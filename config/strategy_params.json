@@ -1,0 +1,7 @@
+{
+    "rsi_oversold": 40,
+    "rsi_overbought": 70,
+    "min_vol_ratio": 1.5,
+    "macd_threshold": 0,
+    "lookback_days": 252
+}

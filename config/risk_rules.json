@@ -1,0 +1,9 @@
+{
+    "_comment": "YOUR RULES. Follow these when trading.",
+    "max_position_pct": 0.10,
+    "max_concurrent_positions": 8,
+    "cash_buffer_pct": 0.30,
+    "stop_loss_multiplier": 2.0,
+    "max_weekly_loss_pct": 0.05,
+    "execution_mode": "paper"
+}

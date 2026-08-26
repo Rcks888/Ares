@@ -1,0 +1,8 @@
+{
+    "description": "Stocks to scan daily",
+    "symbols": [
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
+        "META", "TSLA", "JPM", "V", "JNJ",
+        "SPY", "QQQ", "IWM"
+    ]
+}
