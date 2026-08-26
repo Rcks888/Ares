@@ -1,0 +1,36 @@
+name: Ares Daily Report
+
+on:
+  schedule:
+    - cron: '30 13 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  daily-report:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+    
+      - name: Set up Python
+        uses: action/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: pip install pandas numpy yfinance pandas-ta
+
+      - name: Run daily report
+        run: python daily_report.py
+
+      - name: Commit trade logs
+        run: |
+          git config user.name "Ares Bot"
+          git config user.email "ares-bot@users.noreply.github.com"
+          git add logs/ -f
+          git diff --cached --quiet || git commit -m "Daily report $(date +%Y-%m-%d)"
+          git push
