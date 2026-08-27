@@ -1,0 +1,2 @@
+symbol,strategy,category,entry_date,entry_price,shares,position_size,stop_loss,rsi_at_entry,vol_at_entry,strength,status,exit_date,exit_price,exit_reason,pnl,pnl_pct
+CRWD,momentum_breakout,growth_tech,2026-08-27,227.96,4.39,1000.0,202.57,64.0,2.68,medium,open,,,,,
