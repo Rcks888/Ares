@@ -11,7 +11,7 @@
         },
         "fintech_crypto": {
             "description": "Fintech & crypto-adjacent - Very volatile",
-            "symbols": ["COIN", "SQ", "SOFI", "HOOD", "MARA", "RIOT"]
+            "symbols": ["COIN", "XYZ", "SOFI", "HOOD", "MARA", "RIOT"]
         },
         "consumer_growth": {
             "description": "Consumer & platform - Moderate volatility",
