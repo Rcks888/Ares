@@ -3,6 +3,7 @@ name: Ares Daily Report
 on:
   schedule:
     - cron: '30 13 * * 1-5'
+    - cron: '0 21 * * 1-5'
   workflow_dispatch:
   
 jobs:
