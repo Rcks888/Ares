@@ -35,6 +35,7 @@ def open_trade(signal):
     trade = {
         'symbol': signal['symbol'],
         'strategy': signal['strategy'],
+        'category': signal.get('category', 'unknown'),
         'entry_date': signal['date'],
         'entry_price': signal['price'],
         'shares': round(shares, 2),
@@ -177,7 +178,7 @@ def export_csv():
 
     csv_path = LOGS_DIR / "trades_report.csv"
     columns = [
-        'symbol', 'strategy', 'entry_date', 'entry_price', 'shares',
+        'symbol', 'strategy', 'category', 'entry_date', 'entry_price', 'shares',
         'position_size', 'stop_loss', 'rsi_at_entry', 'vol_at_entry',
         'strength', 'status', 'exit_date', 'exit_price', 'exit_reason',
         'pnl', 'pnl_pct'

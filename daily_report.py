@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from engine.data_feed import refresh_watchlist, load_stock
 from engine.indicators import add_indicators
-from engine.signals import scan_universe
+from engine.signals import scan_universe, load_watchlist, get_all_symbols
 from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv
 
 def generate_report():
@@ -12,11 +12,11 @@ def generate_report():
     print(f"  ARES DAILY REPORT — {today}")
     print(f"{'='*50}\n")
 
-    with open("config/watchlist.json") as f:
-        watchlist = json.load(f)
+    watchlist = load_watchlist()
+    all_symbols = get_all_symbols(watchlist)
 
-    print("[1] Refreshing data...")
-    refresh_watchlist(watchlist["symbols"])
+    print(f"[1] Refreshing data ({len(all_symbols)} stocks)...")
+    refresh_watchlist(all_symbols)
 
     print("\n[2] Checking open positions...")
     check_open_trades()
@@ -33,14 +33,14 @@ def generate_report():
         print(f"  {sym}: ${float(latest['Close']):.2f} "
               f"{direction}{abs(change_pct):.2f}% | "
               f"RSI: {float(latest['rsi']):.0f}")
-        
-    print(f"\n[4] SIGNAL SCAN")
+
+    print(f"\n[4] SIGNAL SCAN ({len(all_symbols)} stocks)")
     print("-" * 40)
     signals = scan_universe()
 
     if signals:
         for s in signals:
-            print(f"\n  * SIGNAL: {s['symbol']}")
+            print(f"\n  * SIGNAL: {s['symbol']} [{s['category']}]")
             print(f"    Strategy: {s['strategy']}")
             print(f"    Price:    ${s['price']}")
             print(f"    RSI:      {s['rsi']}")
@@ -65,31 +65,23 @@ def generate_report():
     print_scorecard()
     export_csv()
 
-    print(f"\n[6] WATCHLIST STATUS")
+    print(f"\n[6] CATEGORY OVERVIEW")
     print("-" * 40)
-    print(f"  {'Symbol':<8}{'Price':<10}{'RSI':<8}{'Vol':<8}{'Note'}")
-    print(f"  {'------':<8}{'-----':<10}{'---':<8}{'---':<8}{'----'}")
-
-    for sym in watchlist["symbols"]:
-        try:
-            df = load_stock(sym)
-            df = add_indicators(df)
-            latest = df.iloc[-1]
-            rsi = float(latest['rsi'])
-            vol = float(latest['vol_ratio'])
-            price = float(latest['Close'])
-
-            note = ""
-            if rsi < 35:
-                note = "<- near oversold"
-            elif rsi > 65:
-                note = "<- overbought"
-            if vol > 1.8:
-                note += " HIGH VOL"
-
-            print(f"  {sym:<8}${price:<9.2f}{rsi:<8.0f}{vol:<8.1f}{note}")
-        except Exception as e:
-            print(f"  {sym:<8} ERROR: {e}")
+    for cat_name, cat_data in watchlist['categories'].items():
+        rsi_values = []
+        for sym in cat_data['symbols']:
+            try:
+                df = load_stock(sym)
+                df = add_indicators(df)
+                rsi_values.append(float(df.iloc[-1]['rsi']))
+            except:
+                pass
+        if rsi_values:
+            avg_rsi = sum(rsi_values) / len(rsi_values)
+            low_rsi = min(rsi_values)
+            print(f"  {cat_name:<16} Avg RSI: {avg_rsi:.0f} | "
+                  f"Lowest: {low_rsi:.0f} | "
+                  f"Stocks: {len(cat_data['symbols'])}")
 
     print(f"\n{'='*50}")
     print("  RULES REMINDER:")

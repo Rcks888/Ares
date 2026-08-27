@@ -1,8 +1,29 @@
 {
-    "description": "Stocks to scan daily",
-    "symbols": [
-        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
-        "META", "TSLA", "JPM", "V", "JNJ",
-        "SPY", "QQQ", "IWM"
-    ]
+    "description": "Categorized stock universe for signal scanning",
+    "categories": {
+        "mega_cap": {
+            "description": "Mega-cap ($200B+) - Stable, lower volatility",
+            "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "JPM", "V", "JNJ", "UNH", "WMT"]
+        },
+        "growth_tech": {
+            "description": "High-growth tech - Higher volatility, bigger moves",
+            "symbols": ["AMD", "NFLX", "CRM", "SNOW", "SHOP", "PLTR", "CRWD", "DDOG", "NET", "MDB"]
+        },
+        "fintech_crypto": {
+            "description": "Fintech & crypto-adjacent - Very volatile",
+            "symbols": ["COIN", "SQ", "SOFI", "HOOD", "MARA", "RIOT"]
+        },
+        "consumer_growth": {
+            "description": "Consumer & platform - Moderate volatility",
+            "symbols": ["UBER", "ABNB", "ROKU", "SNAP", "PINS", "RBLX", "DIS"]
+        },
+        "sector_etfs": {
+            "description": "Sector ETFs - Broad market exposure",
+            "symbols": ["SPY", "QQQ", "IWM", "XLF", "XLE", "XLK", "XLV", "ARKK", "SMH", "XBI"]
+        },
+        "value_dividend": {
+            "description": "Value/dividend stocks - Stable, lower risk",
+            "symbols": ["KO", "PG", "PEP", "MCD", "HD", "COST", "ABBV"]
+        }
+    }
 }

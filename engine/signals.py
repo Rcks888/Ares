@@ -7,7 +7,12 @@ def load_strategy_params():
     config_path = Path(__file__).parent.parent / "config" / "strategy_params.json"
     with open(config_path) as f:
         return json.load(f)
-    
+
+def load_watchlist():
+    watchlist_path = Path(__file__).parent.parent / "config" / "watchlist.json"
+    with open(watchlist_path) as f:
+        return json.load(f)
+
 def check_rsi_reversal(symbol, df, params):
     """Check if stock shows RSI mean-reversion signal."""
     latest = df.iloc[-1]
@@ -19,7 +24,7 @@ def check_rsi_reversal(symbol, df, params):
         return None
     if prev['rsi'] < params['rsi_oversold']:
         return None
-    
+
     return {
         'symbol': symbol,
         'strategy': 'rsi_reversal',
@@ -41,7 +46,7 @@ def check_momentum_breakout(symbol, df, params):
         return None
     if latest['macd'] < latest['macd_signal']:
         return None
-    
+
     return {
         'symbol': symbol,
         'strategy': 'momentum_breakout',
@@ -53,29 +58,45 @@ def check_momentum_breakout(symbol, df, params):
         'strength': 'high' if latest['vol_ratio'] > 3.0 else 'medium'
     }
 
+def get_symbol_category(symbol, watchlist):
+    """Find which category a symbol belongs to."""
+    for cat_name, cat_data in watchlist['categories'].items():
+        if symbol in cat_data['symbols']:
+            return cat_name
+    return 'unknown'
+
+def get_all_symbols(watchlist):
+    """Get flat list of all symbols from all categories."""
+    symbols = []
+    for cat_data in watchlist['categories'].values():
+        symbols.extend(cat_data['symbols'])
+    return list(set(symbols))
+
 def scan_universe(symbols=None):
     """Scan all stocks in watchlist for signals."""
     params = load_strategy_params()
+    watchlist = load_watchlist()
 
     if symbols is None:
-        watchlist_path = Path(__file__).parent.parent / "config" / "watchlist.json"
-        with open(watchlist_path) as f:
-            symbols = json.load(f)['symbols']
+        symbols = get_all_symbols(watchlist)
 
     signals = []
     for symbol in symbols:
         try:
             df = load_stock(symbol)
             df = add_indicators(df)
+
             signal = check_rsi_reversal(symbol, df, params)
             if signal:
+                signal['category'] = get_symbol_category(symbol, watchlist)
                 signals.append(signal)
                 continue
 
             signal = check_momentum_breakout(symbol, df, params)
             if signal:
-               signals.append(signal)
+                signal['category'] = get_symbol_category(symbol, watchlist)
+                signals.append(signal)
         except Exception as e:
             print(f"Error scanning {symbol}: {e}")
-            
+
     return signals
