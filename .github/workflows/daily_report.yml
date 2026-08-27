@@ -26,8 +26,25 @@ jobs:
         run: pip install pandas numpy yfinance pandas-ta
         
       - name: Run daily report
-        run: python daily_report.py
-        
+        run: python daily_report.py | tee report_output.txt
+      
+      - name: Send Telegram notification
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if grep -q "SIGNAL:" report_output.txt; then
+            SIGNALS=$(grep -A 6 "SIGNAL:" report_output.txt)
+            MSG="🏛️ ARES ALERT - Signal Detected!%0A%0A${SIGNALS}"
+          else
+            MSG="🏛️ ARES - No signals today.%0AMarket scanned. All quiet."
+          fi
+          curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            -d chat_id="${TELEGRAM_CHAT_ID}" \
+            -d text="${MSG}" \
+            -d parse_mode="HTML"
+            
       - name: Commit trade logs
         run: |
           git config user.name "Ares Bot"
