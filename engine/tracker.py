@@ -85,7 +85,21 @@ def check_open_trades():
                     / trade['entry_price'] * 100, 2)
                 updated = True
 
-            elif current_rsi > 50 and today != trade['entry_date']:
+            elif trade['strategy'] == 'momentum_breakout' and current_rsi > 75 and today != trade['entry_date']:
+                # Momentum breakout: exit when overbought (RSI > 75)
+                trade['status'] = 'closed'
+                trade['exit_date'] = today
+                trade['exit_price'] = round(current_price, 2)
+                trade['exit_reason'] = 'target_reached'
+                pnl = (current_price - trade['entry_price']) * trade['shares']
+                trade['pnl'] = round(pnl, 2)
+                trade['pnl_pct'] = round(
+                    (current_price - trade['entry_price'])
+                    / trade['entry_price'] * 100, 2)
+                updated = True
+
+            elif trade['strategy'] == 'rsi_reversal' and current_rsi > 50 and today != trade['entry_date']:
+                # RSI reversal: exit when mean reversion complete (RSI > 50)
                 trade['status'] = 'closed'
                 trade['exit_date'] = today
                 trade['exit_price'] = round(current_price, 2)
