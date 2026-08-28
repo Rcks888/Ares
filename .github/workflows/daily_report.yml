@@ -3,48 +3,70 @@ name: Ares Daily Report
 on:
   schedule:
     - cron: '30 13 * * 1-5'
+    - cron: '30 15 * * 1-5'
+    - cron: '30 17 * * 1-5'
     - cron: '0 21 * * 1-5'
   workflow_dispatch:
-  
+
 jobs:
   daily-report:
     runs-on: ubuntu-latest
-    
+
     permissions:
       contents: write
-      
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
-        
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-          
+
       - name: Install dependencies
         run: pip install pandas numpy yfinance pandas-ta
-        
+
       - name: Run daily report
         run: python daily_report.py | tee report_output.txt
-      
+
       - name: Send Telegram notification
         if: always()
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
-          if grep -q "SIGNAL:" report_output.txt; then
-            SIGNALS=$(grep -A 6 "SIGNAL:" report_output.txt)
-            MSG="🏛️ ARES ALERT - Signal Detected!%0A%0A${SIGNALS}"
+          OPEN_TRADES=$(grep -A2 "OPEN POSITIONS" report_output.txt 2>/dev/null | tail -n +2 | head -10)
+          CLOSED_TODAY=$(grep "stop_loss\|target_reached" report_output.txt 2>/dev/null | head -5)
+
+          if grep -q "SIGNAL:" report_output.txt 2>/dev/null; then
+            SIGNALS=$(grep -B1 -A8 "SIGNAL:" report_output.txt | head -40)
+            MSG="🏛️ ARES ALERT - Signal Detected!
+
+          ${SIGNALS}"
           else
-            MSG="🏛️ ARES - No signals today.%0AMarket scanned. All quiet."
+            MSG="🏛️ ARES - No new signals."
           fi
+
+          if [ -n "$OPEN_TRADES" ]; then
+            MSG="${MSG}
+
+          📊 Open Positions:
+          ${OPEN_TRADES}"
+          fi
+
+          if [ -n "$CLOSED_TODAY" ]; then
+            MSG="${MSG}
+
+          ✅ Closed Today:
+          ${CLOSED_TODAY}"
+          fi
+
+          MSG=$(echo "$MSG" | head -c 4000)
           curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             -d chat_id="${TELEGRAM_CHAT_ID}" \
-            -d text="${MSG}" \
-            -d parse_mode="HTML"
-            
+            -d text="${MSG}"
+
       - name: Commit trade logs
         run: |
           git config user.name "Ares Bot"
