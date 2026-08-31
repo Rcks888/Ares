@@ -17,5 +17,24 @@
     "exit_reason": null,
     "pnl": null,
     "pnl_pct": null
+  },
+  {
+    "symbol": "PINS",
+    "strategy": "rsi_reversal",
+    "category": "consumer_growth",
+    "entry_date": "2026-08-31",
+    "entry_price": 21.71,
+    "shares": 46.06,
+    "position_size": 1000.0,
+    "stop_loss": 20.24,
+    "rsi_at_entry": 39.1,
+    "vol_at_entry": 2.05,
+    "strength": "medium",
+    "status": "open",
+    "exit_date": null,
+    "exit_price": null,
+    "exit_reason": null,
+    "pnl": null,
+    "pnl_pct": null
   }
 ]
