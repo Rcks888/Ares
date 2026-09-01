@@ -32,6 +32,8 @@ def open_trade(signal):
     position_size = portfolio * 0.10
     shares = position_size / signal['price']
     stop_loss = signal['price'] - (signal['price'] * signal['stdev_20'] * 2)
+    tp_pct = 0.12 if signal['strategy'] == 'momentum_breakout' else 0.08
+    take_profit = signal['price'] * (1 + tp_pct)
     trade = {
         'symbol': signal['symbol'],
         'strategy': signal['strategy'],
@@ -41,6 +43,7 @@ def open_trade(signal):
         'shares': round(shares, 2),
         'position_size': round(position_size, 2),
         'stop_loss': round(stop_loss, 2),
+        'take_profit': round(take_profit, 2),
         'rsi_at_entry': signal['rsi'],
         'vol_at_entry': signal['vol_ratio'],
         'strength': signal['strength'],
@@ -73,6 +76,8 @@ def check_open_trades():
             current_rsi = float(latest['rsi'])
             today = str(latest.name)[:10]
 
+            take_profit = trade.get('take_profit')
+
             if current_price <= trade['stop_loss']:
                 trade['status'] = 'closed'
                 trade['exit_date'] = today
@@ -82,6 +87,18 @@ def check_open_trades():
                 trade['pnl'] = round(pnl, 2)
                 trade['pnl_pct'] = round(
                     (trade['stop_loss'] - trade['entry_price'])
+                    / trade['entry_price'] * 100, 2)
+                updated = True
+
+            elif take_profit and current_price >= take_profit and today != trade['entry_date']:
+                trade['status'] = 'closed'
+                trade['exit_date'] = today
+                trade['exit_price'] = round(take_profit, 2)
+                trade['exit_reason'] = 'take_profit'
+                pnl = (take_profit - trade['entry_price']) * trade['shares']
+                trade['pnl'] = round(pnl, 2)
+                trade['pnl_pct'] = round(
+                    (take_profit - trade['entry_price'])
                     / trade['entry_price'] * 100, 2)
                 updated = True
 
@@ -140,12 +157,14 @@ def print_scorecard():
                 current = float(df.iloc[-1]['Close'])
                 unrealized = (current - t['entry_price']) / t['entry_price'] * 100
                 arrow = "+" if unrealized > 0 else "-"
+                tp = t.get('take_profit', 'N/A')
                 print(f"    {t['symbol']}: entry ${t['entry_price']} -> "
                       f"now ${current:.2f} {arrow}{abs(unrealized):.1f}% | "
-                      f"stop: ${t['stop_loss']}")
+                      f"stop: ${t['stop_loss']} | TP: ${tp}")
             except Exception:
+                tp = t.get('take_profit', 'N/A')
                 print(f"    {t['symbol']}: entry ${t['entry_price']} | "
-                      f"stop: ${t['stop_loss']}")
+                      f"stop: ${t['stop_loss']} | TP: ${tp}")
 
     if closed:
         wins = [t for t in closed if t['pnl'] > 0]
@@ -193,7 +212,7 @@ def export_csv():
     csv_path = LOGS_DIR / "trades_report.csv"
     columns = [
         'symbol', 'strategy', 'category', 'entry_date', 'entry_price', 'shares',
-        'position_size', 'stop_loss', 'rsi_at_entry', 'vol_at_entry',
+        'position_size', 'stop_loss', 'take_profit', 'rsi_at_entry', 'vol_at_entry',
         'strength', 'status', 'exit_date', 'exit_price', 'exit_reason',
         'pnl', 'pnl_pct'
     ]
