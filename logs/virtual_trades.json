@@ -11,12 +11,12 @@
     "rsi_at_entry": 64.0,
     "vol_at_entry": 2.68,
     "strength": "medium",
-    "status": "open",
-    "exit_date": null,
-    "exit_price": null,
-    "exit_reason": null,
-    "pnl": null,
-    "pnl_pct": null
+    "status": "closed",
+    "exit_date": "2026-09-02",
+    "exit_price": 202.57,
+    "exit_reason": "stop_loss",
+    "pnl": -111.46,
+    "pnl_pct": -11.14
   },
   {
     "symbol": "PINS",
