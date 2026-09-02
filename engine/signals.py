@@ -14,30 +14,55 @@ def load_watchlist():
         return json.load(f)
 
 def check_rsi_reversal(symbol, df, params):
-    """Check if stock shows RSI mean-reversion signal."""
+    """Check if stock shows RSI mean-reversion signal.
+    Triggers on either:
+      1. RSI drops below oversold threshold (original)
+      2. Bullish divergence detected (price lower low + RSI higher low)
+    """
     latest = df.iloc[-1]
     prev = df.iloc[-2]
 
-    if latest['rsi'] >= params['rsi_oversold']:
+    oversold_trigger = (
+        latest['rsi'] < params['rsi_oversold']
+        and prev['rsi'] >= params['rsi_oversold']
+        and latest['vol_ratio'] >= params['min_vol_ratio']
+    )
+
+    divergence_trigger = (
+        bool(latest.get('bullish_divergence', False))
+        and latest['rsi'] < 50
+        and latest['vol_ratio'] >= params['min_vol_ratio']
+    )
+
+    if not oversold_trigger and not divergence_trigger:
         return None
-    if latest['vol_ratio'] < params['min_vol_ratio']:
-        return None
-    if prev['rsi'] < params['rsi_oversold']:
-        return None
+
+    if divergence_trigger and not oversold_trigger:
+        trigger_type = 'bullish_divergence'
+        strength = 'high'
+    elif oversold_trigger and divergence_trigger:
+        trigger_type = 'oversold+divergence'
+        strength = 'high'
+    else:
+        trigger_type = 'oversold'
+        strength = 'high' if latest['rsi'] < 25 else 'medium'
 
     return {
         'symbol': symbol,
         'strategy': 'rsi_reversal',
+        'trigger': trigger_type,
         'date': str(latest.name)[:10],
         'price': round(float(latest['Close']), 2),
         'rsi': round(float(latest['rsi']), 1),
         'vol_ratio': round(float(latest['vol_ratio']), 2),
         'stdev_20': round(float(latest['stdev_20']), 4),
-        'strength': 'high' if latest['rsi'] < 25 else 'medium'
+        'strength': strength
     }
 
 def check_momentum_breakout(symbol, df, params):
-    """Check if stock is breaking to new 52-week high on volume."""
+    """Check if stock is breaking to new 52-week high on volume.
+    Rejects signal if bearish divergence is detected (weakening momentum).
+    """
     latest = df.iloc[-1]
 
     if latest['pct_from_high'] < -0.01:
@@ -46,10 +71,13 @@ def check_momentum_breakout(symbol, df, params):
         return None
     if latest['macd'] < latest['macd_signal']:
         return None
+    if bool(latest.get('bearish_divergence', False)):
+        return None
 
     return {
         'symbol': symbol,
         'strategy': 'momentum_breakout',
+        'trigger': 'breakout',
         'date': str(latest.name)[:10],
         'price': round(float(latest['Close']), 2),
         'rsi': round(float(latest['rsi']), 1),
