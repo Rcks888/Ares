@@ -1,7 +1,19 @@
 {
-    "rsi_oversold": 40,
+    "version": "2.0",
+    "rsi_length": 21,
+    "rsi_source": "ohlc4",
+    "rsi_oversold": 30,
     "rsi_overbought": 70,
+    "rsi_extreme_low": 10,
+    "rsi_extreme_high": 90,
+    "rsi_midline": 50,
     "min_vol_ratio": 1.5,
     "macd_threshold": 0,
-    "lookback_days": 252
+    "lookback_days": 252,
+    "sma_trend_length": 50,
+    "sma_slope_threshold": 0.001,
+    "min_confluence": 2,
+    "trailing_stop_pct": 0.08,
+    "tp_momentum": 0.12,
+    "tp_reversal": 0.08
 }

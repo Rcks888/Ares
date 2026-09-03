@@ -9,7 +9,8 @@ from engine.tracker import open_trade, check_open_trades, print_scorecard, expor
 def generate_report():
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
-    print(f"  ARES DAILY REPORT — {today}")
+    print(f"  ARES V2 DAILY REPORT — {today}")
+    print(f"  RSI: 21-period OHLC4 | Regime-Aware")
     print(f"{'='*50}\n")
 
     watchlist = load_watchlist()
@@ -41,21 +42,27 @@ def generate_report():
     if signals:
         for s in signals:
             print(f"\n  * SIGNAL: {s['symbol']} [{s['category']}]")
-            print(f"    Strategy: {s['strategy']}")
-            print(f"    Price:    ${s['price']}")
-            print(f"    RSI:      {s['rsi']}")
-            print(f"    Volume:   {s['vol_ratio']}x average")
-            print(f"    Strength: {s['strength']}")
+            print(f"    Strategy:   {s['strategy']}")
+            print(f"    Trigger:    {s['trigger']}")
+            print(f"    Regime:     {s.get('regime', 'N/A')}")
+            print(f"    Confluence: {s.get('confluence', 'N/A')} signals")
+            print(f"    Price:      ${s['price']}")
+            print(f"    RSI:        {s['rsi']}")
+            print(f"    Volume:     {s['vol_ratio']}x average")
+            print(f"    Strength:   {s['strength']}")
 
             portfolio = 10000
             position_size = portfolio * 0.10
             shares = position_size / s['price']
             stop_loss = s['price'] - (s['price'] * s['stdev_20'] * 2)
+            tp_pct = 0.12 if s['strategy'] in ('momentum_breakout', 'trend_continuation') else 0.08
+            take_profit = s['price'] * (1 + tp_pct)
             print(f"\n    --- WHAT TO DO ---")
-            print(f"    Buy:       ${position_size:.0f} worth "
+            print(f"    Buy:          ${position_size:.0f} worth "
                   f"({shares:.1f} shares)")
-            print(f"    Stop-loss: ${stop_loss:.2f}")
-            print(f"    Exit when: RSI > 50")
+            print(f"    Stop-loss:    ${stop_loss:.2f}")
+            print(f"    Take-profit:  ${take_profit:.2f} (+{tp_pct*100:.0f}%)")
+            print(f"    Trailing:     8% from peak")
 
             open_trade(s)
             print(f"    [Recorded as virtual trade]")

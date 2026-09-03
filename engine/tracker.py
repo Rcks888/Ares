@@ -22,29 +22,41 @@ def save_trades(trades):
         json.dump(trades, f, indent=2)
 
 def open_trade(signal):
-    """Record a new virtual trade from a signal."""
+    """Record a new virtual trade from a signal. Ares V2."""
     trades = load_trades()
     for t in trades:
         if t['symbol'] == signal['symbol'] and t['status'] == 'open':
             return
-        
+
     portfolio = 10000
     position_size = portfolio * 0.10
     shares = position_size / signal['price']
     stop_loss = signal['price'] - (signal['price'] * signal['stdev_20'] * 2)
-    tp_pct = 0.12 if signal['strategy'] == 'momentum_breakout' else 0.08
+
+    strategy = signal['strategy']
+    if strategy == 'momentum_breakout':
+        tp_pct = 0.12
+    elif strategy == 'trend_continuation':
+        tp_pct = 0.12
+    else:
+        tp_pct = 0.08
+
     take_profit = signal['price'] * (1 + tp_pct)
     trade = {
         'symbol': signal['symbol'],
-        'strategy': signal['strategy'],
+        'strategy': strategy,
         'trigger': signal.get('trigger', 'unknown'),
+        'regime': signal.get('regime', 'unknown'),
         'category': signal.get('category', 'unknown'),
+        'confluence': signal.get('confluence', 1),
         'entry_date': signal['date'],
         'entry_price': signal['price'],
         'shares': round(shares, 2),
         'position_size': round(position_size, 2),
         'stop_loss': round(stop_loss, 2),
         'take_profit': round(take_profit, 2),
+        'trailing_stop': round(stop_loss, 2),
+        'peak_price': signal['price'],
         'rsi_at_entry': signal['rsi'],
         'vol_at_entry': signal['vol_ratio'],
         'strength': signal['strength'],
@@ -53,14 +65,27 @@ def open_trade(signal):
         'exit_price': None,
         'exit_reason': None,
         'pnl': None,
-        'pnl_pct': None
+        'pnl_pct': None,
+        'version': '2.0'
     }
 
     trades.append(trade)
     save_trades(trades)
 
+def _close_trade(trade, today, exit_price, reason):
+    """Helper to close a trade with given reason."""
+    trade['status'] = 'closed'
+    trade['exit_date'] = today
+    trade['exit_price'] = round(exit_price, 2)
+    trade['exit_reason'] = reason
+    pnl = (exit_price - trade['entry_price']) * trade['shares']
+    trade['pnl'] = round(pnl, 2)
+    trade['pnl_pct'] = round(
+        (exit_price - trade['entry_price'])
+        / trade['entry_price'] * 100, 2)
+
 def check_open_trades():
-    """Check all open trades for stop-loss or take-profit."""
+    """Check all open trades. Ares V2 exit rules."""
     trades = load_trades()
     updated = False
 
@@ -76,57 +101,51 @@ def check_open_trades():
             current_price = float(latest['Close'])
             current_rsi = float(latest['rsi'])
             today = str(latest.name)[:10]
+            if today == trade['entry_date']:
+                continue
 
+            strategy = trade['strategy']
             take_profit = trade.get('take_profit')
+            trailing_stop = trade.get('trailing_stop', trade['stop_loss'])
+            peak_price = trade.get('peak_price', trade['entry_price'])
 
-            if current_price <= trade['stop_loss']:
-                trade['status'] = 'closed'
-                trade['exit_date'] = today
-                trade['exit_price'] = trade['stop_loss']
-                trade['exit_reason'] = 'stop_loss'
-                pnl = (trade['stop_loss'] - trade['entry_price']) * trade['shares']
-                trade['pnl'] = round(pnl, 2)
-                trade['pnl_pct'] = round(
-                    (trade['stop_loss'] - trade['entry_price'])
-                    / trade['entry_price'] * 100, 2)
+            if current_price > peak_price:
+                peak_price = current_price
+                trade['peak_price'] = round(peak_price, 2)
+                new_trailing = peak_price * (1 - 0.08)
+                if new_trailing > trailing_stop:
+                    trailing_stop = new_trailing
+                    trade['trailing_stop'] = round(trailing_stop, 2)
                 updated = True
 
-            elif take_profit and current_price >= take_profit and today != trade['entry_date']:
-                trade['status'] = 'closed'
-                trade['exit_date'] = today
-                trade['exit_price'] = round(take_profit, 2)
-                trade['exit_reason'] = 'take_profit'
-                pnl = (take_profit - trade['entry_price']) * trade['shares']
-                trade['pnl'] = round(pnl, 2)
-                trade['pnl_pct'] = round(
-                    (take_profit - trade['entry_price'])
-                    / trade['entry_price'] * 100, 2)
+            effective_stop = max(trade['stop_loss'], trailing_stop)
+
+            if current_price <= effective_stop:
+                exit_price = effective_stop
+                reason = 'trailing_stop' if trailing_stop > trade['stop_loss'] else 'stop_loss'
+                _close_trade(trade, today, exit_price, reason)
                 updated = True
 
-            elif trade['strategy'] == 'momentum_breakout' and current_rsi > 75 and today != trade['entry_date']:
-                # Momentum breakout: exit when overbought (RSI > 75)
-                trade['status'] = 'closed'
-                trade['exit_date'] = today
-                trade['exit_price'] = round(current_price, 2)
-                trade['exit_reason'] = 'target_reached'
-                pnl = (current_price - trade['entry_price']) * trade['shares']
-                trade['pnl'] = round(pnl, 2)
-                trade['pnl_pct'] = round(
-                    (current_price - trade['entry_price'])
-                    / trade['entry_price'] * 100, 2)
+            elif take_profit and current_price >= take_profit:
+                _close_trade(trade, today, take_profit, 'take_profit')
                 updated = True
 
-            elif trade['strategy'] == 'rsi_reversal' and current_rsi > 50 and today != trade['entry_date']:
-                # RSI reversal: exit when mean reversion complete (RSI > 50)
-                trade['status'] = 'closed'
-                trade['exit_date'] = today
-                trade['exit_price'] = round(current_price, 2)
-                trade['exit_reason'] = 'target_reached'
-                pnl = (current_price - trade['entry_price']) * trade['shares']
-                trade['pnl'] = round(pnl, 2)
-                trade['pnl_pct'] = round(
-                    (current_price - trade['entry_price'])
-                    / trade['entry_price'] * 100, 2)
+            elif current_rsi > 90:
+                _close_trade(trade, today, current_price, 'emotional_extreme')
+                updated = True
+
+            elif bool(latest.get('bearish_div', False)):
+                if strategy in ('momentum_breakout', 'trend_continuation'):
+                    _close_trade(trade, today, current_price, 'bearish_divergence')
+                    updated = True
+
+            elif strategy == 'mean_reversion' and current_rsi > 70:
+                _close_trade(trade, today, current_price, 'mean_reversion_complete')
+                updated = True
+
+            # V1 backward compatibility
+            elif strategy == 'rsi_reversal' and current_rsi > 50:
+                _close_trade(trade, today, current_price, 'target_reached')
                 updated = True
 
         except Exception as e:
@@ -212,10 +231,12 @@ def export_csv():
 
     csv_path = LOGS_DIR / "trades_report.csv"
     columns = [
-        'symbol', 'strategy', 'trigger', 'category', 'entry_date', 'entry_price', 'shares',
-        'position_size', 'stop_loss', 'take_profit', 'rsi_at_entry', 'vol_at_entry',
-        'strength', 'status', 'exit_date', 'exit_price', 'exit_reason',
-        'pnl', 'pnl_pct'
+        'symbol', 'strategy', 'trigger', 'regime', 'category', 'confluence',
+        'entry_date', 'entry_price', 'shares', 'position_size',
+        'stop_loss', 'trailing_stop', 'take_profit', 'peak_price',
+        'rsi_at_entry', 'vol_at_entry', 'strength',
+        'status', 'exit_date', 'exit_price', 'exit_reason',
+        'pnl', 'pnl_pct', 'version'
     ]
 
     with open(csv_path, 'w', newline='') as f:
