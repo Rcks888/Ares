@@ -1,5 +1,6 @@
 import yfinance as yf
 import pandas as pd
+import time as _time
 from pathlib import Path
 from datetime import datetime
 
@@ -116,11 +117,16 @@ def refresh_watchlist(symbols):
     ibkr_count = 0
     yf_count = 0
 
+    batch_count = 0
     for symbol in symbols:
         df = download_stock_ibkr(symbol) if ib else None
         if df is not None and len(df) > 50:
             data[symbol] = df
             ibkr_count += 1
+            batch_count += 1
+            if batch_count % 55 == 0 and ib:
+                print(f"  Rate limit pause... ({ibkr_count} done)")
+                _time.sleep(120)
         else:
             data[symbol] = download_stock_yfinance(symbol)
             yf_count += 1

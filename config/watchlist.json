@@ -1,29 +1,44 @@
 {
-    "description": "Categorized stock universe for signal scanning",
     "categories": {
         "mega_cap": {
-            "description": "Mega-cap ($200B+) - Stable, lower volatility",
-            "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "JPM", "V", "JNJ", "UNH", "WMT"]
+            "description": "Top 20 by market cap",
+            "symbols": ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK-B", "JPM", "V", "JNJ", "UNH", "WMT", "MA", "PG", "HD", "ORCL", "ABBV", "XOM", "CVX"]
         },
         "growth_tech": {
-            "description": "High-growth tech - Higher volatility, bigger moves",
-            "symbols": ["AMD", "NFLX", "CRM", "SNOW", "SHOP", "PLTR", "CRWD", "DDOG", "NET", "MDB"]
+            "description": "High-growth technology",
+            "symbols": ["AMD", "NFLX", "CRM", "SNOW", "SHOP", "PLTR", "CRWD", "DDOG", "NET", "MDB", "PANW", "NOW", "ADBE", "INTU", "ANET", "SNPS", "CDNS", "FTNT", "ZS", "TEAM"]
         },
         "fintech_crypto": {
-            "description": "Fintech & crypto-adjacent - Very volatile",
-            "symbols": ["COIN", "XYZ", "SOFI", "HOOD", "MARA", "RIOT"]
+            "description": "Fintech and crypto-related",
+            "symbols": ["COIN", "XYZ", "SOFI", "HOOD", "MARA", "RIOT", "PYPL", "GS", "MS", "SCHW"]
         },
         "consumer_growth": {
-            "description": "Consumer & platform - Moderate volatility",
-            "symbols": ["UBER", "ABNB", "ROKU", "SNAP", "PINS", "RBLX", "DIS"]
+            "description": "Consumer and entertainment",
+            "symbols": ["UBER", "ABNB", "ROKU", "SNAP", "PINS", "RBLX", "DIS", "SBUX", "NKE", "LULU", "CMG", "TJX", "BKNG", "MAR", "RCL"]
+        },
+        "healthcare": {
+            "description": "Healthcare and biotech",
+            "symbols": ["LLY", "NVO", "MRK", "PFE", "TMO", "ABT", "DHR", "BMY", "GILD", "VRTX", "REGN", "ISRG", "DXCM", "MRNA", "BIIB"]
+        },
+        "industrials": {
+            "description": "Industrial and aerospace",
+            "symbols": ["CAT", "DE", "GE", "HON", "RTX", "BA", "LMT", "UNP", "UPS", "FDX", "WM", "ETN", "ITW", "EMR", "GD"]
+        },
+        "energy_materials": {
+            "description": "Energy and raw materials",
+            "symbols": ["XOM", "CVX", "COP", "SLB", "EOG", "MPC", "PSX", "LIN", "APD", "SHW", "FCX", "NEM", "FSLR", "ENPH", "NEE"]
         },
         "sector_etfs": {
-            "description": "Sector ETFs - Broad market exposure",
-            "symbols": ["SPY", "QQQ", "IWM", "XLF", "XLE", "XLK", "XLV", "ARKK", "SMH", "XBI"]
+            "description": "Broad market ETFs",
+            "symbols": ["SPY", "QQQ", "IWM", "XLF", "XLE", "XLK", "XLV", "ARKK", "SMH", "XBI", "DIA", "VTI", "XLI", "XLP", "XLU"]
         },
         "value_dividend": {
-            "description": "Value/dividend stocks - Stable, lower risk",
-            "symbols": ["KO", "PG", "PEP", "MCD", "HD", "COST", "ABBV"]
+            "description": "Stable value and dividend stocks",
+            "symbols": ["KO", "PEP", "MCD", "COST", "TGT", "CL", "MMM", "IBM", "VZ", "T", "SO", "DUK", "AEP", "D", "ED"]
+        },
+        "realestate_finance": {
+            "description": "REITs and financial services",
+            "symbols": ["AMT", "PLD", "CCI", "EQIX", "SPG", "O", "BLK", "ICE", "CME", "MCO", "SPGI", "AON", "AIG", "MET", "PRU"]
         }
     }
 }
