@@ -2,7 +2,7 @@ import json
 import csv
 from datetime import datetime
 from pathlib import Path
-from engine.data_feed import load_stock
+from engine.data_feed import load_stock, get_live_price
 from engine.indicators import add_indicators
 
 def _load_params():
@@ -102,7 +102,10 @@ def check_open_trades():
             df = add_indicators(df)
             latest = df.iloc[-1]
 
-            current_price = float(latest['Close'])
+            live = get_live_price(trade['symbol'])
+            daily_price = float(latest['Close'])
+            current_price = live if live else daily_price
+            price_source = "IBKR" if live else "daily"
             current_rsi = float(latest['rsi'])
             today = str(latest.name)[:10]
             if today == trade['entry_date']:
@@ -181,14 +184,18 @@ def print_scorecard():
         print(f"\n  OPEN POSITIONS ({len(open_trades)}):")
         for t in open_trades:
             try:
+                live = get_live_price(t['symbol'])
                 df = load_stock(t['symbol'])
-                current = float(df.iloc[-1]['Close'])
+                daily = float(df.iloc[-1]['Close'])
+                current = live if live else daily
+                src = "live" if live else "daily"
                 unrealized = (current - t['entry_price']) / t['entry_price'] * 100
                 arrow = "+" if unrealized > 0 else "-"
                 tp = t.get('take_profit', 'N/A')
+                ts = t.get('trailing_stop', t['stop_loss'])
                 print(f"    {t['symbol']}: entry ${t['entry_price']} -> "
-                      f"now ${current:.2f} {arrow}{abs(unrealized):.1f}% | "
-                      f"stop: ${t['stop_loss']} | TP: ${tp}")
+                      f"now ${current:.2f} ({src}) {arrow}{abs(unrealized):.1f}% | "
+                      f"SL: ${t['stop_loss']} | TS: ${ts} | TP: ${tp}")
             except Exception:
                 tp = t.get('take_profit', 'N/A')
                 print(f"    {t['symbol']}: entry ${t['entry_price']} | "

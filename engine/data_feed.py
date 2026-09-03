@@ -1,6 +1,5 @@
 import yfinance as yf
 import pandas as pd
-import time as _time
 from pathlib import Path
 from datetime import datetime
 
@@ -10,12 +9,11 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 IBKR_PORT = 4002
 IBKR_HOST = '127.0.0.1'
 
-_ib_connection = None
-
 SYMBOL_MAP_TO_IBKR = {
     'BRK-B': 'BRK B',
 }
-SYMBOL_MAP_FROM_IBKR = {v: k for k, v in SYMBOL_MAP_TO_IBKR.items()}
+
+_ib_connection = None
 
 def _get_ib():
     """Get or create a shared IBKR connection."""
@@ -39,62 +37,40 @@ def disconnect_ib():
         _ib_connection.disconnect()
     _ib_connection = None
 
-def download_stock_ibkr(symbol, duration="2 Y"):
-    """Download OHLCV data from IBKR."""
+def get_live_price(symbol):
+    """Get live/delayed price from IBKR for stop-loss and trailing stop checks."""
     ib = _get_ib()
     if not ib:
         return None
 
     try:
         from ib_insync import Stock
+        import time
         ibkr_symbol = SYMBOL_MAP_TO_IBKR.get(symbol, symbol)
         contract = Stock(ibkr_symbol, 'SMART', 'USD')
         ib.qualifyContracts(contract)
-        bars = ib.reqHistoricalData(
-            contract,
-            endDateTime='',
-            durationStr=duration,
-            barSizeSetting='1 day',
-            whatToShow='TRADES',
-            useRTH=True,
-            timeout=30
-        )
-        if not bars:
-            return None
-
-        data = [{
-            'Date': bar.date,
-            'Open': bar.open,
-            'High': bar.high,
-            'Low': bar.low,
-            'Close': bar.close,
-            'Volume': bar.volume
-        } for bar in bars]
-
-        df = pd.DataFrame(data)
-        df['Date'] = pd.to_datetime(df['Date'])
-        df.set_index('Date', inplace=True)
-
-        filepath = DATA_DIR / f"{symbol}.csv"
-        df.to_csv(filepath)
-        return df
-    except Exception as e:
-        print(f"  IBKR error for {symbol}: {e}")
+        ib.reqMarketDataType(3)
+        ticker = ib.reqMktData(contract)
+        time.sleep(3)
+        price = ticker.last if ticker.last == ticker.last else ticker.close
+        ib.cancelMktData(contract)
+        if price and price == price:
+            return float(price)
+        return None
+    except Exception:
         return None
 
-def download_stock_yfinance(symbol, period="2y"):
-    """Download OHLCV data from yfinance (fallback)."""
-    df = yf.download(symbol, period=period)
-    filepath = DATA_DIR / f"{symbol}.csv"
-    df.to_csv(filepath)
-    return df
-
 def download_stock(symbol, period="2y"):
-    """Download OHLCV data. Try IBKR first, fallback to yfinance."""
-    df = download_stock_ibkr(symbol)
-    if df is not None and len(df) > 50:
-        return df
-    return download_stock_yfinance(symbol, period)
+    """Download OHLCV daily data from yfinance. Free, no rate limit."""
+    try:
+        df = yf.download(symbol, period=period)
+        if df is not None and len(df) > 0:
+            filepath = DATA_DIR / f"{symbol}.csv"
+            df.to_csv(filepath)
+            return df
+    except Exception as e:
+        print(f"  yfinance error for {symbol}: {e}")
+    return None
 
 def load_stock(symbol):
     """Load cached stock data from disk."""
@@ -108,28 +84,13 @@ def load_stock(symbol):
     return df
 
 def refresh_watchlist(symbols):
-    """Download fresh data for all stocks. IBKR first, yfinance fallback."""
-    ib = _get_ib()
-    source = "IBKR" if ib else "yfinance"
-    print(f"  Data source: {source}")
-
+    """Download fresh daily data from yfinance for all stocks."""
+    print(f"  Data source: yfinance (daily candles)")
     data = {}
-    ibkr_count = 0
-    yf_count = 0
-
-    batch_count = 0
     for symbol in symbols:
-        df = download_stock_ibkr(symbol) if ib else None
-        if df is not None and len(df) > 50:
+        df = download_stock(symbol)
+        if df is not None:
             data[symbol] = df
-            ibkr_count += 1
-            batch_count += 1
-            if batch_count % 58 == 0 and ib:
-                print(f"  Rate limit pause 60s... ({ibkr_count} done)")
-                _time.sleep(60)
-        else:
-            data[symbol] = download_stock_yfinance(symbol)
-            yf_count += 1
-
-    print(f"  Downloaded: {ibkr_count} from IBKR, {yf_count} from yfinance")
+    print(f"  Downloaded: {len(data)} stocks")
+    return data
     return data
