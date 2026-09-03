@@ -141,12 +141,24 @@ def get_all_symbols(watchlist):
         symbols.extend(cat_data['symbols'])
     return list(set(symbols))
 
-def scan_universe(symbols=None):
-    """Scan all stocks using regime-aware strategy. Ares V2."""
-    params = load_strategy_params()
+def classify_sector(symbol, screen_tags=None):
+    """Auto-classify a symbol's sector from Finviz screen tags."""
+    if screen_tags:
+        if 'oversold_bounce' in screen_tags or 'big_movers_down' in screen_tags:
+            return 'reversal_candidate'
+        if 'near_52w_high' in screen_tags or 'big_movers_up' in screen_tags:
+            return 'momentum_candidate'
+        if 'unusual_volume' in screen_tags:
+            return 'volume_spike'
     watchlist = load_watchlist()
+    return get_symbol_category(symbol, watchlist)
+
+def scan_universe(symbols=None, screen_data=None):
+    """Scan stocks using regime-aware strategy. Ares V2.1."""
+    params = load_strategy_params()
 
     if symbols is None:
+        watchlist = load_watchlist()
         symbols = get_all_symbols(watchlist)
 
     signals = []
@@ -173,7 +185,9 @@ def scan_universe(symbols=None):
                     print(f"  {symbol}: Bullish divergence in downtrend — WATCHLIST only")
 
             if signal:
-                signal['category'] = get_symbol_category(symbol, watchlist)
+                tags = screen_data.get(symbol, []) if screen_data else []
+                signal['category'] = classify_sector(symbol, tags)
+                signal['screens'] = tags
                 signals.append(signal)
         except Exception as e:
             print(f"Error scanning {symbol}: {e}")

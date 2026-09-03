@@ -6,17 +6,39 @@ from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
 from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv
 
+USE_SCREENER = True
+
 def generate_report():
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
-    print(f"  ARES V2 DAILY REPORT — {today}")
+    print(f"  ARES V2.1 DAILY REPORT — {today}")
     print(f"  RSI: 21-period OHLC4 | Regime-Aware")
+    print(f"  Mode: {'Dynamic Screener' if USE_SCREENER else 'Fixed Watchlist'}")
     print(f"{'='*50}\n")
 
-    watchlist = load_watchlist()
-    all_symbols = get_all_symbols(watchlist)
+    screen_data = {}
+    if USE_SCREENER:
+        print("[0] FINVIZ MARKET SCREENING")
+        print("-" * 40)
+        try:
+            from engine.screener import get_screened_symbols
+            all_symbols, screen_data = get_screened_symbols()
+            print(f"  Screened {len(all_symbols)} candidates from entire market")
+        except Exception as e:
+            print(f"  Screener error: {e}")
+            print(f"  Falling back to fixed watchlist")
+            watchlist = load_watchlist()
+            all_symbols = get_all_symbols(watchlist)
+    else:
+        watchlist = load_watchlist()
+        all_symbols = get_all_symbols(watchlist)
 
-    print(f"[1] Refreshing data ({len(all_symbols)} stocks)...")
+    market_syms = ["SPY", "QQQ", "IWM"]
+    for sym in market_syms:
+        if sym not in all_symbols:
+            all_symbols.append(sym)
+
+    print(f"\n[1] Refreshing data ({len(all_symbols)} stocks)...")
     refresh_watchlist(all_symbols)
 
     print("\n[2] Checking open positions...")
@@ -24,20 +46,23 @@ def generate_report():
 
     print("\n[3] MARKET OVERVIEW")
     print("-" * 40)
-    for sym in ["SPY", "QQQ", "IWM"]:
-        df = load_stock(sym)
-        df = add_indicators(df)
-        latest = df.iloc[-1]
-        prev = df.iloc[-2]
-        change_pct = (float(latest['Close']) - float(prev['Close'])) / float(prev['Close']) * 100
-        direction = "+" if change_pct > 0 else "-"
-        print(f"  {sym}: ${float(latest['Close']):.2f} "
-              f"{direction}{abs(change_pct):.2f}% | "
-              f"RSI: {float(latest['rsi']):.0f}")
+    for sym in market_syms:
+        try:
+            df = load_stock(sym)
+            df = add_indicators(df)
+            latest = df.iloc[-1]
+            prev = df.iloc[-2]
+            change_pct = (float(latest['Close']) - float(prev['Close'])) / float(prev['Close']) * 100
+            direction = "+" if change_pct > 0 else "-"
+            print(f"  {sym}: ${float(latest['Close']):.2f} "
+                  f"{direction}{abs(change_pct):.2f}% | "
+                  f"RSI: {float(latest['rsi']):.0f}")
+        except Exception:
+            pass
 
     print(f"\n[4] SIGNAL SCAN ({len(all_symbols)} stocks)")
     print("-" * 40)
-    signals = scan_universe()
+    signals = scan_universe(all_symbols, screen_data)
 
     if signals:
         for s in signals:
@@ -50,6 +75,8 @@ def generate_report():
             print(f"    RSI:        {s['rsi']}")
             print(f"    Volume:     {s['vol_ratio']}x average")
             print(f"    Strength:   {s['strength']}")
+            if s.get('screens'):
+                print(f"    Screens:    {', '.join(s['screens'])}")
 
             portfolio = 10000
             position_size = portfolio * 0.10
@@ -74,23 +101,32 @@ def generate_report():
     print_scorecard()
     export_csv()
 
-    print(f"\n[6] CATEGORY OVERVIEW")
+    print(f"\n[6] SCREEN OVERVIEW")
     print("-" * 40)
-    for cat_name, cat_data in watchlist['categories'].items():
-        rsi_values = []
-        for sym in cat_data['symbols']:
-            try:
-                df = load_stock(sym)
-                df = add_indicators(df)
-                rsi_values.append(float(df.iloc[-1]['rsi']))
-            except:
-                pass
-        if rsi_values:
-            avg_rsi = sum(rsi_values) / len(rsi_values)
-            low_rsi = min(rsi_values)
-            print(f"  {cat_name:<16} Avg RSI: {avg_rsi:.0f} | "
-                  f"Lowest: {low_rsi:.0f} | "
-                  f"Stocks: {len(cat_data['symbols'])}")
+    if screen_data:
+        screen_counts = {}
+        for sym, tags in screen_data.items():
+            for tag in tags:
+                screen_counts[tag] = screen_counts.get(tag, 0) + 1
+        for screen_name, count in sorted(screen_counts.items(), key=lambda x: -x[1]):
+            print(f"  {screen_name:<20} {count} stocks")
+    else:
+        watchlist = load_watchlist()
+        for cat_name, cat_data in watchlist['categories'].items():
+            rsi_values = []
+            for sym in cat_data['symbols']:
+                try:
+                    df = load_stock(sym)
+                    df = add_indicators(df)
+                    rsi_values.append(float(df.iloc[-1]['rsi']))
+                except:
+                    pass
+            if rsi_values:
+                avg_rsi = sum(rsi_values) / len(rsi_values)
+                low_rsi = min(rsi_values)
+                print(f"  {cat_name:<16} Avg RSI: {avg_rsi:.0f} | "
+                      f"Lowest: {low_rsi:.0f} | "
+                      f"Stocks: {len(cat_data['symbols'])}")
 
     print(f"\n{'='*50}")
     print("  RULES REMINDER:")
