@@ -1,7 +1,7 @@
 import json
 from datetime import datetime
 from pathlib import Path
-from engine.data_feed import refresh_watchlist, load_stock
+from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib
 from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
 from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv
@@ -103,3 +103,4 @@ def generate_report():
 
 if __name__ == "__main__":
     generate_report()
+    disconnect_ib()
