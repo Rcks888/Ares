@@ -11,6 +11,11 @@ IBKR_HOST = '127.0.0.1'
 
 _ib_connection = None
 
+SYMBOL_MAP_TO_IBKR = {
+    'BRK-B': 'BRK B',
+}
+SYMBOL_MAP_FROM_IBKR = {v: k for k, v in SYMBOL_MAP_TO_IBKR.items()}
+
 def _get_ib():
     """Get or create a shared IBKR connection."""
     global _ib_connection
@@ -41,7 +46,8 @@ def download_stock_ibkr(symbol, duration="2 Y"):
 
     try:
         from ib_insync import Stock
-        contract = Stock(symbol, 'SMART', 'USD')
+        ibkr_symbol = SYMBOL_MAP_TO_IBKR.get(symbol, symbol)
+        contract = Stock(ibkr_symbol, 'SMART', 'USD')
         ib.qualifyContracts(contract)
         bars = ib.reqHistoricalData(
             contract,
