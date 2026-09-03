@@ -5,6 +5,11 @@ from pathlib import Path
 from engine.data_feed import load_stock
 from engine.indicators import add_indicators
 
+def _load_params():
+    config_path = Path(__file__).parent.parent / "config" / "strategy_params.json"
+    with open(config_path) as f:
+        return json.load(f)
+
 LOGS_DIR = Path(__file__).parent.parent / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 TRADES_FILE = LOGS_DIR / "virtual_trades.json"
@@ -33,13 +38,12 @@ def open_trade(signal):
     shares = position_size / signal['price']
     stop_loss = signal['price'] - (signal['price'] * signal['stdev_20'] * 2)
 
+    params = _load_params()
     strategy = signal['strategy']
-    if strategy == 'momentum_breakout':
-        tp_pct = 0.12
-    elif strategy == 'trend_continuation':
-        tp_pct = 0.12
+    if strategy in ('momentum_breakout', 'trend_continuation'):
+        tp_pct = params.get('tp_momentum', 0.12)
     else:
-        tp_pct = 0.08
+        tp_pct = params.get('tp_reversal', 0.08)
 
     take_profit = signal['price'] * (1 + tp_pct)
     trade = {
@@ -109,10 +113,14 @@ def check_open_trades():
             trailing_stop = trade.get('trailing_stop', trade['stop_loss'])
             peak_price = trade.get('peak_price', trade['entry_price'])
 
+            params = _load_params()
+            trailing_pct = params.get('trailing_stop_pct', 0.08)
+            rsi_extreme = params.get('rsi_extreme_high', 90)
+
             if current_price > peak_price:
                 peak_price = current_price
                 trade['peak_price'] = round(peak_price, 2)
-                new_trailing = peak_price * (1 - 0.08)
+                new_trailing = peak_price * (1 - trailing_pct)
                 if new_trailing > trailing_stop:
                     trailing_stop = new_trailing
                     trade['trailing_stop'] = round(trailing_stop, 2)
@@ -130,7 +138,7 @@ def check_open_trades():
                 _close_trade(trade, today, take_profit, 'take_profit')
                 updated = True
 
-            elif current_rsi > 90:
+            elif current_rsi > rsi_extreme:
                 _close_trade(trade, today, current_price, 'emotional_extreme')
                 updated = True
 

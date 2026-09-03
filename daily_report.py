@@ -55,7 +55,9 @@ def generate_report():
             position_size = portfolio * 0.10
             shares = position_size / s['price']
             stop_loss = s['price'] - (s['price'] * s['stdev_20'] * 2)
-            tp_pct = 0.12 if s['strategy'] in ('momentum_breakout', 'trend_continuation') else 0.08
+            from engine.signals import load_strategy_params
+            _params = load_strategy_params()
+            tp_pct = _params.get('tp_momentum', 0.12) if s['strategy'] in ('momentum_breakout', 'trend_continuation') else _params.get('tp_reversal', 0.08)
             take_profit = s['price'] * (1 + tp_pct)
             print(f"\n    --- WHAT TO DO ---")
             print(f"    Buy:          ${position_size:.0f} worth "

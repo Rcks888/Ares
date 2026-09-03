@@ -23,8 +23,8 @@ def add_indicators(df):
 
     macd = ta.macd(df['Close'], fast=12, slow=26, signal=9)
     df['macd'] = macd.iloc[:, 0]
-    df['macd_signal'] = macd.iloc[:, 1]
-    df['macd_hist'] = macd.iloc[:, 2]
+    df['macd_hist'] = macd.iloc[:, 1]
+    df['macd_signal'] = macd.iloc[:, 2]
 
     df['stdev_20'] = df['Close'].pct_change().rolling(20).std()
 
