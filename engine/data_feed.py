@@ -124,9 +124,9 @@ def refresh_watchlist(symbols):
             data[symbol] = df
             ibkr_count += 1
             batch_count += 1
-            if batch_count % 55 == 0 and ib:
-                print(f"  Rate limit pause... ({ibkr_count} done)")
-                _time.sleep(120)
+            if batch_count % 58 == 0 and ib:
+                print(f"  Rate limit pause 60s... ({ibkr_count} done)")
+                _time.sleep(60)
         else:
             data[symbol] = download_stock_yfinance(symbol)
             yf_count += 1
