@@ -100,6 +100,11 @@
 
 ### Sep 5, 2026 (Friday)
 
+**Changes Made:**
+- Added holding days tracking to trades JSON, CSV, scorecard, and monitor
+- Holding days auto-updates on every save for open trades
+- Closed trades record final holding days permanently
+
 **Scan Results:**
 - 9:30 PM scan: _pending_
 - 11:30 PM scan: _pending_
@@ -128,6 +133,9 @@
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
+
+**Changes Made:**
+-
 
 **Scan Results:**
 - 9:30 PM scan:
