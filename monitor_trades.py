@@ -4,7 +4,7 @@ No signal scanning, no yfinance download.
 """
 from datetime import datetime
 from engine.data_feed import get_live_price, disconnect_ib
-from engine.tracker import load_trades, save_trades, _load_params, _close_trade, load_stock
+from engine.tracker import load_trades, save_trades, _load_params, _close_trade, _holding_days, load_stock
 from engine.indicators import add_indicators
 
 def monitor():
@@ -71,8 +71,9 @@ def monitor():
             print(f"     P&L: {trade['pnl_pct']:+.1f}% (${trade['pnl']:+.2f})")
             updated = True
         else:
+            days = _holding_days(trade['entry_date'])
             print(f"  📊 {symbol}: ${live:.2f} ({arrow}{unrealized:.1f}%) | "
-                  f"SL: ${stop_loss:.2f} | TS: ${trailing_stop:.2f} | "
+                  f"Day {days} | SL: ${stop_loss:.2f} | TS: ${trailing_stop:.2f} | "
                   f"TP: ${take_profit if take_profit else 'N/A'}")
 
     if updated:

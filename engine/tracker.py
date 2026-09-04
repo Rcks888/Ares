@@ -1,9 +1,17 @@
 import json
 import csv
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 from engine.data_feed import load_stock, get_live_price
 from engine.indicators import add_indicators
+
+def _holding_days(entry_date_str):
+    """Calculate number of days held from entry date to today."""
+    try:
+        entry = datetime.strptime(entry_date_str, "%Y-%m-%d").date()
+        return (date.today() - entry).days
+    except Exception:
+        return 0
 
 def _load_params():
     config_path = Path(__file__).parent.parent / "config" / "strategy_params.json"
@@ -82,6 +90,7 @@ def _close_trade(trade, today, exit_price, reason):
     trade['exit_date'] = today
     trade['exit_price'] = round(exit_price, 2)
     trade['exit_reason'] = reason
+    trade['holding_days'] = _holding_days(trade['entry_date'])
     pnl = (exit_price - trade['entry_price']) * trade['shares']
     trade['pnl'] = round(pnl, 2)
     trade['pnl_pct'] = round(
@@ -193,9 +202,10 @@ def print_scorecard():
                 arrow = "+" if unrealized > 0 else "-"
                 tp = t.get('take_profit', 'N/A')
                 ts = t.get('trailing_stop', t['stop_loss'])
+                days = _holding_days(t['entry_date'])
                 print(f"    {t['symbol']}: entry ${t['entry_price']} -> "
                       f"now ${current:.2f} ({src}) {arrow}{abs(unrealized):.1f}% | "
-                      f"SL: ${t['stop_loss']} | TS: ${ts} | TP: ${tp}")
+                      f"Day {days} | SL: ${t['stop_loss']} | TS: ${ts} | TP: ${tp}")
             except Exception:
                 tp = t.get('take_profit', 'N/A')
                 print(f"    {t['symbol']}: entry ${t['entry_price']} | "
@@ -216,12 +226,16 @@ def print_scorecard():
         print(f"    Total P&L:  ${total_pnl:+.2f}")
         print(f"    Avg win:    {avg_win:+.1f}%")
         print(f"    Avg loss:   {avg_loss:+.1f}%")
+        hold_days = [t.get('holding_days', 0) for t in closed if t.get('holding_days')]
+        if hold_days:
+            print(f"    Avg hold:   {sum(hold_days)/len(hold_days):.0f} days")
 
         print(f"\n  RECENT TRADES:")
         for t in closed[-5:]:
             icon = "W" if t['pnl'] > 0 else "L"
+            days = t.get('holding_days', '?')
             print(f"    [{icon}] {t['symbol']} | "
-                  f"{t['entry_date']} -> {t['exit_date']} | "
+                  f"{t['entry_date']} -> {t['exit_date']} ({days}d) | "
                   f"{t['pnl_pct']:+.1f}% | {t['exit_reason']}")
         strategies = {}
         for t in closed:
@@ -251,7 +265,7 @@ def export_csv():
         'stop_loss', 'trailing_stop', 'take_profit', 'peak_price',
         'rsi_at_entry', 'vol_at_entry', 'strength',
         'status', 'exit_date', 'exit_price', 'exit_reason',
-        'pnl', 'pnl_pct', 'version'
+        'holding_days', 'pnl', 'pnl_pct', 'version'
     ]
 
     with open(csv_path, 'w', newline='') as f:
