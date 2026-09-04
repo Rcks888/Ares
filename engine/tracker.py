@@ -30,7 +30,10 @@ def load_trades():
         return json.load(f)
     
 def save_trades(trades):
-    """Save all virtual trades to disk."""
+    """Save all virtual trades to disk. Updates holding_days for open trades."""
+    for t in trades:
+        if t['status'] == 'open':
+            t['holding_days'] = _holding_days(t['entry_date'])
     with open(TRADES_FILE, 'w') as f:
         json.dump(trades, f, indent=2)
 
