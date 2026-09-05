@@ -104,11 +104,17 @@
 - Added holding days tracking to trades JSON, CSV, scorecard, and monitor
 - Holding days auto-updates on every save for open trades
 - Closed trades record final holding days permanently
+- Added shadow tracking: monitors price 30 days after trade closes
+  - Tracks peak/trough after exit, missed upside %, avoided downside %
+  - Verdict: "Good exit" (<5% missed) or "Left money on table"
+- Fixed monitor bug: now shows positions even without IBKR live price
+- Fixed run_ares.sh: added PATH + DISPLAY so cron can connect to IB Gateway
+- Restarted IB Gateway (had died since Thursday)
 
 **Scan Results:**
 - 9:30 PM scan: ✅ No signals. Regimes: 16 uptrend | 4 range | 12 downtrend
-- 11:30 PM scan: ✅ Monitor — No live price (IBKR couldn't fetch, see bug fix)
-- 1:30 AM scan: ✅ Monitor — No live price (same issue)
+- 11:30 PM scan: ✅ Monitor — No live price (market closed, IBKR returned None)
+- 1:30 AM scan: ✅ Monitor — No live price (same)
 - 5:00 AM scan: ✅ No signals. Regimes: 14 uptrend | 18 range | 29 downtrend
 
 **Signals Triggered:**
@@ -117,8 +123,8 @@
 **Open Trades:**
 | Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
 |--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
-| CNH | momentum_breakout | Sep 3 | $13.84 | $13.84 | 0.0% | 1 | $12.83 | $12.83 | $15.50 |
-| PAYP | momentum_breakout | Sep 3 | $16.93 | $16.93 | 0.0% | 1 | $15.73 | $15.73 | $18.96 |
+| CNH | momentum_breakout | Sep 3 | $13.84 | $13.84 (daily) | 0.0% | 1 | $12.83 | $12.83 | $15.50 |
+| PAYP | momentum_breakout | Sep 3 | $16.93 | $16.93 (daily) | 0.0% | 1 | $15.73 | $15.73 | $18.96 |
 
 **Closed Trades:**
 | Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
@@ -126,10 +132,72 @@
 | — | — | — | — | — | — | — |
 
 **Notes:**
-- Prices unchanged (still daily close, no intraday movement captured yet)
-- Monitor bug: showed "No open positions" because IBKR returned no live price and script skipped display — fixed
-- 5:00 AM scan shows more downtrend stocks (29 vs 12) — different Finviz candidates at different times
-- Weekend ahead — no scans until Monday 9:30 PM MYT
+- Prices unchanged — yfinance daily candle hasn't updated (no new trading day yet)
+- IBKR live prices not available: (1) market closed for monitors, (2) run_ares.sh was missing PATH/DISPLAY — fixed
+- IB Gateway had stopped since Thursday — restarted Saturday
+- Shadow tracking ready — will activate when first trade closes
+- Weekend: no scans Sat/Sun, next scan Monday 9:30 PM MYT
+- **Plan: collect full week of data Mon-Fri, update logbook manually via iPad GitHub app**
+
+---
+
+### Sep 8-12, 2026 (Monday-Friday) — Week 2
+
+**Changes Made:**
+- None planned — observation week, collecting data
+
+**Monday Sep 8:**
+- 9:30 PM scan:
+- 11:30 PM / 1:30 AM monitors:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Tuesday Sep 9:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Wednesday Sep 10:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Thursday Sep 11:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Friday Sep 12:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Open Trades (End of Week):**
+| Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
+|--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
+| CNH | momentum_breakout | Sep 3 | $13.84 | | | | $12.83 | | $15.50 |
+| PAYP | momentum_breakout | Sep 3 | $16.93 | | | | $15.73 | | $18.96 |
+
+**Closed Trades (This Week):**
+| Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
+|--------|----------|-------|------|-----------|-------|--------|
+| | | | | | | |
+
+**Weekly Summary:**
+| Metric | Value |
+|--------|-------|
+| Total scans | /20 |
+| Signals triggered | |
+| Trades opened | |
+| Trades closed | |
+| Win rate | |
+| Total P&L | |
+| Shadow insights | |
 
 ---
 
