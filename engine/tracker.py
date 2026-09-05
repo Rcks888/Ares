@@ -99,6 +99,18 @@ def _close_trade(trade, today, exit_price, reason):
     trade['pnl_pct'] = round(
         (exit_price - trade['entry_price'])
         / trade['entry_price'] * 100, 2)
+    trade['shadow'] = {
+        'active': True,
+        'days_tracked': 0,
+        'max_days': 30,
+        'peak_after_exit': exit_price,
+        'trough_after_exit': exit_price,
+        'peak_date': today,
+        'trough_date': today,
+        'missed_upside_pct': 0,
+        'avoided_downside_pct': 0,
+        'latest_price': exit_price
+    }
 
 def check_open_trades():
     """Check all open trades. Ares V2 exit rules."""
@@ -254,6 +266,62 @@ def print_scorecard():
             wr = data['wins'] / data['total'] * 100
             print(f"    {s}: {data['wins']}/{data['total']} wins ({wr:.0f}%)")
 
+def check_shadow_trades():
+    """Track price movement for 30 days after trade closes."""
+    trades = load_trades()
+    updated = False
+    shadow_trades = [t for t in trades if t['status'] == 'closed'
+                     and t.get('shadow', {}).get('active', False)]
+
+    if not shadow_trades:
+        return
+
+    print(f"\n  SHADOW TRACKING ({len(shadow_trades)} trades):")
+    for trade in shadow_trades:
+        symbol = trade['symbol']
+        shadow = trade['shadow']
+
+        try:
+            df = load_stock(symbol)
+            current_price = float(df.iloc[-1]['Close'])
+            shadow['latest_price'] = round(current_price, 2)
+            shadow['days_tracked'] = _holding_days(trade['exit_date'])
+
+            if current_price > shadow['peak_after_exit']:
+                shadow['peak_after_exit'] = round(current_price, 2)
+                shadow['peak_date'] = str(df.iloc[-1].name)[:10]
+
+            if current_price < shadow['trough_after_exit']:
+                shadow['trough_after_exit'] = round(current_price, 2)
+                shadow['trough_date'] = str(df.iloc[-1].name)[:10]
+
+            exit_price = trade['exit_price']
+            shadow['missed_upside_pct'] = round(
+                (shadow['peak_after_exit'] - exit_price) / exit_price * 100, 2)
+            shadow['avoided_downside_pct'] = round(
+                (exit_price - shadow['trough_after_exit']) / exit_price * 100, 2)
+
+            if shadow['days_tracked'] >= shadow['max_days']:
+                shadow['active'] = False
+                verdict = "✅ Good exit" if shadow['missed_upside_pct'] < 5 else "⚠️ Left money on table"
+                print(f"    {symbol}: SHADOW COMPLETE ({shadow['max_days']}d) | {verdict}")
+                print(f"      Peak after exit: ${shadow['peak_after_exit']} (+{shadow['missed_upside_pct']}%)")
+                print(f"      Trough after exit: ${shadow['trough_after_exit']} (-{shadow['avoided_downside_pct']}%)")
+            else:
+                days_left = shadow['max_days'] - shadow['days_tracked']
+                print(f"    {symbol}: Day {shadow['days_tracked']}/{shadow['max_days']} | "
+                      f"Now ${current_price:.2f} | "
+                      f"Peak +{shadow['missed_upside_pct']}% | "
+                      f"Trough -{shadow['avoided_downside_pct']}% | "
+                      f"{days_left}d left")
+
+            updated = True
+        except Exception as e:
+            print(f"    {symbol}: Shadow error — {e}")
+
+    if updated:
+        save_trades(trades)
+
 def export_csv():
     """Export all trades to CSV for easy viewing in Excel."""
     trades = load_trades()
@@ -268,7 +336,9 @@ def export_csv():
         'stop_loss', 'trailing_stop', 'take_profit', 'peak_price',
         'rsi_at_entry', 'vol_at_entry', 'strength',
         'status', 'exit_date', 'exit_price', 'exit_reason',
-        'holding_days', 'pnl', 'pnl_pct', 'version'
+        'holding_days', 'pnl', 'pnl_pct', 'version',
+        'shadow_days', 'shadow_peak', 'shadow_missed_pct',
+        'shadow_trough', 'shadow_avoided_pct', 'shadow_verdict'
     ]
 
     with open(csv_path, 'w', newline='') as f:
@@ -276,6 +346,15 @@ def export_csv():
         writer.writeheader()
         for t in trades:
             row = {col: t.get(col, '') for col in columns}
+            shadow = t.get('shadow', {})
+            if shadow:
+                row['shadow_days'] = shadow.get('days_tracked', '')
+                row['shadow_peak'] = shadow.get('peak_after_exit', '')
+                row['shadow_missed_pct'] = shadow.get('missed_upside_pct', '')
+                row['shadow_trough'] = shadow.get('trough_after_exit', '')
+                row['shadow_avoided_pct'] = shadow.get('avoided_downside_pct', '')
+                missed = shadow.get('missed_upside_pct', 0)
+                row['shadow_verdict'] = 'Good exit' if missed < 5 else 'Left money on table'
             writer.writerow(row)
 
     print(f"  CSV exported: logs/trades_report.csv")

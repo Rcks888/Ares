@@ -4,7 +4,7 @@ from pathlib import Path
 from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib
 from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
-from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv
+from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades
 
 USE_SCREENER = True
 
@@ -99,6 +99,7 @@ def generate_report():
         print("  No signals today. Do nothing.")
 
     print_scorecard()
+    check_shadow_trades()
     export_csv()
 
     print(f"\n[6] SCREEN OVERVIEW")
