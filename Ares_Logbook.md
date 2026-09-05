@@ -106,19 +106,19 @@
 - Closed trades record final holding days permanently
 
 **Scan Results:**
-- 9:30 PM scan: _pending_
-- 11:30 PM scan: _pending_
-- 1:30 AM scan: _pending_
-- 5:00 AM scan: _pending_
+- 9:30 PM scan: ✅ No signals. Regimes: 16 uptrend | 4 range | 12 downtrend
+- 11:30 PM scan: ✅ Monitor — No live price (IBKR couldn't fetch, see bug fix)
+- 1:30 AM scan: ✅ Monitor — No live price (same issue)
+- 5:00 AM scan: ✅ No signals. Regimes: 14 uptrend | 18 range | 29 downtrend
 
 **Signals Triggered:**
-- _pending_
+- None
 
 **Open Trades:**
 | Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
 |--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
-| CNH | momentum_breakout | Sep 3 | $13.84 | _pending_ | _pending_ | 2 | $12.83 | $12.83 | $15.50 |
-| PAYP | momentum_breakout | Sep 3 | $16.93 | _pending_ | _pending_ | 2 | $15.73 | $15.73 | $18.96 |
+| CNH | momentum_breakout | Sep 3 | $13.84 | $13.84 | 0.0% | 1 | $12.83 | $12.83 | $15.50 |
+| PAYP | momentum_breakout | Sep 3 | $16.93 | $16.93 | 0.0% | 1 | $15.73 | $15.73 | $18.96 |
 
 **Closed Trades:**
 | Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
@@ -126,7 +126,10 @@
 | — | — | — | — | — | — | — |
 
 **Notes:**
--
+- Prices unchanged (still daily close, no intraday movement captured yet)
+- Monitor bug: showed "No open positions" because IBKR returned no live price and script skipped display — fixed
+- 5:00 AM scan shows more downtrend stocks (29 vs 12) — different Finviz candidates at different times
+- Weekend ahead — no scans until Monday 9:30 PM MYT
 
 ---
 
