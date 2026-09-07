@@ -1,0 +1,3 @@
+candidates_screened:103
+signals_found:1
+signal_names:HAFN(momentum_breakout,conf3)
