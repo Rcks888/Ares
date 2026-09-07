@@ -4,7 +4,7 @@ from pathlib import Path
 from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib
 from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
-from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades
+from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals
 
 USE_SCREENER = True
 
@@ -37,6 +37,8 @@ def generate_report():
     for sym in market_syms:
         if sym not in all_symbols:
             all_symbols.append(sym)
+
+    execute_pending_signals()
 
     print(f"\n[1] Refreshing data ({len(all_symbols)} stocks)...")
     refresh_watchlist(all_symbols)
@@ -98,10 +100,12 @@ def generate_report():
             print(f"    Trailing:     {trailing_pct*100:.0f}% from peak (remaining 50%)")
 
             result = open_trade(s)
-            if result == 'opened':
-                print(f"    [Recorded as virtual trade]")
+            if result == 'pending':
+                print(f"    [PENDING — will execute at next day's open]")
             elif result == 'queued':
-                print(f"    [Queued — waiting for slot to open]")
+                print(f"    [QUEUED — slots full, waiting for opening]")
+            elif result == 'duplicate':
+                print(f"    [SKIP — already open or pending]")
     else:
         print("  No signals today. Do nothing.")
 
