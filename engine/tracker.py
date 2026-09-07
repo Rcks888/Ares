@@ -106,13 +106,14 @@ def open_trade(signal, from_queue=False):
 
     slippage_pct = params.get('slippage_pct', 0.001)
     commission = params.get('commission_per_trade', 1.00)
+    cash_reserve_pct = params.get('cash_reserve_pct', 0.25)
 
     raw_price = signal['price']
     entry_price = raw_price * (1 + slippage_pct)
 
-    portfolio = params.get('starting_capital', 10000)
-    position_pct = 1.0 / max_positions
-    position_size = portfolio * position_pct - commission
+    portfolio = params.get('starting_capital', 1000)
+    available_capital = portfolio * (1 - cash_reserve_pct)
+    position_size = (available_capital / max_positions) - commission
     shares = position_size / entry_price
     stop_loss = entry_price - (entry_price * signal['stdev_20'] * 2)
 
