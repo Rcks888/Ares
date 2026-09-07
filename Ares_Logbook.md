@@ -175,6 +175,20 @@
 - Compare live results vs Athena backtest
 - Only then consider parameter tweaks or ML (Phase 3)
 
+**Friction Tracking Added (per reviewer):**
+- Entry slippage: 0.1% applied to buy price
+- Exit slippage: 0.1% applied to sell price
+- Commission: $1 per entry, exit, and scale-out (tracked individually)
+- Next-bar execution flagged (signal day N → entry day N+1)
+- pnl_after_costs field for true P&L after all friction
+- All trades now directly comparable to Athena V5 backtest
+
+**Observation Phase Rules (DO NOT CHANGE):**
+- No RSI/confluence/trailing stop parameter changes
+- No new filters or indicators
+- No manual signal overrides
+- No ML training until 40-60 trades collected
+
 ---
 
 ### Sep 8-12, 2026 (Monday-Friday) — Week 2

@@ -79,7 +79,17 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 | Trailing stop | 10% from peak | +5.66% avg P&L |
 | Trend continuation | Disabled | Was 24% win rate |
 | Max positions | 5 | Best risk/reward ratio |
-| Profit factor | 2.42-3.00 | Backtested on 1060 trades |
+| Profit factor | 2.41 (realistic) | Backtested on 1060 trades |
+
+### Realistic Execution Tracking
+| Item | Setting |
+|------|---------|
+| Entry timing | Next-bar execution (signal day N → buy day N+1 open) |
+| Slippage | 0.1% per trade (buy higher, sell lower) |
+| Commission | $1 per trade (entry + exit + scale-out each) |
+| Fill assumption | System always follows signal (no manual override) |
+
+Every trade logs: `signal_price`, `entry_price` (after slippage), `entry_commission`, `exit_slippage`, `exit_commission`, `total_commission`, `pnl_after_costs` — directly comparable to Athena V5 backtest.
 
 ## Finviz Screens
 
