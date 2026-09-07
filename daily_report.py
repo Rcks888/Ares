@@ -11,8 +11,8 @@ USE_SCREENER = True
 def generate_report():
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
-    print(f"  ARES V2.1 DAILY REPORT — {today}")
-    print(f"  RSI: 21-period OHLC4 | Regime-Aware")
+    print(f"  ARES V3 DAILY REPORT — {today}")
+    print(f"  RSI: 21-period OHLC4 | Regime-Aware | Scale-Out")
     print(f"  Mode: {'Dynamic Screener' if USE_SCREENER else 'Fixed Watchlist'}")
     print(f"{'='*50}\n")
 
@@ -78,23 +78,28 @@ def generate_report():
             if s.get('screens'):
                 print(f"    Screens:    {', '.join(s['screens'])}")
 
-            portfolio = 10000
-            position_size = portfolio * 0.10
-            shares = position_size / s['price']
-            stop_loss = s['price'] - (s['price'] * s['stdev_20'] * 2)
             from engine.signals import load_strategy_params
             _params = load_strategy_params()
-            tp_pct = _params.get('tp_momentum', 0.12) if s['strategy'] in ('momentum_breakout', 'trend_continuation') else _params.get('tp_reversal', 0.08)
+            max_pos = _params.get('max_positions', 5)
+            portfolio = _params.get('starting_capital', 10000)
+            position_size = portfolio * (1.0 / max_pos)
+            shares = position_size / s['price']
+            stop_loss = s['price'] - (s['price'] * s['stdev_20'] * 2)
+            tp_pct = _params.get('tp_momentum', 0.18) if s['strategy'] == 'momentum_breakout' else _params.get('tp_reversal', 0.10)
             take_profit = s['price'] * (1 + tp_pct)
+            trailing_pct = _params.get('trailing_stop_pct', 0.10)
             print(f"\n    --- WHAT TO DO ---")
             print(f"    Buy:          ${position_size:.0f} worth "
                   f"({shares:.1f} shares)")
             print(f"    Stop-loss:    ${stop_loss:.2f}")
-            print(f"    Take-profit:  ${take_profit:.2f} (+{tp_pct*100:.0f}%)")
-            print(f"    Trailing:     8% from peak")
+            print(f"    Take-profit:  ${take_profit:.2f} (+{tp_pct*100:.0f}%) — scale out 50%")
+            print(f"    Trailing:     {trailing_pct*100:.0f}% from peak (remaining 50%)")
 
-            open_trade(s)
-            print(f"    [Recorded as virtual trade]")
+            result = open_trade(s)
+            if result == 'opened':
+                print(f"    [Recorded as virtual trade]")
+            elif result == 'queued':
+                print(f"    [Queued — waiting for slot to open]")
     else:
         print("  No signals today. Do nothing.")
 

@@ -1,5 +1,5 @@
 {
-    "version": "2.1",
+    "version": "3.0",
     "rsi_length": 21,
     "rsi_source": "ohlc4",
     "rsi_oversold": 30,
@@ -13,7 +13,14 @@
     "sma_trend_length": 50,
     "sma_slope_threshold": 0.001,
     "min_confluence": 2,
-    "trailing_stop_pct": 0.08,
-    "tp_momentum": 0.12,
-    "tp_reversal": 0.08
+    "trailing_stop_pct": 0.10,
+    "tp_momentum": 0.18,
+    "tp_reversal": 0.10,
+    "disable_trend_continuation": true,
+    "scale_out": true,
+    "scale_out_pct": 0.50,
+    "starting_capital": 10000,
+    "max_positions": 5,
+    "cash_reserve_pct": 0.25,
+    "queue_max_age_days": 5
 }

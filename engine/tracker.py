@@ -37,24 +37,84 @@ def save_trades(trades):
     with open(TRADES_FILE, 'w') as f:
         json.dump(trades, f, indent=2)
 
-def open_trade(signal):
-    """Record a new virtual trade from a signal. Ares V2."""
-    trades = load_trades()
-    for t in trades:
-        if t['symbol'] == signal['symbol'] and t['status'] == 'open':
-            return
+QUEUE_FILE = LOGS_DIR / "signal_queue.json"
 
-    portfolio = 10000
-    position_size = portfolio * 0.10
+def load_queue():
+    """Load queued signals from disk."""
+    if not QUEUE_FILE.exists():
+        return []
+    with open(QUEUE_FILE) as f:
+        return json.load(f)
+
+def save_queue(queue):
+    """Save queued signals to disk."""
+    with open(QUEUE_FILE, 'w') as f:
+        json.dump(queue, f, indent=2)
+
+def queue_signal(signal):
+    """Add a signal to the watchlist queue."""
+    queue = load_queue()
+    for q in queue:
+        if q['symbol'] == signal['symbol']:
+            return
+    queue.append({
+        'symbol': signal['symbol'],
+        'strategy': signal['strategy'],
+        'trigger': signal.get('trigger', 'unknown'),
+        'confluence': signal.get('confluence', 1),
+        'price_at_signal': signal['price'],
+        'rsi_at_signal': signal['rsi'],
+        'date_added': signal['date'],
+        'screens': signal.get('screens', [])
+    })
+    save_queue(queue)
+    print(f"    [Queued — slots full] {signal['symbol']} ({signal['strategy']})")
+
+def expire_queue():
+    """Remove expired queue entries (older than queue_max_age_days)."""
+    params = _load_params()
+    max_age = params.get('queue_max_age_days', 5)
+    queue = load_queue()
+    today = date.today()
+    active = []
+    for q in queue:
+        try:
+            added = datetime.strptime(q['date_added'], "%Y-%m-%d").date()
+            if (today - added).days <= max_age:
+                active.append(q)
+        except Exception:
+            pass
+    if len(active) != len(queue):
+        save_queue(active)
+    return active
+
+def open_trade(signal, from_queue=False):
+    """Record a new virtual trade from a signal. Ares V3."""
+    trades = load_trades()
+    params = _load_params()
+
+    open_trades = [t for t in trades if t['status'] == 'open']
+    max_positions = params.get('max_positions', 5)
+
+    for t in open_trades:
+        if t['symbol'] == signal['symbol']:
+            return 'duplicate'
+
+    if len(open_trades) >= max_positions:
+        queue_signal(signal)
+        return 'queued'
+
+    portfolio = params.get('starting_capital', 10000)
+    position_pct = 1.0 / max_positions
+    position_size = portfolio * position_pct
     shares = position_size / signal['price']
     stop_loss = signal['price'] - (signal['price'] * signal['stdev_20'] * 2)
 
-    params = _load_params()
     strategy = signal['strategy']
     if strategy in ('momentum_breakout', 'trend_continuation'):
-        tp_pct = params.get('tp_momentum', 0.12)
+        tp_pct = params.get('tp_momentum', 0.18)
     else:
-        tp_pct = params.get('tp_reversal', 0.08)
+        tp_pct = params.get('tp_reversal', 0.10)
 
     take_profit = signal['price'] * (1 + tp_pct)
     trade = {
@@ -67,6 +127,7 @@ def open_trade(signal):
         'entry_date': signal['date'],
         'entry_price': signal['price'],
         'shares': round(shares, 2),
+        'original_shares': round(shares, 2),
         'position_size': round(position_size, 2),
         'stop_loss': round(stop_loss, 2),
         'take_profit': round(take_profit, 2),
@@ -75,17 +136,22 @@ def open_trade(signal):
         'rsi_at_entry': signal['rsi'],
         'vol_at_entry': signal['vol_ratio'],
         'strength': signal['strength'],
+        'scaled_out': False,
+        'scale_out_price': None,
+        'scale_out_date': None,
+        'from_queue': from_queue,
         'status': 'open',
         'exit_date': None,
         'exit_price': None,
         'exit_reason': None,
         'pnl': None,
         'pnl_pct': None,
-        'version': '2.0'
+        'version': '3.0'
     }
 
     trades.append(trade)
     save_trades(trades)
+    return 'opened'
 
 def _close_trade(trade, today, exit_price, reason):
     """Helper to close a trade with given reason."""
@@ -113,9 +179,12 @@ def _close_trade(trade, today, exit_price, reason):
     }
 
 def check_open_trades():
-    """Check all open trades. Ares V2 exit rules."""
+    """Check all open trades. Ares V3 exit rules with scale-out."""
     trades = load_trades()
+    params = _load_params()
     updated = False
+    scale_out_enabled = params.get('scale_out', False)
+    scale_out_pct = params.get('scale_out_pct', 0.50)
 
     for trade in trades:
         if trade['status'] != 'open':
@@ -140,8 +209,7 @@ def check_open_trades():
             trailing_stop = trade.get('trailing_stop', trade['stop_loss'])
             peak_price = trade.get('peak_price', trade['entry_price'])
 
-            params = _load_params()
-            trailing_pct = params.get('trailing_stop_pct', 0.08)
+            trailing_pct = params.get('trailing_stop_pct', 0.10)
             rsi_extreme = params.get('rsi_extreme_high', 90)
 
             if current_price > peak_price:
@@ -155,14 +223,23 @@ def check_open_trades():
 
             effective_stop = max(trade['stop_loss'], trailing_stop)
 
+            # Scale-out: sell 50% at TP, let rest ride
+            if scale_out_enabled and not trade.get('scaled_out', False):
+                if take_profit and current_price >= take_profit:
+                    original = trade.get('original_shares', trade['shares'])
+                    sell_shares = original * scale_out_pct
+                    trade['shares'] = round(trade['shares'] - sell_shares, 2)
+                    trade['scaled_out'] = True
+                    trade['scale_out_price'] = round(current_price, 2)
+                    trade['scale_out_date'] = today
+                    print(f"  📈 {trade['symbol']}: SCALED OUT 50% at ${current_price:.2f} (+{((current_price - trade['entry_price'])/trade['entry_price']*100):.1f}%)")
+                    updated = True
+                    continue
+
             if current_price <= effective_stop:
                 exit_price = effective_stop
                 reason = 'trailing_stop' if trailing_stop > trade['stop_loss'] else 'stop_loss'
                 _close_trade(trade, today, exit_price, reason)
-                updated = True
-
-            elif take_profit and current_price >= take_profit:
-                _close_trade(trade, today, take_profit, 'take_profit')
                 updated = True
 
             elif current_rsi > rsi_extreme:
@@ -178,16 +255,19 @@ def check_open_trades():
                 _close_trade(trade, today, current_price, 'mean_reversion_complete')
                 updated = True
 
-            # V1 backward compatibility
-            elif strategy == 'rsi_reversal' and current_rsi > 50:
-                _close_trade(trade, today, current_price, 'target_reached')
-                updated = True
-
         except Exception as e:
             print(f"  Error checking {trade['symbol']}: {e}")
 
     if updated:
         save_trades(trades)
+
+    # Check queue for entries if slot opened
+    open_count = len([t for t in trades if t['status'] == 'open'])
+    max_positions = params.get('max_positions', 5)
+    if open_count < max_positions:
+        queue = expire_queue()
+        if queue:
+            print(f"\n  QUEUE CHECK: {len(queue)} signals waiting, {max_positions - open_count} slot(s) open")
 
     return trades
 
@@ -204,8 +284,12 @@ def print_scorecard():
         print("  No trades recorded yet.")
         return
 
+    params = _load_params()
+    max_pos = params.get('max_positions', 5)
+    queue = load_queue()
+
     if open_trades:
-        print(f"\n  OPEN POSITIONS ({len(open_trades)}):")
+        print(f"\n  OPEN POSITIONS ({len(open_trades)}/{max_pos} slots):")
         for t in open_trades:
             try:
                 live = get_live_price(t['symbol'])
@@ -218,13 +302,21 @@ def print_scorecard():
                 tp = t.get('take_profit', 'N/A')
                 ts = t.get('trailing_stop', t['stop_loss'])
                 days = _holding_days(t['entry_date'])
+                scaled = " [50% sold]" if t.get('scaled_out') else ""
                 print(f"    {t['symbol']}: entry ${t['entry_price']} -> "
                       f"now ${current:.2f} ({src}) {arrow}{abs(unrealized):.1f}% | "
-                      f"Day {days} | SL: ${t['stop_loss']} | TS: ${ts} | TP: ${tp}")
+                      f"Day {days} | SL: ${t['stop_loss']} | TS: ${ts} | TP: ${tp}{scaled}")
             except Exception:
                 tp = t.get('take_profit', 'N/A')
                 print(f"    {t['symbol']}: entry ${t['entry_price']} | "
                       f"stop: ${t['stop_loss']} | TP: ${tp}")
+
+    if queue:
+        print(f"\n  QUEUED SIGNALS ({len(queue)}):")
+        for q in queue:
+            age = _holding_days(q['date_added'])
+            print(f"    {q['symbol']}: {q['strategy']} | confluence {q['confluence']} | "
+                  f"${q['price_at_signal']:.2f} | queued {age}d ago")
 
     if closed:
         wins = [t for t in closed if t['pnl'] > 0]

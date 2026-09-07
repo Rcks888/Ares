@@ -154,8 +154,9 @@ def classify_sector(symbol, screen_tags=None):
     return get_symbol_category(symbol, watchlist)
 
 def scan_universe(symbols=None, screen_data=None):
-    """Scan stocks using regime-aware strategy. Ares V2.1."""
+    """Scan stocks using regime-aware strategy. Ares V3."""
     params = load_strategy_params()
+    disable_trend_cont = params.get('disable_trend_continuation', False)
 
     if symbols is None:
         watchlist = load_watchlist()
@@ -176,7 +177,7 @@ def scan_universe(symbols=None, screen_data=None):
 
             if regime == 'uptrend':
                 signal = check_momentum_breakout(symbol, df, params)
-                if not signal:
+                if not signal and not disable_trend_cont:
                     signal = check_uptrend_signals(symbol, df, params)
             elif regime == 'range':
                 signal = check_range_signals(symbol, df, params)
