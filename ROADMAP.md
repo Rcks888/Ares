@@ -130,8 +130,86 @@ Never optimize based on 5-10 trades — too small a sample.
 
 ---
 
+## Machine Learning Roadmap
+
+### Architecture: Hybrid AI (3 Layers)
+
+```
+Layer 1: Ares V2.1 (Technical Analysis)
+  → RSI, divergence, regime, confluence
+  → Filters 5000 stocks → 5-10 signals
+
+Layer 2: Custom ML Model (Pattern Scoring) ← NEW
+  → Trained on historical + live trade data
+  → Scores each signal: win probability, optimal TP/SL
+  → "Trades like THIS historically win 70%"
+
+Layer 3: Claude API (Contextual Analysis)
+  → News, earnings, sector outlook
+  → Final approve/reject on ML-scored signals
+```
+
+### ML Phased Approach
+
+| Phase | When | Data | Model | What It Does |
+|-------|------|------|-------|-------------|
+| **ML-1** | Now | Backtested trades (500+) | Random Forest | Win/loss prediction, feature importance |
+| **ML-2** | Month 2 | 50+ real paper trades | XGBoost/LightGBM | Improved scoring with real data |
+| **ML-3** | Month 3 | 200+ trades + Claude | Ensemble | Combines technical + sentiment features |
+| **ML-4** | Month 6+ | 500+ trades | LSTM / RL | Time-series prediction, optimal execution |
+
+### ML Model Features (Inputs)
+
+| Feature | Type | Source |
+|---------|------|--------|
+| RSI at entry | Numeric | Ares indicators |
+| Regime (uptrend/range) | Categorical | Ares regime detection |
+| Confluence count | Numeric | Ares signals |
+| Volume ratio | Numeric | Ares indicators |
+| MACD histogram slope | Numeric | Ares indicators |
+| Distance from 52w high | Numeric | yfinance |
+| Distance from SMA 50 | Numeric | Ares indicators |
+| Sector | Categorical | Finviz |
+| SPY RSI (market condition) | Numeric | yfinance |
+| Day of week | Categorical | Date |
+| VIX level | Numeric | yfinance |
+| Finviz screen type | Categorical | Screener |
+
+### ML Model Outputs (Predictions)
+
+| Output | Type | Example |
+|--------|------|---------|
+| Win probability | 0-100% | 72% |
+| Expected P&L % | Numeric | +8.5% |
+| Optimal TP | Numeric | +15% |
+| Optimal SL | Numeric | -5.5% |
+| Expected holding days | Numeric | 12 days |
+| Confidence | Low/Medium/High | Medium |
+
+### Separate Project: Athena (Backtesting Engine)
+
+The backtesting engine lives in a separate repo: **Athena**
+- Named after the Greek goddess of wisdom and strategy
+- Simulates Ares V2.1 on 2 years of historical data
+- Generates 500+ simulated trades for ML training
+- Shares the same indicator/signal logic as Ares
+- Outputs training data CSV for ML models
+
+### Athena → Ares Integration
+
+```
+Athena (backtest)           Ares (live)
+  ├── Generate trades ──→ ML model training
+  ├── Feature analysis ──→ Parameter tuning
+  └── Optimal TP/SL    ──→ Update strategy_params.json
+```
+
+---
+
 ## Notes
 - Paper trade minimum 3 months before going live
 - Need 50+ closed trades for statistically meaningful data
 - Shadow tracking data is critical for TP optimization
 - Start real money only when profit factor > 1.3 consistently
+- ML model only useful with sufficient data — never trust models trained on <50 trades
+- Backtest results ≠ live results (slippage, timing, emotions) — use as guidance only
