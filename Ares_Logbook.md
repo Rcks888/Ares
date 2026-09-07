@@ -104,11 +104,17 @@
 - Added holding days tracking to trades JSON, CSV, scorecard, and monitor
 - Holding days auto-updates on every save for open trades
 - Closed trades record final holding days permanently
+- Added shadow tracking: monitors price 30 days after trade closes
+  - Tracks peak/trough after exit, missed upside %, avoided downside %
+  - Verdict: "Good exit" (<5% missed) or "Left money on table"
+- Fixed monitor bug: now shows positions even without IBKR live price
+- Fixed run_ares.sh: added PATH + DISPLAY so cron can connect to IB Gateway
+- Restarted IB Gateway (had died since Thursday)
 
 **Scan Results:**
 - 9:30 PM scan: ✅ No signals. Regimes: 16 uptrend | 4 range | 12 downtrend
-- 11:30 PM scan: ✅ Monitor — No live price (IBKR couldn't fetch, see bug fix)
-- 1:30 AM scan: ✅ Monitor — No live price (same issue)
+- 11:30 PM scan: ✅ Monitor — No live price (market closed, IBKR returned None)
+- 1:30 AM scan: ✅ Monitor — No live price (same)
 - 5:00 AM scan: ✅ No signals. Regimes: 14 uptrend | 18 range | 29 downtrend
 
 **Signals Triggered:**
@@ -117,8 +123,8 @@
 **Open Trades:**
 | Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
 |--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
-| CNH | momentum_breakout | Sep 3 | $13.84 | $13.84 | 0.0% | 1 | $12.83 | $12.83 | $15.50 |
-| PAYP | momentum_breakout | Sep 3 | $16.93 | $16.93 | 0.0% | 1 | $15.73 | $15.73 | $18.96 |
+| CNH | momentum_breakout | Sep 3 | $13.84 | $13.84 (daily) | 0.0% | 1 | $12.83 | $12.83 | $15.50 |
+| PAYP | momentum_breakout | Sep 3 | $16.93 | $16.93 (daily) | 0.0% | 1 | $15.73 | $15.73 | $18.96 |
 
 **Closed Trades:**
 | Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
@@ -126,10 +132,122 @@
 | — | — | — | — | — | — | — |
 
 **Notes:**
-- Prices unchanged (still daily close, no intraday movement captured yet)
-- Monitor bug: showed "No open positions" because IBKR returned no live price and script skipped display — fixed
-- 5:00 AM scan shows more downtrend stocks (29 vs 12) — different Finviz candidates at different times
-- Weekend ahead — no scans until Monday 9:30 PM MYT
+- Prices unchanged — yfinance daily candle hasn't updated (no new trading day yet)
+- IBKR live prices not available: (1) market closed for monitors, (2) run_ares.sh was missing PATH/DISPLAY — fixed
+- IB Gateway had stopped since Thursday — restarted Saturday
+- Shadow tracking ready — will activate when first trade closes
+- Weekend: no scans Sat/Sun, next scan Monday 9:30 PM MYT
+- **Plan: collect full week of data Mon-Fri, update logbook manually via iPad GitHub app**
+
+---
+
+### Sep 6-7, 2026 (Saturday-Sunday) — Weekend
+
+**Changes Made:**
+- Built Athena backtesting engine (separate repo: github.com/Rcks888/Athena)
+- Ran 5 backtest versions (V1-V5), 130 stocks, 5 years of data
+- V1: Original params → PF 2.12, 52.5% WR
+- V2: TP 18%, TS 10%, no trend_cont → PF 2.42
+- V3: No fixed TP, trailing only → PF 3.00 🏆
+- V4: Full portfolio sim $1K/5 slots → $1K→$4,046 (+32.5%/yr)
+- V5: Realistic friction (slippage, commission, next-bar exec) → +22.8%/yr, -15.9% DD
+- V5 universe sensitivity: tested different 100 mid-cap stocks → strategy works across universes ✅
+- Upgraded Ares to V3 based on Athena findings
+- V3 changes: TP 18% scale-out, TS 10%, disabled trend_continuation, signal queue, max 5 positions
+- Cleared V2 trade data, fresh start for V3
+
+**Athena Key Findings:**
+| Metric | Optimistic (V4) | Realistic (V5) |
+|--------|-----------------|----------------|
+| Annual return | +32.5% | +22.8% |
+| Max drawdown | -5.0% | -15.9% |
+| Profit factor | 2.42 | 2.41 |
+| 5yr growth | $1K→$4,046 | $1K→$2,774 |
+
+**External Review:**
+- Reviewer validated V5 as "credible baseline for live paper trading"
+- Recommended: 4-6 weeks paper trading (40-60 closed trades) before any parameter tweaks
+- No ML layer until real data collected
+
+**Plan Forward:**
+- Run Ares V3 paper trading for 4-6 weeks
+- Target: 40-60 closed trades for statistical validation
+- Compare live results vs Athena backtest
+- Only then consider parameter tweaks or ML (Phase 3)
+
+**Friction Tracking Added (per reviewer):**
+- Entry slippage: 0.1% applied to buy price
+- Exit slippage: 0.1% applied to sell price
+- Commission: $1 per entry, exit, and scale-out (tracked individually)
+- Next-bar execution flagged (signal day N → entry day N+1)
+- pnl_after_costs field for true P&L after all friction
+- All trades now directly comparable to Athena V5 backtest
+
+**Observation Phase Rules (DO NOT CHANGE):**
+- No RSI/confluence/trailing stop parameter changes
+- No new filters or indicators
+- No manual signal overrides
+- No ML training until 40-60 trades collected
+
+---
+
+### Sep 8-12, 2026 (Monday-Friday) — Week 2
+
+**Changes Made:**
+- Ares V3 first full week of live paper trading
+
+**Monday Sep 8:**
+- 9:30 PM scan:
+- 11:30 PM / 1:30 AM monitors:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Tuesday Sep 9:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Wednesday Sep 10:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Thursday Sep 11:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Friday Sep 12:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
+
+**Open Trades (End of Week):**
+| Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
+|--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
+| CNH | momentum_breakout | Sep 3 | $13.84 | | | | $12.83 | | $15.50 |
+| PAYP | momentum_breakout | Sep 3 | $16.93 | | | | $15.73 | | $18.96 |
+
+**Closed Trades (This Week):**
+| Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
+|--------|----------|-------|------|-----------|-------|--------|
+| | | | | | | |
+
+**Weekly Summary:**
+| Metric | Value |
+|--------|-------|
+| Total scans | /20 |
+| Signals triggered | |
+| Trades opened | |
+| Trades closed | |
+| Win rate | |
+| Total P&L | |
+| Shadow insights | |
 
 ---
 

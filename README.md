@@ -4,7 +4,7 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 
 > *Named after Ares, the Greek god of war — disciplined, strategic, and relentless.*
 
-## Current Version: V2.1
+## Current Version: V3.0
 
 ## How It Works
 
@@ -65,9 +65,31 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 ### Rules
 - ❌ **Never buy in downtrends**
 - ✅ Minimum 2 confluence signals required
-- 🛑 Trailing stop: 8% from peak price
+- 📈 Scale-out: Sell 50% at TP, ride remaining 50% with trailing stop
+- 🛑 Trailing stop: 10% from peak price
 - 🚨 Emotional extreme exit: RSI > 90
-- 📊 Max 8 open positions, max 10% per trade, keep 30% cash
+- 📊 Max 5 open positions, 25% cash reserve
+- 📋 Signal queue: blocked signals wait 5 days for a slot
+
+### V3 Parameters (Athena-Optimized)
+| Parameter | Value | Backtested |
+|-----------|-------|-----------|
+| TP (momentum) | 18% — scale out 50% | +23% avg on scaled trades |
+| TP (reversal) | 10% — scale out 50% | |
+| Trailing stop | 10% from peak | +5.66% avg P&L |
+| Trend continuation | Disabled | Was 24% win rate |
+| Max positions | 5 | Best risk/reward ratio |
+| Profit factor | 2.41 (realistic) | Backtested on 1060 trades |
+
+### Realistic Execution Tracking
+| Item | Setting |
+|------|---------|
+| Entry timing | Next-bar execution (signal day N → buy day N+1 open) |
+| Slippage | 0.1% per trade (buy higher, sell lower) |
+| Commission | $1 per trade (entry + exit + scale-out each) |
+| Fill assumption | System always follows signal (no manual override) |
+
+Every trade logs: `signal_price`, `entry_price` (after slippage), `entry_commission`, `exit_slippage`, `exit_commission`, `total_commission`, `pnl_after_costs` — directly comparable to Athena V5 backtest.
 
 ## Finviz Screens
 
@@ -117,6 +139,16 @@ Ares/
 ```
 
 ## Version History
+
+### V3.0 — Athena-Optimized (Sep 6, 2026)
+- Parameters optimized via 1060+ backtested trades (Athena engine)
+- Scale-out: sell 50% at TP, ride 50% with trailing stop
+- Trailing stop: 8% → 10% (now profitable at +5.66% avg)
+- TP: 12% → 18% (was leaving 12.54% on the table)
+- Disabled trend_continuation strategy (24% win rate, losing money)
+- Signal queue: blocked signals wait 5 days for open slot
+- Max 5 positions with 25% cash reserve
+- Backtested portfolio: $1,000 → $4,046 in 5 years (+32.5%/yr)
 
 ### V2.1 — Dynamic Screener (Sep 3, 2026)
 - Replaced fixed watchlist with Finviz dynamic market screener

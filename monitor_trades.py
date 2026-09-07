@@ -10,7 +10,7 @@ from engine.indicators import add_indicators
 def monitor():
     today_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
-    print(f"  ARES V2.1 TRADE MONITOR — {today_str}")
+    print(f"  ARES V3 TRADE MONITOR — {today_str}")
     print(f"  Mode: IBKR Live Price Check")
     print(f"{'='*50}\n")
 
