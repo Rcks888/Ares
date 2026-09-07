@@ -141,10 +141,46 @@
 
 ---
 
+### Sep 6-7, 2026 (Saturday-Sunday) — Weekend
+
+**Changes Made:**
+- Built Athena backtesting engine (separate repo: github.com/Rcks888/Athena)
+- Ran 5 backtest versions (V1-V5), 130 stocks, 5 years of data
+- V1: Original params → PF 2.12, 52.5% WR
+- V2: TP 18%, TS 10%, no trend_cont → PF 2.42
+- V3: No fixed TP, trailing only → PF 3.00 🏆
+- V4: Full portfolio sim $1K/5 slots → $1K→$4,046 (+32.5%/yr)
+- V5: Realistic friction (slippage, commission, next-bar exec) → +22.8%/yr, -15.9% DD
+- V5 universe sensitivity: tested different 100 mid-cap stocks → strategy works across universes ✅
+- Upgraded Ares to V3 based on Athena findings
+- V3 changes: TP 18% scale-out, TS 10%, disabled trend_continuation, signal queue, max 5 positions
+- Cleared V2 trade data, fresh start for V3
+
+**Athena Key Findings:**
+| Metric | Optimistic (V4) | Realistic (V5) |
+|--------|-----------------|----------------|
+| Annual return | +32.5% | +22.8% |
+| Max drawdown | -5.0% | -15.9% |
+| Profit factor | 2.42 | 2.41 |
+| 5yr growth | $1K→$4,046 | $1K→$2,774 |
+
+**External Review:**
+- Reviewer validated V5 as "credible baseline for live paper trading"
+- Recommended: 4-6 weeks paper trading (40-60 closed trades) before any parameter tweaks
+- No ML layer until real data collected
+
+**Plan Forward:**
+- Run Ares V3 paper trading for 4-6 weeks
+- Target: 40-60 closed trades for statistical validation
+- Compare live results vs Athena backtest
+- Only then consider parameter tweaks or ML (Phase 3)
+
+---
+
 ### Sep 8-12, 2026 (Monday-Friday) — Week 2
 
 **Changes Made:**
-- None planned — observation week, collecting data
+- Ares V3 first full week of live paper trading
 
 **Monday Sep 8:**
 - 9:30 PM scan:
