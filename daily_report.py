@@ -109,6 +109,13 @@ def generate_report():
     else:
         print("  No signals today. Do nothing.")
 
+    summary_path = Path(__file__).parent / "logs" / "last_scan_summary.txt"
+    signal_names = ','.join(f"{s['symbol']}({s['strategy']},conf{s.get('confluence',1)})" for s in signals) if signals else ""
+    with open(summary_path, 'w') as f:
+        f.write(f"candidates_screened:{len(all_symbols)}\n")
+        f.write(f"signals_found:{len(signals)}\n")
+        f.write(f"signal_names:{signal_names}\n")
+
     print_scorecard()
     check_shadow_trades()
     export_csv()
@@ -141,12 +148,13 @@ def generate_report():
                       f"Stocks: {len(cat_data['symbols'])}")
 
     print(f"\n{'='*50}")
-    print("  RULES REMINDER:")
-    print("  - Max 10% of portfolio per trade")
-    print("  - Keep 30% cash at all times")
-    print("  - Sell at stop-loss — no exceptions")
-    print("  - Max 8 positions open")
-    print("  - Stop trading if down 5% this week")
+    print("  V3 RULES — OBSERVATION PHASE:")
+    print("  - Max 5 positions open ($150 each)")
+    print("  - Keep 25% cash reserve")
+    print("  - 10% trailing stop — no exceptions")
+    print("  - Scale out 50% at TP, ride rest")
+    print("  - Do NOT change parameters")
+    print("  - Do NOT override signals manually")
     print(f"{'='*50}\n")
 
 if __name__ == "__main__":
