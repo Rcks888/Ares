@@ -104,11 +104,17 @@ def open_trade(signal, from_queue=False):
         queue_signal(signal)
         return 'queued'
 
+    slippage_pct = params.get('slippage_pct', 0.001)
+    commission = params.get('commission_per_trade', 1.00)
+
+    raw_price = signal['price']
+    entry_price = raw_price * (1 + slippage_pct)
+
     portfolio = params.get('starting_capital', 10000)
     position_pct = 1.0 / max_positions
-    position_size = portfolio * position_pct
-    shares = position_size / signal['price']
-    stop_loss = signal['price'] - (signal['price'] * signal['stdev_20'] * 2)
+    position_size = portfolio * position_pct - commission
+    shares = position_size / entry_price
+    stop_loss = entry_price - (entry_price * signal['stdev_20'] * 2)
 
     strategy = signal['strategy']
     if strategy in ('momentum_breakout', 'trend_continuation'):
@@ -116,7 +122,7 @@ def open_trade(signal, from_queue=False):
     else:
         tp_pct = params.get('tp_reversal', 0.10)
 
-    take_profit = signal['price'] * (1 + tp_pct)
+    take_profit = entry_price * (1 + tp_pct)
     trade = {
         'symbol': signal['symbol'],
         'strategy': strategy,
@@ -124,15 +130,19 @@ def open_trade(signal, from_queue=False):
         'regime': signal.get('regime', 'unknown'),
         'category': signal.get('category', 'unknown'),
         'confluence': signal.get('confluence', 1),
-        'entry_date': signal['date'],
-        'entry_price': signal['price'],
+        'signal_date': signal['date'],
+        'signal_price': round(raw_price, 2),
+        'entry_date': signal['date'] + ' (next-bar)',
+        'entry_price': round(entry_price, 2),
+        'entry_slippage': round(entry_price - raw_price, 4),
+        'entry_commission': commission,
         'shares': round(shares, 2),
         'original_shares': round(shares, 2),
         'position_size': round(position_size, 2),
         'stop_loss': round(stop_loss, 2),
         'take_profit': round(take_profit, 2),
         'trailing_stop': round(stop_loss, 2),
-        'peak_price': signal['price'],
+        'peak_price': entry_price,
         'rsi_at_entry': signal['rsi'],
         'vol_at_entry': signal['vol_ratio'],
         'strength': signal['strength'],
@@ -144,8 +154,12 @@ def open_trade(signal, from_queue=False):
         'exit_date': None,
         'exit_price': None,
         'exit_reason': None,
+        'exit_slippage': None,
+        'exit_commission': None,
+        'total_commission': commission,
         'pnl': None,
         'pnl_pct': None,
+        'pnl_after_costs': None,
         'version': '3.0'
     }
 
@@ -154,17 +168,33 @@ def open_trade(signal, from_queue=False):
     return 'opened'
 
 def _close_trade(trade, today, exit_price, reason):
-    """Helper to close a trade with given reason."""
+    """Helper to close a trade with given reason. Applies slippage and commission."""
+    params = _load_params()
+    slippage_pct = params.get('slippage_pct', 0.001)
+    commission = params.get('commission_per_trade', 1.00)
+
+    raw_exit = exit_price
+    exit_price_after_slippage = raw_exit * (1 - slippage_pct)
+
     trade['status'] = 'closed'
     trade['exit_date'] = today
-    trade['exit_price'] = round(exit_price, 2)
+    trade['exit_price'] = round(exit_price_after_slippage, 2)
     trade['exit_reason'] = reason
-    trade['holding_days'] = _holding_days(trade['entry_date'])
-    pnl = (exit_price - trade['entry_price']) * trade['shares']
-    trade['pnl'] = round(pnl, 2)
+    trade['exit_slippage'] = round(raw_exit - exit_price_after_slippage, 4)
+    trade['exit_commission'] = commission
+    trade['total_commission'] = trade.get('entry_commission', commission) + commission
+
+    entry_date = trade.get('signal_date', trade['entry_date'])
+    if ' (next-bar)' in str(entry_date):
+        entry_date = entry_date.replace(' (next-bar)', '')
+    trade['holding_days'] = _holding_days(entry_date)
+
+    pnl_raw = (exit_price_after_slippage - trade['entry_price']) * trade['shares']
+    trade['pnl'] = round(pnl_raw, 2)
     trade['pnl_pct'] = round(
-        (exit_price - trade['entry_price'])
+        (exit_price_after_slippage - trade['entry_price'])
         / trade['entry_price'] * 100, 2)
+    trade['pnl_after_costs'] = round(pnl_raw - trade['total_commission'], 2)
     trade['shadow'] = {
         'active': True,
         'days_tracked': 0,
@@ -226,13 +256,19 @@ def check_open_trades():
             # Scale-out: sell 50% at TP, let rest ride
             if scale_out_enabled and not trade.get('scaled_out', False):
                 if take_profit and current_price >= take_profit:
+                    slippage_pct = params.get('slippage_pct', 0.001)
+                    scale_commission = params.get('commission_per_trade', 1.00)
+                    scale_price = current_price * (1 - slippage_pct)
                     original = trade.get('original_shares', trade['shares'])
                     sell_shares = original * scale_out_pct
                     trade['shares'] = round(trade['shares'] - sell_shares, 2)
                     trade['scaled_out'] = True
-                    trade['scale_out_price'] = round(current_price, 2)
+                    trade['scale_out_price'] = round(scale_price, 2)
                     trade['scale_out_date'] = today
-                    print(f"  📈 {trade['symbol']}: SCALED OUT 50% at ${current_price:.2f} (+{((current_price - trade['entry_price'])/trade['entry_price']*100):.1f}%)")
+                    trade['scale_out_commission'] = scale_commission
+                    trade['total_commission'] = trade.get('total_commission', 1.0) + scale_commission
+                    pnl_pct = (scale_price - trade['entry_price']) / trade['entry_price'] * 100
+                    print(f"  📈 {trade['symbol']}: SCALED OUT 50% at ${scale_price:.2f} (+{pnl_pct:.1f}%) [comm: ${scale_commission}]")
                     updated = True
                     continue
 
@@ -424,11 +460,16 @@ def export_csv():
     csv_path = LOGS_DIR / "trades_report.csv"
     columns = [
         'symbol', 'strategy', 'trigger', 'regime', 'category', 'confluence',
-        'entry_date', 'entry_price', 'shares', 'position_size',
+        'signal_date', 'signal_price', 'entry_date', 'entry_price',
+        'entry_slippage', 'entry_commission',
+        'shares', 'original_shares', 'position_size',
         'stop_loss', 'trailing_stop', 'take_profit', 'peak_price',
         'rsi_at_entry', 'vol_at_entry', 'strength',
+        'scaled_out', 'scale_out_price', 'scale_out_date',
+        'from_queue',
         'status', 'exit_date', 'exit_price', 'exit_reason',
-        'holding_days', 'pnl', 'pnl_pct', 'version',
+        'exit_slippage', 'exit_commission', 'total_commission',
+        'holding_days', 'pnl', 'pnl_pct', 'pnl_after_costs', 'version',
         'shadow_days', 'shadow_peak', 'shadow_missed_pct',
         'shadow_trough', 'shadow_avoided_pct', 'shadow_verdict'
     ]
