@@ -50,17 +50,14 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 ### 1. Momentum Breakout (Uptrend)
 - Stock near 52-week high with volume surge
 - Blocked by bearish divergence
-- TP: +12% | Trailing Stop: 8% from peak
+- Scale-out: 50% at +18% TP | Remaining 50%: 10% trailing stop
 
-### 2. Trend Continuation (Uptrend)
-- Hidden bullish divergence + RSI pullback to 40-50
-- MACD confirmation
-- TP: +12% | Trailing Stop: 8% from peak
-
-### 3. Mean Reversion (Range)
+### 2. Mean Reversion (Range)
 - RSI < 30 + bullish divergence + volume spike
 - Price near SMA support
-- TP: +8% | Trailing Stop: 8% from peak
+- Scale-out: 50% at +10% TP | Remaining 50%: 10% trailing stop
+
+> **Note:** Trend Continuation strategy was disabled in V3 (24% win rate in backtesting).
 
 ### Rules
 - ❌ **Never buy in downtrends**
@@ -90,6 +87,8 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 | Fill assumption | System always follows signal (no manual override) |
 
 Every trade logs: `signal_price`, `entry_price` (after slippage), `entry_commission`, `exit_slippage`, `exit_commission`, `total_commission`, `pnl_after_costs` — directly comparable to Athena V5 backtest.
+
+> **Note on capital tracking:** Position sizing uses a fixed $1,000 base (not dynamic equity). This is acceptable for the observation phase data collection. Dynamic equity tracking will be added when transitioning to live execution (Phase 4).
 
 ## Finviz Screens
 

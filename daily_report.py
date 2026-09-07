@@ -81,8 +81,10 @@ def generate_report():
             from engine.signals import load_strategy_params
             _params = load_strategy_params()
             max_pos = _params.get('max_positions', 5)
-            portfolio = _params.get('starting_capital', 10000)
-            position_size = portfolio * (1.0 / max_pos)
+            portfolio = _params.get('starting_capital', 1000)
+            cash_reserve = _params.get('cash_reserve_pct', 0.25)
+            available = portfolio * (1 - cash_reserve)
+            position_size = available / max_pos
             shares = position_size / s['price']
             stop_loss = s['price'] - (s['price'] * s['stdev_20'] * 2)
             tp_pct = _params.get('tp_momentum', 0.18) if s['strategy'] == 'momentum_breakout' else _params.get('tp_reversal', 0.10)
