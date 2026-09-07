@@ -21,6 +21,131 @@ def _load_params():
 LOGS_DIR = Path(__file__).parent.parent / "logs"
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 TRADES_FILE = LOGS_DIR / "virtual_trades.json"
+PENDING_FILE = LOGS_DIR / "pending_signals.json"
+
+def load_pending():
+    """Load pending signals (awaiting next-bar execution)."""
+    if not PENDING_FILE.exists():
+        return []
+    with open(PENDING_FILE) as f:
+        return json.load(f)
+
+def save_pending(pending):
+    """Save pending signals to disk."""
+    with open(PENDING_FILE, 'w') as f:
+        json.dump(pending, f, indent=2)
+
+def execute_pending_signals():
+    """Execute pending signals using today's open price. Called at start of each scan."""
+    pending = load_pending()
+    if not pending:
+        return
+
+    params = _load_params()
+    slippage_pct = params.get('slippage_pct', 0.001)
+    commission = params.get('commission_per_trade', 1.00)
+    cash_reserve_pct = params.get('cash_reserve_pct', 0.25)
+    max_positions = params.get('max_positions', 5)
+
+    trades = load_trades()
+    open_count = len([t for t in trades if t['status'] == 'open'])
+    executed = []
+
+    print(f"\n  PENDING SIGNALS: {len(pending)} awaiting execution")
+
+    for sig in pending:
+        if open_count >= max_positions:
+            print(f"    {sig['symbol']}: Slots full — moving to queue")
+            queue_signal(sig)
+            executed.append(sig)
+            continue
+
+        if any(t['symbol'] == sig['symbol'] and t['status'] == 'open' for t in trades):
+            print(f"    {sig['symbol']}: Already open — skipping")
+            executed.append(sig)
+            continue
+
+        try:
+            df = load_stock(sig['symbol'])
+            if df is None or len(df) < 2:
+                executed.append(sig)
+                continue
+
+            today_open = float(df.iloc[-1]['Open'])
+            entry_price = today_open * (1 + slippage_pct)
+
+            portfolio = params.get('starting_capital', 1000)
+            available_capital = portfolio * (1 - cash_reserve_pct)
+            position_size = (available_capital / max_positions) - commission
+            shares = position_size / entry_price
+
+            stdev_20 = sig.get('stdev_20', entry_price * 0.05)
+            stop_loss = entry_price - (entry_price * stdev_20 * 2)
+
+            strategy = sig['strategy']
+            if strategy in ('momentum_breakout', 'trend_continuation'):
+                tp_pct = params.get('tp_momentum', 0.18)
+            else:
+                tp_pct = params.get('tp_reversal', 0.10)
+
+            take_profit = entry_price * (1 + tp_pct)
+            today_str = str(df.iloc[-1].name)[:10]
+
+            trade = {
+                'symbol': sig['symbol'],
+                'strategy': strategy,
+                'trigger': sig.get('trigger', 'unknown'),
+                'regime': sig.get('regime', 'unknown'),
+                'category': sig.get('category', 'unknown'),
+                'confluence': sig.get('confluence', 1),
+                'signal_date': sig['date'],
+                'signal_price': round(sig['price'], 2),
+                'entry_date': today_str,
+                'entry_price': round(entry_price, 2),
+                'entry_slippage': round(entry_price - today_open, 4),
+                'entry_commission': commission,
+                'shares': round(shares, 2),
+                'original_shares': round(shares, 2),
+                'position_size': round(position_size, 2),
+                'stop_loss': round(stop_loss, 2),
+                'take_profit': round(take_profit, 2),
+                'trailing_stop': round(stop_loss, 2),
+                'peak_price': entry_price,
+                'rsi_at_entry': sig.get('rsi', 0),
+                'vol_at_entry': sig.get('vol_ratio', 0),
+                'strength': sig.get('strength', 'unknown'),
+                'scaled_out': False,
+                'scale_out_price': None,
+                'scale_out_date': None,
+                'from_queue': sig.get('from_queue', False),
+                'status': 'open',
+                'exit_date': None,
+                'exit_price': None,
+                'exit_reason': None,
+                'exit_slippage': None,
+                'exit_commission': None,
+                'total_commission': commission,
+                'pnl': None,
+                'pnl_pct': None,
+                'pnl_after_costs': None,
+                'version': '3.0'
+            }
+
+            trades.append(trade)
+            open_count += 1
+            print(f"    ✅ {sig['symbol']}: EXECUTED at ${entry_price:.2f} (open) | "
+                  f"Signal was ${sig['price']:.2f} (close) | "
+                  f"Diff: {((entry_price - sig['price'])/sig['price']*100):+.2f}%")
+        except Exception as e:
+            print(f"    ❌ {sig['symbol']}: Execution failed — {e}")
+
+        executed.append(sig)
+
+    for sig in executed:
+        pending.remove(sig)
+
+    save_pending(pending)
+    save_trades(trades)
 
 def load_trades():
     """Load all virtual trades from disk."""
@@ -94,27 +219,41 @@ def open_trade(signal, from_queue=False):
     params = _load_params()
 
     open_trades = [t for t in trades if t['status'] == 'open']
+    pending = load_pending()
     max_positions = params.get('max_positions', 5)
 
     for t in open_trades:
         if t['symbol'] == signal['symbol']:
             return 'duplicate'
 
-    if len(open_trades) >= max_positions:
+    if len(open_trades) + len(pending) >= max_positions:
         queue_signal(signal)
         return 'queued'
 
-    slippage_pct = params.get('slippage_pct', 0.001)
-    commission = params.get('commission_per_trade', 1.00)
-    cash_reserve_pct = params.get('cash_reserve_pct', 0.25)
+    # Save as pending — will execute at next day's open price
+    pending = load_pending()
+    for p in pending:
+        if p['symbol'] == signal['symbol']:
+            return 'duplicate'
 
-    raw_price = signal['price']
-    entry_price = raw_price * (1 + slippage_pct)
-
-    portfolio = params.get('starting_capital', 1000)
-    available_capital = portfolio * (1 - cash_reserve_pct)
-    position_size = (available_capital / max_positions) - commission
-    shares = position_size / entry_price
+    pending.append({
+        'symbol': signal['symbol'],
+        'strategy': signal['strategy'],
+        'trigger': signal.get('trigger', 'unknown'),
+        'regime': signal.get('regime', 'unknown'),
+        'category': signal.get('category', 'unknown'),
+        'confluence': signal.get('confluence', 1),
+        'date': signal['date'],
+        'price': signal['price'],
+        'rsi': signal.get('rsi', 0),
+        'vol_ratio': signal.get('vol_ratio', 0),
+        'stdev_20': signal.get('stdev_20', 0.05),
+        'strength': signal.get('strength', 'unknown'),
+        'screens': signal.get('screens', []),
+        'from_queue': from_queue
+    })
+    save_pending(pending)
+    return 'pending'
     stop_loss = entry_price - (entry_price * signal['stdev_20'] * 2)
 
     strategy = signal['strategy']
