@@ -23,30 +23,30 @@ def scan_market():
     """
     screens = {
         'unusual_volume': {
-            'Relative Volume': 'Over 3',
-            'Market Cap.': '+Large (over $10bln)',
-            'Average Volume': 'Over 1M',
+            'Relative Volume': 'Over 2',
+            'Market Cap.': '+Mid (over $2bln)',
+            'Average Volume': 'Over 500K',
         },
         'oversold_bounce': {
             'RSI (14)': 'Oversold (30)',
-            'Market Cap.': '+Large (over $10bln)',
-            'Average Volume': 'Over 1M',
+            'Market Cap.': '+Mid (over $2bln)',
+            'Average Volume': 'Over 500K',
         },
         'near_52w_high': {
             '52-Week High/Low': '0-3% below High',
             'Market Cap.': '+Large (over $10bln)',
-            'Average Volume': 'Over 1M',
+            'Average Volume': 'Over 500K',
             'Relative Volume': 'Over 1.5',
         },
         'big_movers_up': {
-            'Change': 'Up 5%',
-            'Market Cap.': '+Large (over $10bln)',
-            'Average Volume': 'Over 1M',
+            'Change': 'Up 3%',
+            'Market Cap.': '+Mid (over $2bln)',
+            'Average Volume': 'Over 500K',
         },
         'big_movers_down': {
-            'Change': 'Down 5%',
-            'Market Cap.': '+Large (over $10bln)',
-            'Average Volume': 'Over 1M',
+            'Change': 'Down 3%',
+            'Market Cap.': '+Mid (over $2bln)',
+            'Average Volume': 'Over 500K',
         },
     }
 
