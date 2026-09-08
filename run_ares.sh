@@ -15,7 +15,7 @@ MSG=$(cat /tmp/ares_dashboard.txt | head -c 4000)
 curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
     -d chat_id="${CHAT_ID}" \
     -d text="${MSG}" \
-    -d parse_mode="Markdown"
+    -d parse_mode="HTML"
 
 cd /root/ares/Ares
 git add logs/ -f

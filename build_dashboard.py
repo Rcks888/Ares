@@ -23,11 +23,11 @@ def build_dashboard():
     max_pos = params.get('max_positions', 5)
 
     lines = []
-    lines.append(f"📊 *ARES V3 — Daily Dashboard*")
+    lines.append(f"📊 <b>ARES V3 — Daily Dashboard</b>")
     lines.append(f"{now}")
     lines.append("")
 
-    lines.append(f"💼 *PORTFOLIO ({len(open_trades)}/{max_pos} slots)*")
+    lines.append(f"💼 <b>PORTFOLIO ({len(open_trades)}/{max_pos} slots)</b>")
     if open_trades:
         for t in open_trades:
             sym = t['symbol']
@@ -50,13 +50,13 @@ def build_dashboard():
     lines.append("")
 
     if pending:
-        lines.append(f"⏳ *PENDING ({len(pending)})*")
+        lines.append(f"⏳ <b>PENDING ({len(pending)})</b>")
         for p in pending:
             lines.append(f"  {p['symbol']} — executes tomorrow at open")
         lines.append("")
 
     if queue:
-        lines.append(f"📋 *QUEUED ({len(queue)})*")
+        lines.append(f"📋 <b>QUEUED ({len(queue)})</b>")
         for q in queue:
             queued_date = q.get('queued_date', q.get('date', ''))
             lines.append(f"  {q['symbol']} — queued {queued_date}")
@@ -75,7 +75,7 @@ def build_dashboard():
             except Exception:
                 pass
             total_comm += t.get('total_commission', 1.0)
-        lines.append(f"💰 *ESTIMATED P&L*")
+        lines.append(f"💰 <b>ESTIMATED P&L</b>")
         lines.append(f"  Open trades: ${total_pnl:+.2f}")
         lines.append(f"  Commissions: -${total_comm:.2f}")
         lines.append(f"  Net: ${total_pnl - total_comm:+.2f}")
@@ -97,7 +97,7 @@ def build_dashboard():
                 if names:
                     new_signal_names = names.split(',')
 
-    lines.append(f"📡 *TODAY'S SCAN*")
+    lines.append(f"📡 <b>TODAY'S SCAN</b>")
     lines.append(f"  Candidates screened: {scan_candidates}")
     lines.append(f"  New signals: {scan_signals}")
     if new_signal_names:
@@ -110,7 +110,7 @@ def build_dashboard():
     losses = total_closed - wins
     win_rate = (wins / total_closed * 100) if total_closed > 0 else 0
 
-    lines.append(f"🏛️ *OBSERVATION PHASE*")
+    lines.append(f"🏛️ <b>OBSERVATION PHASE</b>")
     lines.append(f"  Total trades completed: {total_closed}")
     if total_closed > 0:
         lines.append(f"  Win/Loss: {wins}W / {losses}L ({win_rate:.0f}%)")
