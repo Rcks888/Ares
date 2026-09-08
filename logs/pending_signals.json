@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "symbol": "HAFN",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-09-04",
+    "price": 9.22,
+    "rsi": 71.2,
+    "vol_ratio": 1.9,
+    "stdev_20": 0.0245,
+    "strength": "medium",
+    "screens": [
+      "big_movers_up"
+    ],
+    "from_queue": false
+  }
+]
