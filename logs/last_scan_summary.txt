@@ -1,6 +1,9 @@
 candidates_screened:103
-signals_found:1
-signal_details:DYN | mean_reversion | conf2 | range
-  Price: $17.01 | RSI: 25.0 | Vol: 0.6x
-  Buy: $150 (8.8 shares)
-  SL: $14.69 | TP: $18.71 (+10%) | TS: 10%
+signals_found:2
+signal_details:DYN | mean_reversion | conf3 | range
+  Price: $20.31 | RSI: 28.3 | Vol: 7.13x
+  Buy: $150 (7.4 shares)
+  SL: $18.71 | TP: $22.34 (+10%) | TS: 10%|||ABM | momentum_breakout | conf3 | uptrend
+  Price: $50.60 | RSI: 59.3 | Vol: 2.65x
+  Buy: $150 (3.0 shares)
+  SL: $48.63 | TP: $59.71 (+18%) | TS: 10%
