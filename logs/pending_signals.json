@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "symbol": "DYN",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 2,
+    "date": "2026-09-08",
+    "price": 17.01,
+    "rsi": 25.0,
+    "vol_ratio": 0.6,
+    "stdev_20": 0.0681,
+    "strength": "medium",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce",
+      "big_movers_down"
+    ],
+    "from_queue": false
+  }
+]

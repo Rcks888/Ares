@@ -1,6 +1,6 @@
 candidates_screened:103
 signals_found:1
-signal_details:HAFN | momentum_breakout | conf3 | uptrend
-  Price: $9.22 | RSI: 71.2 | Vol: 1.9x
-  Buy: $150 (16.3 shares)
-  SL: $8.77 | TP: $10.88 (+18%) | TS: 10%
+signal_details:DYN | mean_reversion | conf2 | range
+  Price: $17.01 | RSI: 25.0 | Vol: 0.6x
+  Buy: $150 (8.8 shares)
+  SL: $14.69 | TP: $18.71 (+10%) | TS: 10%
