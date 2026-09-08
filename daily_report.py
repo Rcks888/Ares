@@ -110,11 +110,30 @@ def generate_report():
         print("  No signals today. Do nothing.")
 
     summary_path = Path(__file__).parent / "logs" / "last_scan_summary.txt"
-    signal_names = '|'.join(f"{s['symbol']} {s['strategy']} conf{s.get('confluence',1)}" for s in signals) if signals else ""
+    signal_details = []
+    for s in signals:
+        _params = load_strategy_params()
+        max_pos = _params.get('max_positions', 5)
+        cash_reserve = _params.get('cash_reserve_pct', 0.25)
+        portfolio = _params.get('starting_capital', 1000)
+        available = portfolio * (1 - cash_reserve)
+        pos_size = available / max_pos
+        shares = pos_size / s['price']
+        stdev = s.get('stdev_20', s['price'] * 0.05)
+        sl = s['price'] - (s['price'] * stdev * 2)
+        tp_pct = _params.get('tp_momentum', 0.18) if s['strategy'] == 'momentum_breakout' else _params.get('tp_reversal', 0.10)
+        tp = s['price'] * (1 + tp_pct)
+        ts_pct = _params.get('trailing_stop_pct', 0.10)
+        detail = (f"{s['symbol']} | {s['strategy']} | conf{s.get('confluence',1)} | {s.get('regime','?')}\n"
+                  f"  Price: ${s['price']:.2f} | RSI: {s['rsi']:.1f} | Vol: {s['vol_ratio']}x\n"
+                  f"  Buy: ${pos_size:.0f} ({shares:.1f} shares)\n"
+                  f"  SL: ${sl:.2f} | TP: ${tp:.2f} (+{tp_pct*100:.0f}%) | TS: {ts_pct*100:.0f}%")
+        signal_details.append(detail)
+
     with open(summary_path, 'w') as f:
         f.write(f"candidates_screened:{len(all_symbols)}\n")
         f.write(f"signals_found:{len(signals)}\n")
-        f.write(f"signal_names:{signal_names}\n")
+        f.write(f"signal_details:{'|||'.join(signal_details)}\n")
 
     print_scorecard()
     check_shadow_trades()
