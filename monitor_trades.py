@@ -39,6 +39,15 @@ def monitor():
         trailing_stop = trade.get('trailing_stop', stop_loss)
         peak_price = trade.get('peak_price', entry)
         take_profit = trade.get('take_profit')
+
+        if not live:
+            days = _holding_days(trade['entry_date'])
+            tp_str = f"${take_profit:.2f}" if take_profit else "N/A"
+            print(f"  📊 {symbol}: No live price | "
+                  f"entry ${entry:.2f} | Day {days} | "
+                  f"SL: ${stop_loss:.2f} | TS: ${trailing_stop:.2f} | TP: {tp_str}")
+            continue
+
         unrealized = (live - entry) / entry * 100
         arrow = "+" if unrealized > 0 else ""
 
@@ -53,15 +62,6 @@ def monitor():
 
         effective_stop = max(stop_loss, trailing_stop)
         today = datetime.now().strftime("%Y-%m-%d")
-
-        if not live:
-            days = _holding_days(trade['entry_date'])
-            unrealized = 0
-            print(f"  📊 {symbol}: No live price (market closed?) | "
-                  f"Day {days} | Entry: ${entry:.2f} | "
-                  f"SL: ${stop_loss:.2f} | TS: ${trailing_stop:.2f} | "
-                  f"TP: ${take_profit if take_profit else 'N/A'}")
-            continue
 
         if live <= effective_stop:
             reason = 'trailing_stop' if trailing_stop > stop_loss else 'stop_loss'
