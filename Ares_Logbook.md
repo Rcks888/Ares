@@ -245,13 +245,16 @@
 **Open Trades (End of Week):**
 | Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
 |--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
-| CNH | momentum_breakout | Sep 3 | $13.84 | | | | $12.83 | | $15.50 |
-| PAYP | momentum_breakout | Sep 3 | $16.93 | | | | $15.73 | | $18.96 |
+| CNH | momentum_breakout | Sep 3 | $13.84 | — | — | — | $12.83 | — | $15.50 |
+| PAYP | momentum_breakout | Sep 3 | $16.93 | — | — | — | $15.73 | — | $18.96 |
+
+> ⚠️ CNH and PAYP were V2 trades — cleared on Sep 8 when V3 deployed. No exit data recorded.
 
 **Closed Trades (This Week):**
 | Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
 |--------|----------|-------|------|-----------|-------|--------|
-| | | | | | | |
+| CNH | momentum_breakout | $13.84 | — | — | — | Cleared for V3 |
+| PAYP | momentum_breakout | $16.93 | — | — | — | Cleared for V3 |
 
 **Weekly Summary:**
 | Metric | Value |
