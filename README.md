@@ -10,7 +10,7 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  ARES V2.1 PIPELINE                  │
+│                  ARES V3.0 PIPELINE                  │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
 │  Finviz (entire US market)                          │
