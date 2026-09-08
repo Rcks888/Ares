@@ -89,7 +89,7 @@ def execute_pending_signals():
                 tp_pct = params.get('tp_reversal', 0.10)
 
             take_profit = entry_price * (1 + tp_pct)
-            today_str = str(df.iloc[-1].name)[:10]
+            today_str = datetime.now().strftime("%Y-%m-%d")
 
             trade = {
                 'symbol': sig['symbol'],
