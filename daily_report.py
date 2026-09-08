@@ -110,7 +110,7 @@ def generate_report():
         print("  No signals today. Do nothing.")
 
     summary_path = Path(__file__).parent / "logs" / "last_scan_summary.txt"
-    signal_names = ','.join(f"{s['symbol']}({s['strategy']},conf{s.get('confluence',1)})" for s in signals) if signals else ""
+    signal_names = '|'.join(f"{s['symbol']} {s['strategy']} conf{s.get('confluence',1)}" for s in signals) if signals else ""
     with open(summary_path, 'w') as f:
         f.write(f"candidates_screened:{len(all_symbols)}\n")
         f.write(f"signals_found:{len(signals)}\n")

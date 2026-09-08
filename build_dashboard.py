@@ -64,7 +64,7 @@ def build_dashboard():
                 sig_names = line.split(':', 1)[1].strip()
         lines.append(f"\n📡 SCAN: {cands} screened, {sigs} signals")
         if sig_names:
-            for name in sig_names.split(','):
+            for name in sig_names.split('|'):
                 lines.append(f"  -> {name.strip()}")
 
     total_closed = len(closed_trades)
