@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "symbol": "PINS",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "date": "2026-09-09",
+    "price": 18.28,
+    "rsi": 29.1,
+    "vol_ratio": 2.58,
+    "stdev_20": 0.0293,
+    "strength": "high",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce",
+      "big_movers_down"
+    ],
+    "from_queue": false
+  }
+]

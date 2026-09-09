@@ -1,6 +1,6 @@
 candidates_screened:103
 signals_found:1
-signal_details:DYN | mean_reversion | conf3 | range
-  Price: $20.31 | RSI: 28.3 | Vol: 7.16x
-  Buy: $150 (7.4 shares)
-  SL: $18.71 | TP: $22.34 (+10%) | TS: 10%
+signal_details:PINS | mean_reversion | conf3 | range
+  Price: $18.28 | RSI: 29.1 | Vol: 2.58x
+  Buy: $150 (8.2 shares)
+  SL: $17.21 | TP: $20.11 (+10%) | TS: 10%
