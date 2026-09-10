@@ -36,14 +36,15 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 └─────────────────────────────────────────────────────┘
 ```
 
-## Scan Schedule (4x Daily, Mon-Fri)
+## Scan Schedule (5x Daily, Mon-Fri)
 
-| Time (MYT) | Type | Description |
-|------------|------|-------------|
-| 9:30 PM | **Full Scan** | Market open — Finviz screen + signal detection |
-| 11:30 PM | **Monitor** | IBKR live price check on open trades |
-| 1:30 AM | **Monitor** | IBKR live price check on open trades |
-| 5:00 AM | **Full Scan** | Market close — new daily candle + signals |
+| Time (MYT) | UTC | Type | Description |
+|------------|-----|------|-------------|
+| 9:00 PM | 13:00 | **Gateway Check** | Auto-restart IB Gateway if down |
+| 9:30 PM | 13:30 | **Full Scan** | Market open — Finviz screen + signal detection + execute pending |
+| 11:30 PM | 15:30 | **Monitor** | IBKR live price check on open trades |
+| 1:30 AM | 17:30 | **Monitor** | IBKR live price check on open trades |
+| 5:00 AM | 21:00 | **Full Scan** | Market close — new daily candle + signals |
 
 ## Strategies
 
@@ -90,15 +91,17 @@ Every trade logs: `signal_price`, `entry_price` (after slippage), `entry_commiss
 
 > **Note on capital tracking:** Position sizing uses a fixed $1,000 base (not dynamic equity). This is acceptable for the observation phase data collection. Dynamic equity tracking will be added when transitioning to live execution (Phase 4).
 
-## Finviz Screens
+## Finviz Screens (V3 — Loosened)
 
-| Screen | What It Catches |
-|--------|----------------|
-| `unusual_volume` | Volume > 3x avg, large cap — something big happening |
-| `oversold_bounce` | RSI < 30, large cap — mean reversion candidates |
-| `near_52w_high` | Within 3% of high + volume — momentum breakouts |
-| `big_movers_up` | Up > 5% today — surge candidates |
-| `big_movers_down` | Down > 5% today — potential reversals |
+| Screen | Filter | What It Catches |
+|--------|--------|----------------|
+| `unusual_volume` | Volume > 2x avg, mkt cap > $2B | Something big happening |
+| `oversold_bounce` | RSI < 30, mkt cap > $2B | Mean reversion candidates |
+| `near_52w_high` | Within 3% of high, mkt cap > $10B | Momentum breakouts |
+| `big_movers_up` | Up > 3% today, vol > 500K | Surge candidates |
+| `big_movers_down` | Down > 3% today, vol > 500K | Potential reversals |
+
+Max 100 candidates per scan (capped from Finviz output).
 
 ## Tech Stack
 
@@ -111,7 +114,7 @@ Every trade logs: `signal_price`, `entry_price` (after slippage), `entry_commiss
 | Indicators | pandas_ta — RSI, MACD, SMA, volume |
 | Notifications | Telegram Bot API |
 | Broker | Interactive Brokers (paper trading) |
-| Scheduler | cron (4x daily, Mon-Fri) |
+| Scheduler | cron (5x daily, Mon-Fri) |
 
 ## Project Structure
 
@@ -119,22 +122,30 @@ Every trade logs: `signal_price`, `entry_price` (after slippage), `entry_commiss
 Ares/
 ├── config/
 │   ├── watchlist.json          # Fallback fixed watchlist (153 stocks)
-│   └── strategy_params.json    # V2.1 strategy parameters
+│   └── strategy_params.json    # V3 strategy parameters
 ├── engine/
 │   ├── screener.py             # Finviz dynamic market screener
 │   ├── data_feed.py            # yfinance + IBKR data
 │   ├── indicators.py           # RSI 21, MACD, divergence, regime
 │   ├── signals.py              # Strategy logic + confluence check
-│   └── tracker.py              # Virtual trade tracking + exits
+│   └── tracker.py              # Virtual trade tracking + exits + pending signals
 ├── data/ohlcv/                 # Cached OHLCV CSV files
 ├── logs/
-│   ├── virtual_trades.json     # Active trade log
+│   ├── virtual_trades.json     # Active + closed trade log
+│   ├── pending_signals.json    # Signals waiting for next-bar execution
+│   ├── signal_queue.json       # Blocked signals waiting for open slot
 │   ├── trades_report.csv       # Trade history export
+│   ├── last_scan_summary.txt   # Latest scan results for dashboard
 │   └── archive/                # V1 trade data (archived)
-├── daily_report.py             # Full scan script
-├── monitor_trades.py           # Intraday IBKR monitor
+├── daily_report.py             # Full scan + execute pending + new signals
+├── build_dashboard.py          # Compact Telegram dashboard builder
+├── monitor_trades.py           # Intraday IBKR live price monitor
+├── run_ares.sh                 # Main cron: scan + dashboard + Telegram + git push
 ├── run_monitor.sh              # Monitor + Telegram
-└── start_gateway.sh            # IB Gateway background launcher
+├── restart_gateway.sh          # IB Gateway health check + auto-restart
+├── start_gateway.sh            # IB Gateway background launcher
+├── Ares_Logbook.md             # Daily trading journal
+└── README.md
 ```
 
 ## Version History
@@ -175,10 +186,20 @@ Ares/
 |-------|-------------|--------|
 | 1 | Signal scanner + Telegram alerts | ✅ Complete |
 | 2 | Virtual paper trading + performance tracking | ✅ Complete |
-| 3 | AI analysis (Claude) for signal validation | 🔜 Next |
-| 4 | Automated trade execution via IBKR | ⏳ Planned |
-| 5 | Portfolio optimization + risk management | ⏳ Planned |
+| 3 | Observation phase — collect 40-60 trades with realistic friction | 🔄 In Progress |
+| 4 | AI/ML signal validation (Athena ML pipeline) | 🔜 Next |
+| 5 | Live execution with real capital ($1K ESPP, June 2027) | ⏳ Planned |
+
+## Timeline
+
+| Period | Milestone |
+|--------|-----------|
+| Sep 2026 - May 2027 | Paper trading observation (~9 months, 40-60 trades) |
+| June 2027 | Go live with $1,000 (ESPP bonus) |
+| Dec 2027+ | +$500 capital injection every 6 months via ESPP |
 
 ## Author
 
 Built by **Rickson Kang** — learning trading through building.
+
+Part of **Project Olympus** — see also [Athena](https://github.com/Rcks888/Athena) (backtesting engine).
