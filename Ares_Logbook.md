@@ -212,17 +212,18 @@
 - Telegram dashboard working (plain text, no parse errors)
 - Monitor working (shows positions even without IBKR live price)
 - IB Gateway read-only issue — may resolve during market hours tonight
-- 9:30 PM scan: (pending — first automated V3 cron run)
-- 11:30 PM / 1:30 AM monitors:
-- 5:00 AM scan:
-- Signals: HAFN (1/5 slots)
-- Notes: First V3 trade opened. System fully operational.
+- 1:31 PM scan: HAFN open (1/5), DYN signal detected → PENDING
+- 11:30 PM / 1:30 AM monitors: HAFN showing, no IBKR live price
+- 9:01 PM scan: DYN executed at $17.09 (mean_reversion, conf3, range). ABM signal → PENDING
+- Signals: HAFN (open), DYN (opened), ABM (pending)
+- Notes: First automated V3 cron run successful. Next-bar execution confirmed working.
 
 **Tuesday Sep 9:**
-- 9:30 PM scan:
-- 5:00 AM scan:
-- Signals:
-- Notes:
+- 1:31 PM scan: ABM executed at $45.86. Portfolio now 3/5 slots (HAFN, DYN, ABM)
+- 11:30 PM / 1:30 AM monitors: All 3 positions showing, still no IBKR live price
+- 9:01 PM scan: **DYN hit TP → 50% scaled out!** 🎉 TS now trailing at $17.27. PINS signal → PENDING
+- Signals: DYN (scaled out), PINS (pending)
+- Notes: First scale-out event on Day 1! DYN mean_reversion strategy working. Git push from VPS failing silently (token issue).
 
 **Wednesday Sep 10:**
 - 9:30 PM scan:
