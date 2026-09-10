@@ -226,9 +226,17 @@
 - Notes: First scale-out event on Day 1! DYN mean_reversion strategy working. Git push from VPS failing silently (token issue).
 
 **Wednesday Sep 10:**
+- Fixed IB Gateway read-only issue: added `ReadOnlyApi=no` to `/root/ibc/config.ini`
+- IBC now auto-unchecks read-only checkbox on startup ✅
+- Confirmed in logs: `Read-Only API checkbox is now set to: false`
+- Fixed silent git push failure in `run_ares.sh` (was `2>/dev/null`, now logs errors)
+- VPS git push synced — all 3 trades (HAFN, DYN, ABM) + PINS pending now on GitHub
+- Updated README to V3: screens, project structure, schedule, roadmap, timeline
+- Live price still shows "No live price" — expected, market closed at time of test (5:35 AM MYT)
+- **Will verify live price works from tomorrow's 11:30 PM monitor logs**
 - 9:30 PM scan:
 - 5:00 AM scan:
-- Signals:
+- Signals: PINS pending from last night
 - Notes:
 
 **Thursday Sep 11:**
