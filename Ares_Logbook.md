@@ -195,13 +195,28 @@
 
 **Changes Made:**
 - Ares V3 first full week of live paper trading
+- Implemented true next-bar execution (signal day N → buy at day N+1 open price)
+- Added friction tracking: 0.1% slippage + $1 commission per trade logged
+- Fixed capital from $10K → $1K, position sizing now respects 25% cash reserve ($150/trade)
+- Built Telegram dashboard (build_dashboard.py) with portfolio, SL/TP/TS, scan summary
+- Fixed monitor crash when IBKR returns no live price
+- Loosened Finviz screener: >$2B mkt cap, >500K vol, >2x rel vol, >3% movers
+- Added IB Gateway health check cron (restart_gateway.sh, runs 30min before first scan)
+- Fixed signal_date vs entry_date tracking, holding days now counts from actual execution
+- Cleared all V2 stale data, fresh V3 start
 
 **Monday Sep 8:**
-- 9:30 PM scan:
+- 1:30 AM manual test: HAFN momentum_breakout detected, conf3, uptrend
+- HAFN executed via next-bar: signal $9.22 (close) → entry $8.95 (open) = -2.94% better entry ✅
+- 282 Finviz candidates → capped to 100 → 1 signal passed Ares V3 filter
+- Telegram dashboard working (plain text, no parse errors)
+- Monitor working (shows positions even without IBKR live price)
+- IB Gateway read-only issue — may resolve during market hours tonight
+- 9:30 PM scan: (pending — first automated V3 cron run)
 - 11:30 PM / 1:30 AM monitors:
 - 5:00 AM scan:
-- Signals:
-- Notes:
+- Signals: HAFN (1/5 slots)
+- Notes: First V3 trade opened. System fully operational.
 
 **Tuesday Sep 9:**
 - 9:30 PM scan:
@@ -230,13 +245,16 @@
 **Open Trades (End of Week):**
 | Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
 |--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
-| CNH | momentum_breakout | Sep 3 | $13.84 | | | | $12.83 | | $15.50 |
-| PAYP | momentum_breakout | Sep 3 | $16.93 | | | | $15.73 | | $18.96 |
+| CNH | momentum_breakout | Sep 3 | $13.84 | — | — | — | $12.83 | — | $15.50 |
+| PAYP | momentum_breakout | Sep 3 | $16.93 | — | — | — | $15.73 | — | $18.96 |
+
+> ⚠️ CNH and PAYP were V2 trades — cleared on Sep 8 when V3 deployed. No exit data recorded.
 
 **Closed Trades (This Week):**
 | Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
 |--------|----------|-------|------|-----------|-------|--------|
-| | | | | | | |
+| CNH | momentum_breakout | $13.84 | — | — | — | Cleared for V3 |
+| PAYP | momentum_breakout | $16.93 | — | — | — | Cleared for V3 |
 
 **Weekly Summary:**
 | Metric | Value |
