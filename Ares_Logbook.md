@@ -234,10 +234,11 @@
 - Updated README to V3: screens, project structure, schedule, roadmap, timeline
 - Live price still shows "No live price" — expected, market closed at time of test (5:35 AM MYT)
 - **Will verify live price works from tomorrow's 11:30 PM monitor logs**
-- 9:30 PM scan:
-- 5:00 AM scan:
-- Signals: PINS pending from last night
-- Notes:
+- 1:32 PM scan: PINS executed at $20.00. Portfolio now 4/5 slots. 0 new signals.
+- 11:30 PM / 1:30 AM monitors: Still "No live price" ⚠️ — IBKR gateway may have died at 11:45 PM daily restart
+- 9:01 PM scan: 2 signals (DYN again — already open). 0 new pending. 1 slot remaining.
+- Signals: PINS (opened)
+- Notes: IBKR live price still not working during market hours. Gateway likely dies at daily restart and doesn't come back. Need to investigate `restart_gateway.sh` — it runs at 9:00 PM but gateway dies at 11:45 PM, so monitors at 11:30 PM and 1:30 AM have no gateway.
 
 **Thursday Sep 11:**
 - 9:30 PM scan:
