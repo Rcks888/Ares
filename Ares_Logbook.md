@@ -241,6 +241,20 @@
 - Notes: IBKR live price still not working during market hours. Gateway likely dies at daily restart and doesn't come back. Need to investigate `restart_gateway.sh` — it runs at 9:00 PM but gateway dies at 11:45 PM, so monitors at 11:30 PM and 1:30 AM have no gateway.
 
 **Thursday Sep 11:**
+- Upgraded VPS from 1GB → 2GB RAM ($12/mo). Zero downtime on disk.
+- Added gateway restarts before each monitor (cron at :25 before :30 monitors)
+- Root cause confirmed: IBKR kills gateway at 11:45 PM daily, old cron never restarted it for monitors
+- New cron: gateway restart at 13:00, 15:25, 17:25 UTC → monitors at 15:30, 17:30 always have live gateway
+
+**Verification checklist (tonight):**
+- [ ] IB Gateway running at 9:30 PM scan
+- [ ] 11:30 PM monitor shows **live prices** (not "No live price")
+- [ ] 1:30 AM monitor shows live prices
+- [ ] 5:00 AM scan completes normally
+- [ ] Telegram alerts arriving for all scans/monitors
+- [ ] RAM stays >300MB free with both Ares + Hermes running
+- [ ] Swap usage much lower than before (<200MB)
+
 - 9:30 PM scan:
 - 5:00 AM scan:
 - Signals:
