@@ -55,15 +55,82 @@ and ignore new signals for weeks. Missed opportunities.
 
 ---
 
-## Phase 3: AI Analysis (Claude API)
+## Phase 3: Claude AI Signal Validation
 
-### Purpose
-- Deep-dive 5-10 signal candidates per day
-- Check news, earnings, lawsuits, sector outlook
-- Validate or reject Ares signals before entry
-- Estimated cost: $0.15-0.30/day ($5-9/month)
+> **Core Rule:** Claude validates and contextualizes Ares signals. Claude does NOT generate signals.
 
-### Claude Could Also
+### Decision Hierarchy
+
+| Priority | Layer | Can force a buy? | Can block a buy? |
+|----------|-------|-------------------|-------------------|
+| 1 | Ares hard rules | ✅ (source of signals) | ✅ |
+| 2 | Risk manager (slots, size, stops) | ❌ | ✅ |
+| 3 | ML score (later) | ❌ | ✅ / rank only |
+| 4 | Claude thesis | ❌ | ✅ (soft/hard caution flags) |
+
+### Next-Bar + Thesis Flow
+
+```
+Day N close
+  Ares signal → pending
+  Claude thesis generated and stored
+
+Day N+1 open
+  Revalidate:
+    1. Ares conditions still acceptable?
+    2. Gap / extension acceptable?
+    3. Claude risk flags clear?
+    4. Slot/risk available?
+  If all pass → enter with planned SL/TP/TS
+  Else → skip / expire pending
+```
+
+### Claude Output Structure (per pending signal)
+
+| Field | Type | Example |
+|-------|------|---------|
+| `thesis_summary` | 2-4 lines | "Shipping sector momentum, no earnings within 14 days..." |
+| `catalyst_flags` | list | `["earnings_proximity", "elevated_iv"]` |
+| `risk_level` | low / medium / high | "medium" |
+| `action` | allow / caution / avoid | "allow" |
+| `why_avoid` | string (if any) | "Earnings in 2 days, gap risk" |
+| `confidence` | low / medium / high | "medium" |
+
+### Deterministic Policy on Claude Output
+
+| Claude Verdict | System Action |
+|----------------|---------------|
+| `allow` | Normal Ares execution |
+| `caution` | Reduce size or require stronger ML score |
+| `avoid` | Skip trade |
+
+### Exit Rules — NO Claude Involvement
+Exit remains 100% rule-based:
+- Stop-loss
+- TP scale-out (50%)
+- Trailing stop (10%)
+- RSI extreme (>90)
+
+### Hybrid Architecture
+
+```
+Ares       = permission (generates signals)
+ML ranker  = priority (scores/ranks signals)
+Claude     = context referee (validates/flags)
+Risk engine = final gate (slots, sizing, stops)
+```
+
+### Prerequisites
+1. ✅ Ares V3 running stable
+2. ⏳ Collect 40-60 trades baseline (currently 4/40)
+3. ⏳ Establish win rate / PF without Claude (control group)
+4. Then add Claude layer and compare performance
+
+### Estimated Cost
+- ~$0.01-0.03 per signal validation
+- ~$0.15-0.30/day ($5-9/month)
+
+### Claude Could Also (Future)
 - Analyze shadow tracking data → suggest optimal TP levels
 - Review weekly performance → suggest parameter adjustments
 - Explain WHY a trade worked or failed (pattern recognition)
@@ -100,15 +167,15 @@ and ignore new signals for weeks. Missed opportunities.
 
 ## Parameter Tuning Ideas (After Collecting Data)
 
-| Parameter | Current | Consider |
-|-----------|---------|----------|
+| Parameter | V3 Current | Consider |
+|-----------|------------|----------|
 | RSI period | 21 | Test 14 vs 21 vs 28 |
 | RSI source | OHLC4 | Test Close vs OHLC4 vs HLC3 |
 | Min confluence | 2 | Increase to 3 for higher win rate? |
-| Trailing stop | 8% | Test 5% vs 8% vs 10% |
-| TP momentum | 12% | Shadow data will tell us |
-| TP reversal | 8% | Shadow data will tell us |
-| Max positions | 8 | Start with 5 for $1,000 capital |
+| Trailing stop | 10% | Test 8% vs 10% vs 12% |
+| TP momentum | 18% (scale out 50%) | Shadow data will tell us |
+| TP reversal | 10% (scale out 50%) | Shadow data will tell us |
+| Max positions | 5 | Fixed for $1,000 capital |
 
 ### Decision Rule
 Only change parameters after 50+ closed trades with shadow data.
@@ -135,7 +202,7 @@ Never optimize based on 5-10 trades — too small a sample.
 ### Architecture: Hybrid AI (3 Layers)
 
 ```
-Layer 1: Ares V2.1 (Technical Analysis)
+Layer 1: Ares V3 (Technical Analysis)
   → RSI, divergence, regime, confluence
   → Filters 5000 stocks → 5-10 signals
 
