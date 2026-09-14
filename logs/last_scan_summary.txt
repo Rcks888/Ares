@@ -1,3 +1,12 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:3
+signal_details:ECO | momentum_breakout | conf3 | uptrend
+  Price: $79.72 | RSI: 79.7 | Vol: 2.1x
+  Buy: $150 (1.9 shares)
+  SL: $75.72 | TP: $94.07 (+18%) | TS: 10%|||NTSK | momentum_breakout | conf3 | uptrend
+  Price: $17.00 | RSI: 61.7 | Vol: 2.42x
+  Buy: $150 (8.8 shares)
+  SL: $15.21 | TP: $20.06 (+18%) | TS: 10%|||SLDE | momentum_breakout | conf3 | uptrend
+  Price: $26.23 | RSI: 77.3 | Vol: 2.07x
+  Buy: $150 (5.7 shares)
+  SL: $25.17 | TP: $30.95 (+18%) | TS: 10%
