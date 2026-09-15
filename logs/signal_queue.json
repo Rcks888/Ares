@@ -1,1 +1,28 @@
-[]
+[
+  {
+    "symbol": "NTSK",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "confluence": 3,
+    "price_at_signal": 17.0,
+    "rsi_at_signal": 61.7,
+    "date_added": "2026-09-14",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "SLDE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "confluence": 3,
+    "price_at_signal": 26.23,
+    "rsi_at_signal": 77.3,
+    "date_added": "2026-09-14",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  }
+]
