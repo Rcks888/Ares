@@ -19,6 +19,13 @@ def build_dashboard():
     with open(config_path) as f:
         params = json.load(f)
 
+    def calc_days(entry_date_str):
+        try:
+            entry = datetime.strptime(entry_date_str, "%Y-%m-%d")
+            return (datetime.now() - entry).days
+        except Exception:
+            return 0
+
     open_trades = [t for t in trades if t['status'] == 'open']
     closed_trades = [t for t in trades if t['status'] == 'closed']
     max_pos = params.get('max_positions', 5)
@@ -32,7 +39,7 @@ def build_dashboard():
         for t in open_trades:
             sym = t['symbol']
             entry = t['entry_price']
-            days = t.get('holding_days', 0)
+            days = calc_days(t.get('entry_date', ''))
             scaled = " [50% sold]" if t.get('scaled_out') else ""
             pnl_pct = t.get('pnl_pct', 0) or 0
             arrow = "+" if pnl_pct >= 0 else ""

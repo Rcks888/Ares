@@ -234,12 +234,27 @@
 - Updated README to V3: screens, project structure, schedule, roadmap, timeline
 - Live price still shows "No live price" — expected, market closed at time of test (5:35 AM MYT)
 - **Will verify live price works from tomorrow's 11:30 PM monitor logs**
-- 9:30 PM scan:
-- 5:00 AM scan:
-- Signals: PINS pending from last night
-- Notes:
+- 1:32 PM scan: PINS executed at $20.00. Portfolio now 4/5 slots. 0 new signals.
+- 11:30 PM / 1:30 AM monitors: Still "No live price" ⚠️ — IBKR gateway may have died at 11:45 PM daily restart
+- 9:01 PM scan: 2 signals (DYN again — already open). 0 new pending. 1 slot remaining.
+- Signals: PINS (opened)
+- Notes: IBKR live price still not working during market hours. Gateway likely dies at daily restart and doesn't come back. Need to investigate `restart_gateway.sh` — it runs at 9:00 PM but gateway dies at 11:45 PM, so monitors at 11:30 PM and 1:30 AM have no gateway.
 
 **Thursday Sep 11:**
+- Upgraded VPS from 1GB → 2GB RAM ($12/mo). Zero downtime on disk.
+- Added gateway restarts before each monitor (cron at :25 before :30 monitors)
+- Root cause confirmed: IBKR kills gateway at 11:45 PM daily, old cron never restarted it for monitors
+- New cron: gateway restart at 13:00, 15:25, 17:25 UTC → monitors at 15:30, 17:30 always have live gateway
+
+**Verification checklist (tonight):**
+- [ ] IB Gateway running at 9:30 PM scan
+- [ ] 11:30 PM monitor shows **live prices** (not "No live price")
+- [ ] 1:30 AM monitor shows live prices
+- [ ] 5:00 AM scan completes normally
+- [ ] Telegram alerts arriving for all scans/monitors
+- [ ] RAM stays >300MB free with both Ares + Hermes running
+- [ ] Swap usage much lower than before (<200MB)
+
 - 9:30 PM scan:
 - 5:00 AM scan:
 - Signals:
@@ -251,30 +266,42 @@
 - Signals:
 - Notes:
 
-**Open Trades (End of Week):**
-| Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
-|--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
-| CNH | momentum_breakout | Sep 3 | $13.84 | — | — | — | $12.83 | — | $15.50 |
-| PAYP | momentum_breakout | Sep 3 | $16.93 | — | — | — | $15.73 | — | $18.96 |
+**Open Trades (End of Week 2):**
+| Symbol | Strategy | Entry Date | Entry Price | Hold Days | SL | TS | TP | Status |
+|--------|----------|-----------|-------------|-----------|----|----|-----|--------|
+| HAFN | momentum_breakout | Sep 8 | $8.95 | 4 | $8.51 | $8.51 | $10.56 | Open |
+| DYN | mean_reversion | Sep 8 | $17.09 | 4 | $14.76 | $17.27 | $18.80 | 50% scaled out |
+| ABM | momentum_breakout | Sep 9 | $45.86 | 3 | $44.07 | $45.54 | $54.11 | Open |
+| PINS | mean_reversion | Sep 10 | $20.00 | 2 | $18.83 | $18.83 | $22.00 | Open |
 
-> ⚠️ CNH and PAYP were V2 trades — cleared on Sep 8 when V3 deployed. No exit data recorded.
+**Closed Trades (Week 2):**
+None — all 4 trades still open.
 
-**Closed Trades (This Week):**
-| Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
-|--------|----------|-------|------|-----------|-------|--------|
-| CNH | momentum_breakout | $13.84 | — | — | — | Cleared for V3 |
-| PAYP | momentum_breakout | $16.93 | — | — | — | Cleared for V3 |
-
-**Weekly Summary:**
+**Weekly Summary (Week 2):**
 | Metric | Value |
 |--------|-------|
-| Total scans | /20 |
-| Signals triggered | |
-| Trades opened | |
-| Trades closed | |
-| Win rate | |
-| Total P&L | |
-| Shadow insights | |
+| Trades opened | 4 (HAFN, DYN, ABM, PINS) |
+| Trades closed | 0 |
+| Scale-outs | 1 (DYN 50% @ $19.17) |
+| Signals triggered | ~8 |
+| IBKR live price | ❌ Still not working |
+
+---
+
+### Sep 14-18, 2026 (Monday-Friday) — Week 3
+
+**Monday Sep 14:**
+- 1:32 PM scan: 4/5 slots, 0 new signals. Dashboard holding days showing "2d" ⚠️ (bug — monitor correctly shows Day 6)
+- 11:30 PM / 1:30 AM monitors: Still "No live price" — IBKR gateway issue persists despite cron restarts
+- 9:01 PM scan: 3 signals — ECO (momentum_breakout, conf3, uptrend) → PENDING. NTSK + SLDE → QUEUED (4/5 slots full)
+- Signals: ECO (pending), NTSK + SLDE (queued)
+- Notes: First queued signals! System correctly queues when slots nearly full. IBKR live monitor still broken — need deeper investigation.
+
+**Tuesday Sep 15:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
 
 ---
 
