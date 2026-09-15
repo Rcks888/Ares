@@ -266,30 +266,42 @@
 - Signals:
 - Notes:
 
-**Open Trades (End of Week):**
-| Symbol | Strategy | Entry Date | Entry Price | Current Price | P&L % | Hold Days | SL | TS | TP |
-|--------|----------|-----------|-------------|---------------|-------|-----------|----|----|-----|
-| CNH | momentum_breakout | Sep 3 | $13.84 | — | — | — | $12.83 | — | $15.50 |
-| PAYP | momentum_breakout | Sep 3 | $16.93 | — | — | — | $15.73 | — | $18.96 |
+**Open Trades (End of Week 2):**
+| Symbol | Strategy | Entry Date | Entry Price | Hold Days | SL | TS | TP | Status |
+|--------|----------|-----------|-------------|-----------|----|----|-----|--------|
+| HAFN | momentum_breakout | Sep 8 | $8.95 | 4 | $8.51 | $8.51 | $10.56 | Open |
+| DYN | mean_reversion | Sep 8 | $17.09 | 4 | $14.76 | $17.27 | $18.80 | 50% scaled out |
+| ABM | momentum_breakout | Sep 9 | $45.86 | 3 | $44.07 | $45.54 | $54.11 | Open |
+| PINS | mean_reversion | Sep 10 | $20.00 | 2 | $18.83 | $18.83 | $22.00 | Open |
 
-> ⚠️ CNH and PAYP were V2 trades — cleared on Sep 8 when V3 deployed. No exit data recorded.
+**Closed Trades (Week 2):**
+None — all 4 trades still open.
 
-**Closed Trades (This Week):**
-| Symbol | Strategy | Entry | Exit | Hold Days | P&L % | Reason |
-|--------|----------|-------|------|-----------|-------|--------|
-| CNH | momentum_breakout | $13.84 | — | — | — | Cleared for V3 |
-| PAYP | momentum_breakout | $16.93 | — | — | — | Cleared for V3 |
-
-**Weekly Summary:**
+**Weekly Summary (Week 2):**
 | Metric | Value |
 |--------|-------|
-| Total scans | /20 |
-| Signals triggered | |
-| Trades opened | |
-| Trades closed | |
-| Win rate | |
-| Total P&L | |
-| Shadow insights | |
+| Trades opened | 4 (HAFN, DYN, ABM, PINS) |
+| Trades closed | 0 |
+| Scale-outs | 1 (DYN 50% @ $19.17) |
+| Signals triggered | ~8 |
+| IBKR live price | ❌ Still not working |
+
+---
+
+### Sep 14-18, 2026 (Monday-Friday) — Week 3
+
+**Monday Sep 14:**
+- 1:32 PM scan: 4/5 slots, 0 new signals. Dashboard holding days showing "2d" ⚠️ (bug — monitor correctly shows Day 6)
+- 11:30 PM / 1:30 AM monitors: Still "No live price" — IBKR gateway issue persists despite cron restarts
+- 9:01 PM scan: 3 signals — ECO (momentum_breakout, conf3, uptrend) → PENDING. NTSK + SLDE → QUEUED (4/5 slots full)
+- Signals: ECO (pending), NTSK + SLDE (queued)
+- Notes: First queued signals! System correctly queues when slots nearly full. IBKR live monitor still broken — need deeper investigation.
+
+**Tuesday Sep 15:**
+- 9:30 PM scan:
+- 5:00 AM scan:
+- Signals:
+- Notes:
 
 ---
 
