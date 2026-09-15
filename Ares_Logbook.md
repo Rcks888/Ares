@@ -246,25 +246,25 @@
 - Root cause confirmed: IBKR kills gateway at 11:45 PM daily, old cron never restarted it for monitors
 - New cron: gateway restart at 13:00, 15:25, 17:25 UTC → monitors at 15:30, 17:30 always have live gateway
 
-**Verification checklist (tonight):**
-- [ ] IB Gateway running at 9:30 PM scan
-- [ ] 11:30 PM monitor shows **live prices** (not "No live price")
-- [ ] 1:30 AM monitor shows live prices
-- [ ] 5:00 AM scan completes normally
-- [ ] Telegram alerts arriving for all scans/monitors
-- [ ] RAM stays >300MB free with both Ares + Hermes running
-- [ ] Swap usage much lower than before (<200MB)
+**Verification checklist:**
+- [x] IB Gateway running at 9:30 PM scan ✅ (cron logs confirm)
+- [ ] Monitor shows live prices — ❌ still "No live price" (cron restart was BEFORE 11:45 PM kill)
+- [x] Telegram alerts arriving ✅
+- [x] RAM >300MB free ✅ (1.5GB free after 2GB upgrade)
+- [x] Swap usage low ✅ (0B used)
 
-- 9:30 PM scan:
-- 5:00 AM scan:
-- Signals:
-- Notes:
+- 9:30 PM scan: 4/5 slots, 0 new signals
+- 11:30 PM / 1:30 AM monitors: No live price (gateway dead from 11:45 PM kill)
+- 5:00 AM scan: 4/5 slots, 0 signals
+- Signals: none
+- Notes: Dashboard timestamps showing UTC labeled as MYT (bug found, fixed Sep 15)
 
 **Friday Sep 12:**
-- 9:30 PM scan:
-- 5:00 AM scan:
-- Signals:
-- Notes:
+- 9:30 PM scan: 4/5 slots, 0 new signals (quiet day)
+- 11:30 PM / 1:30 AM monitors: No live price (same gateway timing issue)
+- 5:00 AM scan: no new signals
+- Signals: none
+- Notes: End of Week 2. No trades closed yet. All 4 positions holding.
 
 **Open Trades (End of Week 2):**
 | Symbol | Strategy | Entry Date | Entry Price | Hold Days | SL | TS | TP | Status |

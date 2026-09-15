@@ -1,5 +1,7 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+
+MYT = timezone(timedelta(hours=8))
 from pathlib import Path
 from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib
 from engine.indicators import add_indicators
@@ -9,7 +11,7 @@ from engine.tracker import open_trade, check_open_trades, print_scorecard, expor
 USE_SCREENER = True
 
 def generate_report():
-    today = datetime.now().strftime("%Y-%m-%d %H:%M")
+    today = datetime.now(MYT).strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
     print(f"  ARES V3 DAILY REPORT — {today}")
     print(f"  RSI: 21-period OHLC4 | Regime-Aware | Scale-Out")

@@ -2,13 +2,15 @@
 Only checks open trades using IBKR live prices.
 No signal scanning, no yfinance download.
 """
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from engine.data_feed import get_live_price, disconnect_ib
+
+MYT = timezone(timedelta(hours=8))
 from engine.tracker import load_trades, save_trades, _load_params, _close_trade, _holding_days, load_stock
 from engine.indicators import add_indicators
 
 def monitor():
-    today_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    today_str = datetime.now(MYT).strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
     print(f"  ARES V3 TRADE MONITOR — {today_str}")
     print(f"  Mode: IBKR Live Price Check")

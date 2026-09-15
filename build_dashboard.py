@@ -1,6 +1,8 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+MYT = timezone(timedelta(hours=8))
 
 LOGS_DIR = Path(__file__).parent / "logs"
 
@@ -11,7 +13,7 @@ def load_json(path):
         return json.load(f)
 
 def build_dashboard():
-    now = datetime.now().strftime("%b %d, %Y | %I:%M %p MYT")
+    now = datetime.now(MYT).strftime("%b %d, %Y | %I:%M %p MYT")
     trades = load_json(LOGS_DIR / "virtual_trades.json")
     pending = load_json(LOGS_DIR / "pending_signals.json")
     queue = load_json(LOGS_DIR / "signal_queue.json")
