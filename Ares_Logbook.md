@@ -296,6 +296,27 @@ None — all 4 trades still open.
 - 9:01 PM scan: 3 signals — ECO (momentum_breakout, conf3, uptrend) → PENDING. NTSK + SLDE → QUEUED (4/5 slots full)
 - Signals: ECO (pending), NTSK + SLDE (queued)
 - Notes: First queued signals! System correctly queues when slots nearly full. IBKR live monitor still broken — need deeper investigation.
+- Fixed dashboard holding days bug: was reading stale JSON field, now calculates live from entry_date
+- Root cause of "No live price" found: IBKR kills gateway at 11:45 PM MYT, old cron restarted at 11:25 PM (BEFORE the kill) — useless
+- Fix: moved monitor cron to AFTER the 11:45 PM kill: gateway restart at 12:00 AM, monitor at 12:10 AM MYT
+- VPS upgraded from 1GB → 2GB RAM ($12/mo) to support Ares + Hermes simultaneously
+- Confirmed IBKR connection works when gateway is alive (returns NaN during market closed = expected)
+- Updated cron to avoid Hermes clash (shifted 16:05 → 16:10 UTC)
+- Added reviewer's Claude integration design to ROADMAP.md (Phase 3)
+
+**New cron schedule (MYT):**
+| Time | Job |
+|------|-----|
+| 9:00 PM | Gateway restart |
+| 9:30 PM | Full scan |
+| 11:45 PM | IBKR kills gateway |
+| 12:00 AM | Gateway restart (NEW — after kill) |
+| 12:10 AM | Monitor — should show live prices ✅ |
+| 1:25 AM | Gateway restart |
+| 1:30 AM | Monitor |
+| 5:00 AM | Full scan |
+
+**Verification: check tomorrow's 12:10 AM and 1:30 AM monitors for live prices.**
 
 **Tuesday Sep 15:**
 - 9:30 PM scan:
