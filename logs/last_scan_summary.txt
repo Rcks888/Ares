@@ -1,9 +1,3 @@
 candidates_screened:103
-signals_found:2
-signal_details:ECO | momentum_breakout | conf3 | uptrend
-  Price: $82.73 | RSI: 82.4 | Vol: 2.01x
-  Buy: $150 (1.8 shares)
-  SL: $78.59 | TP: $97.62 (+18%) | TS: 10%|||RVTY | momentum_breakout | conf3 | uptrend
-  Price: $140.19 | RSI: 68.3 | Vol: 2.07x
-  Buy: $150 (1.1 shares)
-  SL: $131.72 | TP: $165.42 (+18%) | TS: 10%
+signals_found:0
+signal_details:
