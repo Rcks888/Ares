@@ -307,6 +307,71 @@ def open_trade(signal, from_queue=False):
     save_trades(trades)
     return 'opened'
 
+def _build_post_mortem(trade, reason):
+    """Analyze why a trade ended the way it did. Auto-generated diagnostics."""
+    entry = trade['entry_price']
+    signal_price = trade.get('signal_price', entry)
+    exit_price = trade.get('exit_price', entry)
+    peak = trade.get('peak_price', entry)
+    tp = trade.get('take_profit')
+    sl = trade.get('stop_loss')
+    scaled = trade.get('scaled_out', False)
+
+    mfe_pct = round((peak - entry) / entry * 100, 2)
+    entry_quality = round((signal_price - entry) / signal_price * 100, 2)
+
+    pm = {
+        'exit_reason': reason,
+        'max_favorable_excursion_pct': mfe_pct,
+        'entry_quality_pct': entry_quality,
+        'scaled_out_before_exit': scaled,
+        'holding_days': trade.get('holding_days', 0),
+        'rsi_at_entry': trade.get('rsi_at_entry'),
+        'regime_at_entry': trade.get('regime'),
+        'confluence': trade.get('confluence'),
+        'verdict': None,
+        'analysis': None,
+        'manual_note': ''
+    }
+
+    if reason == 'take_profit':
+        pm['verdict'] = 'as_expected'
+        pm['analysis'] = f"TP hit at ${tp}. Peak reached +{mfe_pct}%. Strategy worked as designed."
+    elif reason == 'trailing_stop':
+        if mfe_pct > 0:
+            locked = round((exit_price - entry) / entry * 100, 2)
+            gave_back = round(mfe_pct - locked, 2)
+            pm['verdict'] = 'partial_win' if locked > 0 else 'reversal'
+            pm['analysis'] = (f"Peaked +{mfe_pct}%, exited at {locked:+.2f}%. "
+                              f"Gave back {gave_back}% from peak. "
+                              f"{'Trailing stop protected profit.' if locked > 0 else 'Reversed before locking gains.'}")
+        else:
+            pm['verdict'] = 'immediate_reversal'
+            pm['analysis'] = "Never moved favorably. Signal failed immediately."
+    elif reason == 'stop_loss':
+        if mfe_pct <= 0:
+            pm['verdict'] = 'signal_failed'
+            pm['analysis'] = (f"Never traded above entry. Signal was wrong from the start. "
+                              f"RSI {trade.get('rsi_at_entry')}, regime {trade.get('regime')}, "
+                              f"confluence {trade.get('confluence')}.")
+        elif mfe_pct < 3:
+            pm['verdict'] = 'weak_follow_through'
+            pm['analysis'] = (f"Only reached +{mfe_pct}% before reversing to SL. "
+                              f"Weak momentum — entry may have been too late.")
+        else:
+            distance_to_tp = round((tp - peak) / peak * 100, 2) if tp else None
+            pm['verdict'] = 'reversal_after_gain'
+            pm['analysis'] = (f"Peaked +{mfe_pct}% ({distance_to_tp}% short of TP) "
+                              f"then reversed to SL. Consider tighter trailing stop or partial exit earlier.")
+    elif reason == 'rsi_extreme':
+        pm['verdict'] = 'emotional_exit'
+        pm['analysis'] = f"RSI hit extreme (>90). Exited to avoid blow-off top. Peak +{mfe_pct}%."
+    else:
+        pm['verdict'] = 'other'
+        pm['analysis'] = f"Closed via {reason}. Peak +{mfe_pct}%."
+
+    return pm
+
 def _close_trade(trade, today, exit_price, reason):
     """Helper to close a trade with given reason. Applies slippage and commission."""
     params = _load_params()
@@ -335,6 +400,7 @@ def _close_trade(trade, today, exit_price, reason):
         (exit_price_after_slippage - trade['entry_price'])
         / trade['entry_price'] * 100, 2)
     trade['pnl_after_costs'] = round(pnl_raw - trade['total_commission'], 2)
+    trade['post_mortem'] = _build_post_mortem(trade, reason)
     trade['shadow'] = {
         'active': True,
         'days_tracked': 0,

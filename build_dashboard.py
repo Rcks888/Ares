@@ -90,6 +90,16 @@ def build_dashboard():
         total_pnl = sum(t.get('pnl_after_costs', t.get('pnl', 0)) or 0 for t in closed_trades)
         lines.append(f"  Realized: ${total_pnl:+.2f}")
 
+        recent = sorted(closed_trades, key=lambda t: t.get('exit_date', ''), reverse=True)[:3]
+        lines.append(f"\n📋 RECENT CLOSES")
+        for t in recent:
+            pm = t.get('post_mortem', {})
+            pnl_pct = t.get('pnl_pct', 0) or 0
+            icon = "✅" if pnl_pct > 0 else "❌"
+            lines.append(f"  {icon} {t['symbol']} {pnl_pct:+.1f}% ({t.get('exit_reason', '?')})")
+            if pm.get('verdict'):
+                lines.append(f"     {pm['verdict']} | peak +{pm.get('max_favorable_excursion_pct', 0)}%")
+
     print('\n'.join(lines))
 
 if __name__ == "__main__":
