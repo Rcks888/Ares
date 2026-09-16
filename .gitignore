@@ -3,3 +3,5 @@ data/ohlcv/
 logs/
 __pycache__/
 engine/__pycache__/
+.env
+*.env

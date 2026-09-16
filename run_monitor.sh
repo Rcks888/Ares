@@ -5,8 +5,9 @@ cd /root/ares/Ares
 source /root/ares/Ares/venv/bin/activate
 python monitor_trades.py 2>&1 | tee /tmp/ares_monitor.txt
 
-BOT_TOKEN="8313443693:AAHmME5m12A_MK_TN7RRjim9TFi_jR3fzjI"
-CHAT_ID="1231723238"
+set -a
+source /root/ares/.env
+set +a
 
 CLOSED=$(grep "CLOSED" /tmp/ares_monitor.txt 2>/dev/null | head -5)
 POSITIONS=$(grep "📊\|❌\|✅" /tmp/ares_monitor.txt 2>/dev/null | head -10)

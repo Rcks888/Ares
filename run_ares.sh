@@ -6,8 +6,9 @@ cd /root/ares/Ares
 source /root/ares/Ares/venv/bin/activate
 python daily_report.py 2>&1 | tee /tmp/ares_output.txt
 
-BOT_TOKEN="8313443693:AAHmME5m12A_MK_TN7RRjim9TFi_jR3fzjI"
-CHAT_ID="1231723238"
+set -a
+source /root/ares/.env
+set +a
 
 python3 build_dashboard.py > /tmp/ares_dashboard.txt 2>&1
 MSG=$(cat /tmp/ares_dashboard.txt | head -c 4000)
