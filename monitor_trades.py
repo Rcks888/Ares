@@ -13,7 +13,7 @@ def monitor():
     today_str = datetime.now(MYT).strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
     print(f"  ARES V3 TRADE MONITOR — {today_str}")
-    print(f"  Mode: IBKR Live Price Check")
+    print(f"  Mode: IBKR 1-min Bar Price Check")
     print(f"{'='*50}\n")
 
     trades = load_trades()

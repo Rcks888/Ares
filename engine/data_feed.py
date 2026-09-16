@@ -38,24 +38,24 @@ def disconnect_ib():
     _ib_connection = None
 
 def get_live_price(symbol):
-    """Get live/delayed price from IBKR for stop-loss and trailing stop checks."""
+    """Get latest price from IBKR using 1-min historical bars.
+    Paper accounts lack live streaming subscription, but historical bars work.
+    """
     ib = _get_ib()
     if not ib:
         return None
 
     try:
         from ib_insync import Stock
-        import time
         ibkr_symbol = SYMBOL_MAP_TO_IBKR.get(symbol, symbol)
         contract = Stock(ibkr_symbol, 'SMART', 'USD')
         ib.qualifyContracts(contract)
-        ib.reqMarketDataType(3)
-        ticker = ib.reqMktData(contract)
-        time.sleep(3)
-        price = ticker.last if ticker.last == ticker.last else ticker.close
-        ib.cancelMktData(contract)
-        if price and price == price:
-            return float(price)
+        bars = ib.reqHistoricalData(
+            contract, endDateTime='', durationStr='1 D',
+            barSizeSetting='1 min', whatToShow='TRADES', useRTH=False
+        )
+        if bars:
+            return round(float(bars[-1].close), 2)
         return None
     except Exception:
         return None
