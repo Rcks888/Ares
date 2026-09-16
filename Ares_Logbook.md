@@ -319,10 +319,40 @@ None — all 4 trades still open.
 **Verification: check tomorrow's 12:10 AM and 1:30 AM monitors for live prices.**
 
 **Tuesday Sep 15:**
-- 9:30 PM scan:
-- 5:00 AM scan:
-- Signals:
-- Notes:
+- 9:32 PM scan: ECO executed at $75.93. **Portfolio now 5/5 slots FULL.** 0 new signals.
+- Timezone fix confirmed working — timestamps now show correct MYT
+- 12:10 AM / 1:30 AM monitors: Still "No live price"
+- 5:01 AM scan: 2 signals. RVTY added to queue (now 3 queued: NTSK, SLDE, RVTY)
+- Signals: ECO (opened)
+- Notes: All slots full. Queue building up as designed.
+
+**Wednesday Sep 16:**
+- 🚨 **SECURITY INCIDENT**: Telegram bot token was in plaintext in public GitHub repo. Bot got hijacked — name changed to suspicious Russian/Burmese text with spam links.
+- Fix: deleted compromised bot, created new bot, moved token to `/root/ares/.env` (chmod 600), added `.env` to `.gitignore`
+- 🎯 **IBKR LIVE PRICE FIXED!** Root cause: missing `tzdata` package on VPS caused `ZoneInfoNotFoundError: 'US/Eastern'` which silently broke all IBKR data parsing
+- Fix: `apt install tzdata` + `pip install tzdata`
+- Also discovered paper account has no live streaming subscription — switched `get_live_price()` to use 1-min historical bars instead (free, works fine)
+- 10:55 PM monitor: **First live prices ever!** ✅
+
+**First Closed Trade:**
+| Symbol | Entry | Exit | Hold Days | P&L % | P&L $ | Reason |
+|--------|-------|------|-----------|-------|-------|--------|
+| PINS | $20.00 | $18.83 | 5 | **-5.9%** | **-$8.86** | stop_loss |
+
+**Live Portfolio (10:55 PM):**
+| Symbol | Price | P&L | Day | TS | TP |
+|--------|-------|-----|-----|----|----|
+| HAFN | $9.76 | +9.1% | 8 | $8.78 ↑ | $10.56 |
+| DYN | $17.55 | +2.7% | 8 | $17.27 | $18.80 |
+| ABM | $50.40 | +9.9% | 7 | $45.54 | $54.11 |
+| ECO | $85.89 | +13.1% | 1 | $77.30 ↑ | $89.59 |
+
+- Notes: **Major milestone.** Stop-loss executed automatically for the first time. Trailing stops updating live (HAFN $8.51→$8.78, ECO $72.11→$77.30). ECO at +13.1%, approaching TP for 50% scale-out. 4/5 slots now, 1 free for queued signals.
+
+**Lessons Learned:**
+1. Never commit secrets — even to "personal" public repos. Bots get scraped within days.
+2. Always check for silent library errors — the tzdata issue produced no visible error in the monitor, just NaN prices.
+3. Paper accounts don't have live market data subscriptions. Historical bars are a free workaround.
 
 ---
 
