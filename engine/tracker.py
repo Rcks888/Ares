@@ -163,6 +163,45 @@ def save_trades(trades):
         json.dump(trades, f, indent=2)
 
 QUEUE_FILE = LOGS_DIR / "signal_queue.json"
+RANKED_FILE = LOGS_DIR / "queue_ranked.json"
+QUEUE_EVENTS_FILE = LOGS_DIR / "queue_events.jsonl"
+
+def _log_queue_event(symbol, action, q=None, checks=None, reason=None):
+    """Append-only audit log of every queue event.
+    Actions: queued | kept | dropped | promoted | expired | evicted
+    """
+    event = {
+        'timestamp': datetime.now().isoformat(timespec='seconds'),
+        'symbol': symbol,
+        'action': action,
+        'queued_at': (q or {}).get('date_added'),
+        'confluence': (q or {}).get('confluence'),
+        'signal_price': (q or {}).get('price_at_signal'),
+        'drift_pct': (checks or {}).get('drift_pct'),
+        'rsi': (checks or {}).get('rsi'),
+        'ema20_ok': (checks or {}).get('ema20_ok'),
+        'live_price': (checks or {}).get('live'),
+        'drop_reason': reason
+    }
+    try:
+        with open(QUEUE_EVENTS_FILE, 'a') as f:
+            f.write(json.dumps(event) + '\n')
+    except Exception:
+        pass
+
+def load_ranked():
+    """Load the last ranked queue snapshot written by maintain_queue()."""
+    if not RANKED_FILE.exists():
+        return []
+    try:
+        with open(RANKED_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_ranked(ranked):
+    with open(RANKED_FILE, 'w') as f:
+        json.dump(ranked, f, indent=2)
 
 def load_queue():
     """Load queued signals from disk."""
@@ -177,21 +216,40 @@ def save_queue(queue):
         json.dump(queue, f, indent=2)
 
 def queue_signal(signal):
-    """Add a signal to the watchlist queue."""
+    """Add a signal to the watchlist queue. Enforces queue_max_size with eviction."""
+    params = _load_params()
+    max_size = params.get('queue_max_size', 10)
     queue = load_queue()
+
     for q in queue:
         if q['symbol'] == signal['symbol']:
             return
-    queue.append({
+
+    entry = {
         'symbol': signal['symbol'],
         'strategy': signal['strategy'],
         'trigger': signal.get('trigger', 'unknown'),
+        'regime': signal.get('regime', 'unknown'),
+        'category': signal.get('category', 'unknown'),
         'confluence': signal.get('confluence', 1),
         'price_at_signal': signal['price'],
         'rsi_at_signal': signal['rsi'],
         'date_added': signal['date'],
         'screens': signal.get('screens', [])
-    })
+    }
+    queue.append(entry)
+    _log_queue_event(signal['symbol'], 'queued', entry)
+
+    if len(queue) > max_size:
+        # Keep higher confluence, then newer age. Evict the tail.
+        queue.sort(key=lambda q: (-q.get('confluence', 1), q.get('date_added', '')), reverse=False)
+        keep, evicted = queue[:max_size], queue[max_size:]
+        for e in evicted:
+            print(f"    [Evicted — queue full] {e['symbol']} (conf{e.get('confluence')}, added {e.get('date_added')})")
+            _log_queue_event(e['symbol'], 'evicted', e,
+                             reason=f"queue exceeded max_size {max_size}")
+        queue = keep
+
     save_queue(queue)
     print(f"    [Queued — slots full] {signal['symbol']} ({signal['strategy']})")
 
@@ -205,25 +263,146 @@ def expire_queue():
     for q in queue:
         try:
             added = datetime.strptime(q['date_added'], "%Y-%m-%d").date()
-            if (today - added).days <= max_age:
+            age = (today - added).days
+            if age <= max_age:
                 active.append(q)
+            else:
+                print(f"    [Expired] {q['symbol']} — {age}d old (max {max_age}d)")
+                _log_queue_event(q['symbol'], 'expired', q,
+                                 reason=f"age {age}d exceeded max {max_age}d")
         except Exception:
             pass
     if len(active) != len(queue):
         save_queue(active)
     return active
 
-def promote_queue():
-    """Promote queued signals into pending trades when slots free up.
-    Re-validates each signal against current indicators before promoting.
-    Priority: highest confluence first, then oldest.
+def _validate_queued(symbol, q, params, use_live=False):
+    """Validate a queued signal against current data.
+    Returns (valid, reason, checks_dict).
+    use_live=True fetches an intraday price via IBKR instead of last daily close.
+    """
+    checks = {'drift_pct': None, 'rsi': None, 'ema20_ok': None, 'live': None}
+    try:
+        df = load_stock(symbol)
+        if df is None or df.empty:
+            return False, "no data", checks
+        df = add_indicators(df)
+        latest = df.iloc[-1]
+
+        price = None
+        if use_live:
+            price = get_live_price(symbol)
+        if price is None:
+            price = float(latest['Close'])
+        checks['live'] = round(price, 2)
+
+        signal_price = q.get('price_at_signal') or price
+        drift = (price - signal_price) / signal_price * 100 if signal_price else 0
+        checks['drift_pct'] = round(drift, 2)
+
+        rsi = float(latest.get('RSI', 50))
+        checks['rsi'] = round(rsi, 1)
+
+        ema20 = float(latest.get('EMA_20', 0))
+        checks['ema20_ok'] = price >= ema20
+
+        max_drift = params.get('queue_max_drift_pct', 5.0)
+        if abs(drift) > max_drift:
+            return False, f"drifted {drift:+.1f}% (max ±{max_drift}%)", checks
+        if rsi > params.get('rsi_extreme_high', 90):
+            return False, f"RSI {rsi:.1f} overbought", checks
+        if not checks['ema20_ok']:
+            return False, f"price ${price:.2f} below EMA20 ${ema20:.2f}", checks
+
+        return True, "valid", checks
+    except Exception as e:
+        return False, f"validation error: {e}", checks
+
+def maintain_queue():
+    """MAINTENANCE PASS — runs on every scan, regardless of slot availability.
+    Validates all queued signals, drops stale ones with logged reason,
+    re-ranks survivors on current data, persists to logs/queue_ranked.json.
+    Does NOT promote. Promotion is a separate pass.
     """
     queue = expire_queue()
     if not queue:
-        return
+        save_ranked([])
+        return []
 
-    trades = load_trades()
     params = _load_params()
+    survivors = []
+
+    print(f"  [Queue maintenance] validating {len(queue)} signal(s)")
+
+    for q in queue:
+        symbol = q['symbol']
+        valid, reason, checks = _validate_queued(symbol, q, params)
+        if valid:
+            entry = dict(q)
+            entry['checked_at'] = datetime.now().isoformat(timespec='seconds')
+            entry['drift_pct'] = checks['drift_pct']
+            entry['rsi'] = checks['rsi']
+            entry['ema20_ok'] = checks['ema20_ok']
+            entry['live_price'] = checks['live']
+            survivors.append(entry)
+            _log_queue_event(symbol, 'kept', q, checks)
+        else:
+            print(f"    ✗ {symbol}: {reason} — dropped")
+            _log_queue_event(symbol, 'dropped', q, checks, reason)
+
+    # Rank: confluence DESC, absolute drift ASC, age ASC
+    survivors.sort(key=lambda q: (
+        -q.get('confluence', 1),
+        abs(q.get('drift_pct') or 0),
+        q.get('date_added', '')
+    ))
+
+    save_queue([{k: v for k, v in q.items()
+                 if k not in ('checked_at', 'drift_pct', 'rsi', 'ema20_ok', 'live_price')}
+                for q in survivors])
+    save_ranked(survivors)
+
+    if survivors:
+        top = survivors[0]
+        print(f"    Ranked {len(survivors)}: top = {top['symbol']} "
+              f"(conf{top.get('confluence')}, drift {top.get('drift_pct'):+.1f}%)")
+    return survivors
+
+def _fill_window_ok(params):
+    """Weekend / stale-pending guard.
+    A promotion creates a pending order filling at the next US regular session.
+    Reject if that fill would sit across a long gap on stale validation.
+    Server clock is UTC; US regular session is Mon-Fri.
+    """
+    from datetime import timedelta
+    max_gap_h = params.get('pending_max_gap_hours', 48)
+    now = datetime.utcnow()
+
+    US_OPEN_H, US_OPEN_M = 13, 30   # 09:30 ET in UTC (EDT)
+    US_CLOSE_H = 20                 # 16:00 ET in UTC (EDT)
+
+    # Next regular-session open strictly after now, skipping weekends
+    candidate = now.replace(hour=US_OPEN_H, minute=US_OPEN_M, second=0, microsecond=0)
+    if now >= candidate.replace(hour=US_CLOSE_H, minute=0):
+        candidate += timedelta(days=1)
+    elif now >= candidate:
+        candidate += timedelta(days=1)
+    while candidate.weekday() >= 5:
+        candidate += timedelta(days=1)
+
+    gap_h = round((candidate - now).total_seconds() / 3600, 1)
+    if gap_h > max_gap_h:
+        return False, (f"next fill {candidate:%a %H:%M} UTC is {gap_h}h away "
+                       f"(max {max_gap_h}h) — leaving in queue")
+    return True, f"next fill {candidate:%a %H:%M} UTC in {gap_h}h"
+
+def promote_queue(source="scan", use_live=False):
+    """PROMOTION PASS — runs on scans and monitors.
+    If slots are free, promote the top-ranked valid signal to pending.
+    Always re-validates at execution time; never trusts a stale ranking.
+    """
+    params = _load_params()
+    trades = load_trades()
     open_trades = [t for t in trades if t['status'] == 'open']
     pending = load_pending()
     max_positions = params.get('max_positions', 5)
@@ -232,25 +411,36 @@ def promote_queue():
     if free_slots <= 0:
         return
 
-    print(f"\n  [Queue] {free_slots} slot(s) free, {len(queue)} signal(s) queued")
+    ranked = load_ranked()
+    if not ranked:
+        ranked = load_queue()
+    if not ranked:
+        return
 
-    ranked = sorted(queue, key=lambda q: (-q.get('confluence', 1), q.get('date_added', '')))
-    promoted = []
+    ok, why = _fill_window_ok(params)
+    if not ok:
+        print(f"  [Queue promotion] skipped — {why}")
+        return
+
+    print(f"  [Queue promotion / {source}] {free_slots} slot(s) free, {len(ranked)} ranked")
+
+    held = {t['symbol'] for t in open_trades} | {p['symbol'] for p in pending}
+    promoted, dropped = [], []
 
     for q in ranked:
         if free_slots <= 0:
             break
         symbol = q['symbol']
-
-        if any(t['symbol'] == symbol for t in open_trades) or \
-           any(p['symbol'] == symbol for p in pending):
-            promoted.append(symbol)
+        if symbol in held:
+            dropped.append(symbol)
             continue
 
-        valid, reason, live = _revalidate_queued(symbol, q, params)
+        # Mandatory execution-time re-validation
+        valid, reason, checks = _validate_queued(symbol, q, params, use_live=use_live)
         if not valid:
-            print(f"    ✗ {symbol}: {reason} — dropped from queue")
-            promoted.append(symbol)
+            print(f"    ✗ {symbol}: {reason} — dropped at promotion")
+            _log_queue_event(symbol, 'dropped', q, checks, f"promotion-time: {reason}")
+            dropped.append(symbol)
             continue
 
         signal = {
@@ -261,50 +451,26 @@ def promote_queue():
             'category': q.get('category', 'unknown'),
             'confluence': q.get('confluence', 1),
             'date': date.today().isoformat(),
-            'price': live,
+            'price': checks['live'],
             'rsi': q.get('rsi_at_signal'),
             'screens': q.get('screens', [])
         }
         result = open_trade(signal, from_queue=True)
         if result in ('pending', 'opened'):
-            print(f"    ✓ {symbol}: promoted from queue (conf{q.get('confluence')}) → {result}")
+            print(f"    ✓ {symbol}: promoted (conf{q.get('confluence')}, "
+                  f"drift {checks['drift_pct']:+.1f}%) → {result}")
+            _log_queue_event(symbol, 'promoted', q, checks)
             promoted.append(symbol)
             free_slots -= 1
         else:
             print(f"    ✗ {symbol}: open_trade returned '{result}'")
-            promoted.append(symbol)
+            _log_queue_event(symbol, 'dropped', q, checks, f"open_trade={result}")
+            dropped.append(symbol)
 
-    if promoted:
-        remaining = [q for q in queue if q['symbol'] not in promoted]
-        save_queue(remaining)
-
-def _revalidate_queued(symbol, q, params):
-    """Re-check a queued signal is still valid. Returns (valid, reason, live_price)."""
-    try:
-        from engine.indicators import add_indicators
-        df = load_stock(symbol)
-        if df is None or df.empty:
-            return False, "no data", None
-        df = add_indicators(df)
-        latest = df.iloc[-1]
-        live = float(latest['Close'])
-
-        signal_price = q.get('price_at_signal', live)
-        drift = (live - signal_price) / signal_price * 100 if signal_price else 0
-        max_drift = params.get('queue_max_drift_pct', 5.0)
-        if abs(drift) > max_drift:
-            return False, f"price drifted {drift:+.1f}% (max {max_drift}%)", live
-
-        rsi = float(latest.get('RSI', 50))
-        if rsi > params.get('rsi_extreme_high', 90):
-            return False, f"RSI now {rsi:.1f} (overbought)", live
-
-        if live < float(latest.get('EMA_20', 0)):
-            return False, "price fell below EMA20", live
-
-        return True, "valid", live
-    except Exception as e:
-        return False, f"revalidation error: {e}", None
+    removed = set(promoted) | set(dropped)
+    if removed:
+        save_queue([q for q in load_queue() if q['symbol'] not in removed])
+        save_ranked([q for q in ranked if q['symbol'] not in removed])
 
 def open_trade(signal, from_queue=False):
     """Record a new virtual trade from a signal. Ares V3."""

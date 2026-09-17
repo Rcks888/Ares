@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from engine.data_feed import get_live_price, disconnect_ib
 
 MYT = timezone(timedelta(hours=8))
-from engine.tracker import load_trades, save_trades, _load_params, _close_trade, _holding_days, load_stock
+from engine.tracker import load_trades, save_trades, _load_params, _close_trade, _holding_days, load_stock, promote_queue
 from engine.indicators import add_indicators
 
 def monitor():
@@ -84,6 +84,9 @@ def monitor():
 
     if updated:
         save_trades(trades)
+        # A close freed a slot — promote from the ranked queue rather than
+        # leaving it idle until the next scan. No rescanning here.
+        promote_queue(source="monitor", use_live=True)
 
     disconnect_ib()
     print(f"\n{'='*50}\n")

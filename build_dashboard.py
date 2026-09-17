@@ -61,7 +61,14 @@ def build_dashboard():
         for p in pending:
             lines.append(f"  {p['symbol']} -> next open")
 
-    if queue:
+    ranked = load_json(LOGS_DIR / "queue_ranked.json")
+    if ranked:
+        lines.append(f"\n📋 QUEUED ({len(ranked)}) — ranked")
+        for i, q in enumerate(ranked, 1):
+            drift = q.get('drift_pct')
+            drift_s = f"{drift:+.1f}%" if drift is not None else "?"
+            lines.append(f"  {i}. {q['symbol']} conf{q.get('confluence', '?')} | drift {drift_s}")
+    elif queue:
         lines.append(f"\n📋 QUEUED ({len(queue)})")
         for q in queue:
             lines.append(f"  {q['symbol']}")
