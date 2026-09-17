@@ -476,6 +476,90 @@ This is the point of the whole change. An observed queue is worth keeping; a sil
 
 **Repo hygiene:** hardened `.gitignore` to block secrets (`.env`, `*.pem`, `*.key`, `config.ini`, `*token*`, `*secret*`), local docs (`docs/`, `notes/`, `PROPOSAL_*.md`) and caches. GitHub now carries code, config, README/ROADMAP/Logbook and trade history only.
 
+**Capacity review — disk is a non-issue:**
+
+Measured growth rates rather than guessing:
+
+| Source | Rate | 1 year | 5 years |
+|--------|------|--------|---------|
+| Trade records | ~1.5 KB/trade | 100 trades = 150 KB | 750 KB |
+| `queue_events.jsonl` | ~300 B/event, ~10/day | 1.1 MB | 5.5 MB |
+| `data/ohlcv/` | ~4.3 KB/symbol | ~13 MB | 30 MB |
+| Ares `cron.log` | ~30 KB/day | 11 MB | 55 MB |
+| Hermes `cron.log` | ~100 KB/day (96 soak runs/day) | 36 MB | 180 MB |
+
+Total ≈ **60 MB/year** against 35 GB free. Storage will never be the constraint. Trade logs in particular are the most valuable asset and cost nothing — never prune them.
+
+Decided **against** logrotate. The only scenario it protects against is a runaway error loop spamming the log, and the dashboard now warns at `cron.log > 20 MB`, which makes that visible. No need for a background job to guard a risk that is now observable.
+
+**🐛 BUG FOUND via the 736-file cache count — stale cache in queue validation:**
+
+`ls data/ohlcv | wc -l` returned **736** files, far more than the ~103 currently screened. That exposed a correctness bug, not a space problem.
+
+`load_stock()` had **no staleness check** — it only downloaded when the file was missing:
+```python
+if not filepath.exists():
+    return download_stock(symbol)
+df = pd.read_csv(filepath, ...)   # could be months old
+```
+
+`refresh_watchlist()` only refreshes currently-screened symbols. But `maintain_queue()` calls `load_stock()` on **queued** symbols. If a queued symbol dropped out of the screener, its cache went stale — so the drift / RSI / EMA20 gates would have evaluated against old data and produced wrong keep/drop decisions. This would have silently corrupted the queue dataset the whole redesign was built to collect.
+
+**Fix:**
+- `load_stock()` re-downloads when cache age > 20h (20h chosen so both the 9:30 PM and 5:00 AM scans get fresh data)
+- Falls back to the stale cache with a printed warning if re-download fails, rather than crashing
+- Added `prune_cache()` — deletes files that are both >30 days old **and** not screened, not held, not queued. Runs each scan after `refresh_watchlist()`.
+
+**New feature — SYSTEM health block on dashboard:**
+
+Reads `/proc/meminfo` and `shutil.disk_usage` directly, no shelling out. Degrades gracefully if a source is unavailable.
+
+```
+🖥️ SYSTEM
+  ✅ RAM: 503/1900 MB (1400 free)
+  ✅ Swap: 314 MB used
+  ✅ Disk: 14/48 GB (28%)
+  ✅ Cache: 736 symbols
+  ✅ cron.log: 0.3 MB
+```
+
+| Metric | ⚠️ threshold | Rationale |
+|--------|-------------|-----------|
+| RAM available | < 300 MB | Below this the IBKR Gateway JVM starts swapping hard |
+| Swap used | > 500 MB | Indicates sustained pressure, not just a past spike |
+| Disk | > 80% | Standard headroom margin |
+| Cache symbols | > 2000 | Signals pruning has stopped working |
+| `cron.log` | > 20 MB | Runaway error-loop canary (replaces logrotate) |
+
+**RAM is the real long-term constraint, not disk.**
+
+Current VPS reading of 503 Mi used is suspiciously low against the expected steady state:
+
+| Process | Expected |
+|---------|----------|
+| IBKR Gateway (JVM) | ~440 MB |
+| Ares Python | ~100 MB |
+| MT5 + Wine (Hermes) | ~200-300 MB |
+| OS | ~100 MB |
+| **Total** | **~840-940 MB** |
+
+So at sample time something was idle — likely MT5 between soak cycles. Meanwhile **314 Mi of swap is in use**, which proves a genuine memory peak occurred that was never observed. Swap does not release on its own.
+
+**Known gap:** the dashboard samples RAM only when it runs (9:30 PM, 5:00 AM). Hermes fires every 15 minutes, so the true peak almost certainly falls between samples. Two point-in-time readings per day cannot answer whether RAM is actually a problem.
+
+Optional next step under consideration: peak RAM tracking — sample every 10 min into a small file, report the 24h maximum on the dashboard (~10 KB/day, one cron line). Deferred pending decision; it is another moving part.
+
+Escalation options if RAM does become the binding constraint:
+
+| Fix | Cost | Effect |
+|-----|------|--------|
+| Cap IBKR Gateway JVM heap (`-Xmx512m`) | Free | Stops JVM ballooning |
+| Stagger cron so Ares and Hermes never overlap | Free | Partly done already (:10 vs :07) |
+| `swapoff -a && swapon -a` | Free | One-time swap reclaim, run when idle |
+| Upgrade 2 GB → 4 GB | +$12/mo | Real headroom |
+
+**Lesson:** a metric collected for capacity planning (cache file count) found a correctness bug instead. Worth watching numbers even when the obvious concern turns out to be a non-issue.
+
 ---
 
 ### [DATE TEMPLATE — Copy for new days]
