@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "symbol": "RVTY",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "unknown",
+    "category": "unknown",
+    "confluence": 3,
+    "date": "2026-09-17",
+    "price": 145.73,
+    "rsi": 68.3,
+    "vol_ratio": 0,
+    "stdev_20": 0.05,
+    "strength": "unknown",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "from_queue": true
+  }
+]

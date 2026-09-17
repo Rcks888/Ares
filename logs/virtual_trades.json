@@ -37,7 +37,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 8
+    "holding_days": 9
   },
   {
     "symbol": "DYN",
@@ -77,7 +77,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 8,
+    "holding_days": 9,
     "scale_out_commission": 1.0
   },
   {
@@ -118,7 +118,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 7
+    "holding_days": 8
   },
   {
     "symbol": "PINS",
@@ -170,6 +170,19 @@
       "missed_upside_pct": 0.11,
       "avoided_downside_pct": 2.23,
       "latest_price": 18.39
+    },
+    "post_mortem": {
+      "exit_reason": "stop_loss",
+      "max_favorable_excursion_pct": -0.0,
+      "entry_quality_pct": -9.41,
+      "scaled_out_before_exit": false,
+      "holding_days": 7,
+      "rsi_at_entry": 29.1,
+      "regime_at_entry": "range",
+      "confluence": 3,
+      "verdict": "signal_failed",
+      "analysis": "Never traded above entry. Signal was wrong from the start. RSI 29.1, regime range, confluence 3.",
+      "manual_note": ""
     }
   },
   {
@@ -210,6 +223,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 1
+    "holding_days": 2
   }
 ]
