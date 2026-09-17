@@ -1,3 +1,4 @@
+import time
 import yfinance as yf
 import pandas as pd
 from pathlib import Path
@@ -72,11 +73,27 @@ def download_stock(symbol, period="2y"):
         print(f"  yfinance error for {symbol}: {e}")
     return None
 
-def load_stock(symbol):
-    """Load cached stock data from disk."""
+CACHE_MAX_AGE_HOURS = 20
+
+def load_stock(symbol, max_age_hours=CACHE_MAX_AGE_HOURS):
+    """Load cached stock data from disk, re-downloading if the cache is stale.
+
+    Staleness matters: refresh_watchlist() only refreshes currently-screened
+    symbols, but queue validation reads symbols that may have dropped out of
+    the screener. Without this check, drift/RSI/EMA20 gates would evaluate
+    against old data.
+    """
     filepath = DATA_DIR / f"{symbol}.csv"
     if not filepath.exists():
         return download_stock(symbol)
+
+    age_h = (time.time() - filepath.stat().st_mtime) / 3600
+    if age_h > max_age_hours:
+        fresh = download_stock(symbol)
+        if fresh is not None:
+            return fresh
+        print(f"  [stale cache] {symbol} is {age_h:.0f}h old, refresh failed — using cached")
+
     df = pd.read_csv(filepath, index_col=0, parse_dates=True, date_format='ISO8601')
     for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
         if col in df.columns:
@@ -93,4 +110,23 @@ def refresh_watchlist(symbols):
             data[symbol] = df
     print(f"  Downloaded: {len(data)} stocks")
     return data
-    return data
+
+def prune_cache(keep_symbols, max_age_days=30):
+    """Delete cached OHLCV files that are both stale and no longer referenced.
+    Prevents unbounded growth of data/ohlcv as the screener rotates symbols.
+    """
+    keep = set(keep_symbols)
+    cutoff = time.time() - (max_age_days * 86400)
+    removed = 0
+    for f in DATA_DIR.glob("*.csv"):
+        if f.stem in keep:
+            continue
+        if f.stat().st_mtime < cutoff:
+            try:
+                f.unlink()
+                removed += 1
+            except Exception:
+                pass
+    if removed:
+        print(f"  Pruned {removed} stale cache file(s)")
+    return removed

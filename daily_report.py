@@ -3,10 +3,10 @@ from datetime import datetime, timedelta, timezone
 
 MYT = timezone(timedelta(hours=8))
 from pathlib import Path
-from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib
+from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib, prune_cache
 from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
-from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals, maintain_queue, promote_queue
+from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals, maintain_queue, promote_queue, load_trades, load_queue
 
 USE_SCREENER = True
 
@@ -44,6 +44,10 @@ def generate_report():
 
     print(f"\n[1] Refreshing data ({len(all_symbols)} stocks)...")
     refresh_watchlist(all_symbols)
+
+    held = {t['symbol'] for t in load_trades()}
+    queued = {q['symbol'] for q in load_queue()}
+    prune_cache(set(all_symbols) | held | queued)
 
     print("\n[2] Checking open positions...")
     check_open_trades()
