@@ -43,13 +43,14 @@ def build_dashboard():
             entry = t['entry_price']
             days = calc_days(t.get('entry_date', ''))
             scaled = " [50% sold]" if t.get('scaled_out') else ""
-            pnl_pct = t.get('pnl_pct', 0) or 0
-            arrow = "+" if pnl_pct >= 0 else ""
             sl = t.get('stop_loss', 0)
             ts = t.get('trailing_stop', sl)
             tp = t.get('take_profit', 0)
             shares = t.get('shares', 0)
-            lines.append(f"  {sym} {arrow}{pnl_pct:.1f}% | {days}d{scaled}")
+            peak = t.get('peak_price', entry)
+            unreal_pct = (peak - entry) / entry * 100 if entry else 0
+            arrow = "+" if unreal_pct >= 0 else ""
+            lines.append(f"  {sym} peak {arrow}{unreal_pct:.1f}% | {days}d{scaled}")
             lines.append(f"    Entry: ${entry:.2f} ({shares:.1f} shares)")
             lines.append(f"    SL: ${sl:.2f} | TS: ${ts:.2f} | TP: ${tp:.2f}")
     else:
