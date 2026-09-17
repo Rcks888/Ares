@@ -22,5 +22,6 @@
     "starting_capital": 1000,
     "max_positions": 5,
     "cash_reserve_pct": 0.25,
-    "queue_max_age_days": 5
+    "queue_max_age_days": 5,
+    "queue_max_drift_pct": 5.0
 }

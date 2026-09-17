@@ -213,6 +213,99 @@ def expire_queue():
         save_queue(active)
     return active
 
+def promote_queue():
+    """Promote queued signals into pending trades when slots free up.
+    Re-validates each signal against current indicators before promoting.
+    Priority: highest confluence first, then oldest.
+    """
+    queue = expire_queue()
+    if not queue:
+        return
+
+    trades = load_trades()
+    params = _load_params()
+    open_trades = [t for t in trades if t['status'] == 'open']
+    pending = load_pending()
+    max_positions = params.get('max_positions', 5)
+    free_slots = max_positions - len(open_trades) - len(pending)
+
+    if free_slots <= 0:
+        return
+
+    print(f"\n  [Queue] {free_slots} slot(s) free, {len(queue)} signal(s) queued")
+
+    ranked = sorted(queue, key=lambda q: (-q.get('confluence', 1), q.get('date_added', '')))
+    promoted = []
+
+    for q in ranked:
+        if free_slots <= 0:
+            break
+        symbol = q['symbol']
+
+        if any(t['symbol'] == symbol for t in open_trades) or \
+           any(p['symbol'] == symbol for p in pending):
+            promoted.append(symbol)
+            continue
+
+        valid, reason, live = _revalidate_queued(symbol, q, params)
+        if not valid:
+            print(f"    ✗ {symbol}: {reason} — dropped from queue")
+            promoted.append(symbol)
+            continue
+
+        signal = {
+            'symbol': symbol,
+            'strategy': q['strategy'],
+            'trigger': q.get('trigger', 'unknown'),
+            'regime': q.get('regime', 'unknown'),
+            'category': q.get('category', 'unknown'),
+            'confluence': q.get('confluence', 1),
+            'date': date.today().isoformat(),
+            'price': live,
+            'rsi': q.get('rsi_at_signal'),
+            'screens': q.get('screens', [])
+        }
+        result = open_trade(signal, from_queue=True)
+        if result in ('pending', 'opened'):
+            print(f"    ✓ {symbol}: promoted from queue (conf{q.get('confluence')}) → {result}")
+            promoted.append(symbol)
+            free_slots -= 1
+        else:
+            print(f"    ✗ {symbol}: open_trade returned '{result}'")
+            promoted.append(symbol)
+
+    if promoted:
+        remaining = [q for q in queue if q['symbol'] not in promoted]
+        save_queue(remaining)
+
+def _revalidate_queued(symbol, q, params):
+    """Re-check a queued signal is still valid. Returns (valid, reason, live_price)."""
+    try:
+        from engine.indicators import add_indicators
+        df = load_stock(symbol)
+        if df is None or df.empty:
+            return False, "no data", None
+        df = add_indicators(df)
+        latest = df.iloc[-1]
+        live = float(latest['Close'])
+
+        signal_price = q.get('price_at_signal', live)
+        drift = (live - signal_price) / signal_price * 100 if signal_price else 0
+        max_drift = params.get('queue_max_drift_pct', 5.0)
+        if abs(drift) > max_drift:
+            return False, f"price drifted {drift:+.1f}% (max {max_drift}%)", live
+
+        rsi = float(latest.get('RSI', 50))
+        if rsi > params.get('rsi_extreme_high', 90):
+            return False, f"RSI now {rsi:.1f} (overbought)", live
+
+        if live < float(latest.get('EMA_20', 0)):
+            return False, "price fell below EMA20", live
+
+        return True, "valid", live
+    except Exception as e:
+        return False, f"revalidation error: {e}", None
+
 def open_trade(signal, from_queue=False):
     """Record a new virtual trade from a signal. Ares V3."""
     trades = load_trades()

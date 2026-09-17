@@ -6,7 +6,7 @@ from pathlib import Path
 from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib
 from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
-from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals
+from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals, promote_queue
 
 USE_SCREENER = True
 
@@ -47,6 +47,9 @@ def generate_report():
 
     print("\n[2] Checking open positions...")
     check_open_trades()
+
+    print("\n[2b] Promoting queued signals...")
+    promote_queue()
 
     print("\n[3] MARKET OVERVIEW")
     print("-" * 40)
