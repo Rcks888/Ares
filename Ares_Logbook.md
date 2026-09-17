@@ -560,6 +560,75 @@ Escalation options if RAM does become the binding constraint:
 
 **Lesson:** a metric collected for capacity planning (cache file count) found a correctness bug instead. Worth watching numbers even when the obvious concern turns out to be a non-issue.
 
+**VPS memory cleanup performed:**
+
+Disabled services a cloud droplet has no use for:
+```bash
+systemctl disable --now multipathd ModemManager
+systemctl mask --now fwupd            # static unit — disable does not work, must mask
+systemctl stop multipathd.socket      # socket kept re-triggering the service
+systemctl mask multipathd.socket multipathd.service
+```
+
+Capped journald (was consuming 100 MB):
+```bash
+# /etc/systemd/journald.conf
+SystemMaxUse=50M
+RuntimeMaxUse=50M
+```
+`journalctl --vacuum-size=50M` freed 0 B — the 100 MB was memory-mapped runtime cache, not archived files on disk. The **restart** reclaimed it. The cap prevents future growth.
+
+Reclaimed swap while market was closed and no cron was due:
+```bash
+swapoff -a && swapon -a
+```
+
+**Results:**
+
+| Process | Before | After |
+|---------|--------|-------|
+| `systemd-journal` | 100 MB | **18 MB** |
+| `multipathd` | 27 MB | gone |
+| `fwupd` | 24 MB | gone |
+| `ModemManager` | 10 MB | gone |
+| Swap used | 313 MB | **0 B** |
+
+Note: RAM *used* rose 476 → 713 Mi after the swap reclaim. That is correct and expected — the 313 MB of swapped-out pages came back into physical memory.
+
+**Real memory footprint identified.** The largest consumer was an unidentified process named `main`. Resolved it with `readlink /proc/<pid>/exe` → `/usr/lib/wine/wine64`, i.e. **MT5 running under Wine**. Hermes is heavier than previously estimated:
+
+| Process | RSS | Owner |
+|---------|-----|-------|
+| `main` (wine64 = MT5 terminal) | 245 MB | Hermes |
+| `python.exe` (Wine Python MT5 bridge) | 82 MB | Hermes |
+| `winedevice.exe` ×2 | ~32 MB | Hermes |
+| `wineserver` | 17 MB | Hermes |
+| **Hermes / MT5 subtotal** | **~376 MB** | |
+| `Xvfb` | 22 MB | Ares (gateway display) |
+| `systemd-journal` | 18 MB | OS |
+
+Earlier estimate for MT5+Wine was 200-300 MB; actual is ~376 MB. Nothing to disable here — MT5 has to run.
+
+**Projection with IB Gateway up** (it was down at sample time — no `java` process present):
+```
+713 Mi current + ~440 Mi JVM ≈ 1150 Mi used
+1946 Mi total − 1150 ≈ ~790 Mi available
+```
+Above the 500 MB comfort threshold, so 2 GB should hold. Tighter than assumed, but workable.
+
+**The 313 MB of swap was almost certainly inherited from the 1 GB era** before the upgrade — swap is never released automatically. The meaningful signal now is whether it *re-accumulates*:
+
+| Swap over coming days | Interpretation | Action |
+|-----------------------|----------------|--------|
+| Stays near 0 | 2 GB genuinely sufficient | None |
+| Climbs past ~200 MB | Real ongoing pressure | Cap JVM heap `-Xmx512m`, or upgrade to 4 GB |
+
+The dashboard SYSTEM block surfaces swap daily, so this is now passively monitored rather than needing manual checks.
+
+**Peak RAM tracking: deferred.** The projected ~790 Mi available sits above threshold, and swap is now a sufficient proxy for detecting pressure — if RAM peaks hard between dashboard samples, swap will rise and the dashboard will show it. Revisit only if swap re-accumulates.
+
+**Still to verify:** `free -h` after tonight's 9:00 PM gateway restart, to confirm the ~790 Mi projection against a real reading with both systems up.
+
 ---
 
 ### [DATE TEMPLATE — Copy for new days]
