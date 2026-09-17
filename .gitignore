@@ -1,7 +1,28 @@
-venv/
-data/ohlcv/
-logs/
-__pycache__/
-engine/__pycache__/
+# Secrets — NEVER commit
 .env
 *.env
+*.pem
+*.key
+config.ini
+*token*
+*secret*
+*credential*
+
+# Local-only docs and notes
+docs/
+notes/
+*.local.md
+PROPOSAL_*.md
+
+# Virtualenv and caches
+venv/
+__pycache__/
+engine/__pycache__/
+*.pyc
+
+# Data and temp
+data/ohlcv/
+logs/
+*.log
+/tmp/
+gateway.log
