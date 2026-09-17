@@ -411,6 +411,71 @@ Captures `max_favorable_excursion_pct`, `entry_quality_pct`, `rsi_at_entry`, `re
 
 **Git note:** push from home VPN kept failing (`RPC failed; curl 56/52`). Corporate network suspected. Workaround is to push from office, or scp the file to VPS and push from there.
 
+**Queue redesign implemented (after review):**
+
+Design correction: the earlier "two-level validation" framing was wrong — both levels would have run microseconds apart in the same scan process on identical data. Replaced with **two distinct passes**:
+
+```
+SCAN (9:30 PM, 5:00 AM MYT)
+  [2]  check_open_trades()      closes positions, frees slots
+  [2b] maintain_queue()         validate ALL → drop stale → re-rank → queue_ranked.json
+       promote_queue("scan")    if slots free → promote top valid
+
+MONITOR (12:10 AM, 1:30 AM MYT)
+       close detected → promote_queue("monitor", use_live=True)
+       reads ranked queue, re-validates against live IBKR price. No rescanning.
+```
+
+**Monitors can now promote** — closes the ~6h idle-slot gap. Kept deliberately narrow: monitors do not scan, they only promote from the existing ranked queue.
+
+**Ranking (kept simple on purpose):** `confluence DESC → |drift| ASC → age ASC`. No weighted scoring formula — with 1 closed trade any weights would be fake precision. Real ranking deferred to the Phase 3 ML layer at 40-60 trades.
+
+**Guards added:**
+- **Execution-time re-validation is mandatory.** `promote_queue()` never trusts the stored ranking; it re-checks drift / RSI / EMA20 immediately before promoting. This is the real safety net, not clock heuristics.
+- **Fill-window guard** — computes the actual next US regular open (13:30 UTC, skipping weekends) and skips promotion if the fill sits too far out (`pending_max_gap_hours: 48`):
+
+| Now (UTC) | Next fill | Gap | Result |
+|-----------|-----------|-----|--------|
+| Wed 18:00 | Thu 13:30 | 19.5h | ALLOW |
+| Thu 21:00 (= Fri 5am MYT scan) | Fri 13:30 | 16.5h | ALLOW |
+| Fri 18:00 | Mon 13:30 | 67.5h | SKIP |
+| Fri 21:00 | Mon 13:30 | 64.5h | SKIP |
+| Sat 10:00 | Mon 13:30 | 51.5h | SKIP |
+
+- **Queue size cap** `queue_max_size: 10`. On overflow keeps higher confluence then newer age, logs every eviction.
+- **Permanent drop** on failed re-validation. A signal that ran +7% then pulled back is treated as a different setup — the scanner can rediscover it cleanly. Avoids zombie signals bouncing in and out of eligibility.
+
+**New audit log — `logs/queue_events.jsonl`** (append-only, one JSON per line):
+```json
+{"timestamp":"2026-09-17T21:32:04","symbol":"NTSK","action":"dropped",
+ "queued_at":"2026-09-14","confluence":2,"signal_price":41.2,
+ "drift_pct":7.3,"rsi":88.1,"ema20_ok":true,"live_price":44.2,
+ "drop_reason":"drifted +7.3% (max ±5.0%)"}
+```
+Actions tracked: `queued | kept | dropped | promoted | expired | evicted`
+
+This is the point of the whole change. An observed queue is worth keeping; a silent queue is not. Over the next month this log answers a question the system could not previously answer: **do queued signals run away or fade?**
+
+| Pattern | Interpretation | Action |
+|---------|----------------|--------|
+| Mostly drift up past +5% | Queue too slow, real opportunity cost | Consider raising `max_positions` |
+| Mostly lose EMA20 / fade | Queue is protecting capital | Keep as-is, design validated |
+| Mixed | Drift threshold mis-calibrated | Tune `queue_max_drift_pct` on evidence |
+
+**Dashboard now shows the ranking**, not just symbol names:
+```
+📋 QUEUED (3) — ranked
+  1. RVTY conf3 | drift +1.2%
+  2. NTSK conf2 | drift -0.4%
+  3. SLDE conf2 | drift +2.8%
+```
+
+**New params:** `queue_max_size: 10`, `pending_max_gap_hours: 48`
+
+**Explicitly deferred:** ML ranking, multi-factor freshness scores, dynamic `max_positions` based on queue pressure. Not enough trades to justify any of it.
+
+**Repo hygiene:** hardened `.gitignore` to block secrets (`.env`, `*.pem`, `*.key`, `config.ini`, `*token*`, `*secret*`), local docs (`docs/`, `notes/`, `PROPOSAL_*.md`) and caches. GitHub now carries code, config, README/ROADMAP/Logbook and trade history only.
+
 ---
 
 ### [DATE TEMPLATE — Copy for new days]
