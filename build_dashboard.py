@@ -6,6 +6,57 @@ MYT = timezone(timedelta(hours=8))
 
 LOGS_DIR = Path(__file__).parent / "logs"
 
+def system_health():
+    """RAM / swap / disk / cache summary. Returns list of display lines."""
+    lines = []
+    try:
+        mem = {}
+        with open('/proc/meminfo') as f:
+            for line in f:
+                k, v = line.split(':', 1)
+                mem[k] = int(v.strip().split()[0]) // 1024   # MiB
+
+        total = mem.get('MemTotal', 0)
+        avail = mem.get('MemAvailable', 0)
+        used = total - avail
+        swap_used = mem.get('SwapTotal', 0) - mem.get('SwapFree', 0)
+
+        ram_icon = "⚠️" if avail < 300 else "✅"
+        swap_icon = "⚠️" if swap_used > 500 else "✅"
+        lines.append(f"  {ram_icon} RAM: {used}/{total} MB ({avail} free)")
+        lines.append(f"  {swap_icon} Swap: {swap_used} MB used")
+    except Exception:
+        pass
+
+    try:
+        import shutil
+        du = shutil.disk_usage("/")
+        gb = 1024 ** 3
+        pct = du.used / du.total * 100
+        disk_icon = "⚠️" if pct > 80 else "✅"
+        lines.append(f"  {disk_icon} Disk: {du.used // gb}/{du.total // gb} GB ({pct:.0f}%)")
+    except Exception:
+        pass
+
+    try:
+        cache = Path(__file__).parent / "data" / "ohlcv"
+        n = len(list(cache.glob("*.csv"))) if cache.exists() else 0
+        cache_icon = "⚠️" if n > 2000 else "✅"
+        lines.append(f"  {cache_icon} Cache: {n} symbols")
+    except Exception:
+        pass
+
+    try:
+        log = Path("/root/ares/cron.log")
+        if log.exists():
+            mb = log.stat().st_size / (1024 ** 2)
+            log_icon = "⚠️" if mb > 20 else "✅"
+            lines.append(f"  {log_icon} cron.log: {mb:.1f} MB")
+    except Exception:
+        pass
+
+    return lines
+
 def load_json(path):
     if not path.exists():
         return []
@@ -107,6 +158,11 @@ def build_dashboard():
             lines.append(f"  {icon} {t['symbol']} {pnl_pct:+.1f}% ({t.get('exit_reason', '?')})")
             if pm.get('verdict'):
                 lines.append(f"     {pm['verdict']} | peak +{pm.get('max_favorable_excursion_pct', 0)}%")
+
+    health = system_health()
+    if health:
+        lines.append(f"\n🖥️ SYSTEM")
+        lines.extend(health)
 
     print('\n'.join(lines))
 
