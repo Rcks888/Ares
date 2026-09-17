@@ -1,21 +1,21 @@
 [
   {
-    "symbol": "RVTY",
+    "symbol": "SDGR",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
-    "regime": "unknown",
-    "category": "unknown",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
     "confluence": 3,
     "date": "2026-09-17",
-    "price": 145.73,
-    "rsi": 68.3,
-    "vol_ratio": 0,
-    "stdev_20": 0.05,
-    "strength": "unknown",
+    "price": 30.24,
+    "rsi": 79.4,
+    "vol_ratio": 5.62,
+    "stdev_20": 0.073,
+    "strength": "high",
     "screens": [
       "unusual_volume",
       "big_movers_up"
     ],
-    "from_queue": true
+    "from_queue": false
   }
 ]

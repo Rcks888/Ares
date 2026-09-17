@@ -1,3 +1,9 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:2
+signal_details:SDGR | momentum_breakout | conf3 | uptrend
+  Price: $30.24 | RSI: 79.4 | Vol: 5.62x
+  Buy: $150 (5.0 shares)
+  SL: $25.82 | TP: $35.68 (+18%) | TS: 10%|||TMO | momentum_breakout | conf3 | uptrend
+  Price: $658.32 | RSI: 71.0 | Vol: 2.16x
+  Buy: $150 (0.2 shares)
+  SL: $637.39 | TP: $776.82 (+18%) | TS: 10%
