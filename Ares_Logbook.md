@@ -354,6 +354,63 @@ None — all 4 trades still open.
 2. Always check for silent library errors — the tzdata issue produced no visible error in the monitor, just NaN prices.
 3. Paper accounts don't have live market data subscriptions. Historical bars are a free workaround.
 
+**Thursday Sep 17:**
+- Backfilled post-mortem on PINS: verdict `signal_failed` — never traded above $20.00 entry. RSI 29.1, range regime, confluence 3.
+- Insight: a conf3 + oversold + range signal failed outright. High confluence alone is not sufficient in a range regime.
+- 12:10 AM / 1:30 AM monitors: live prices working consistently ✅. Trailing stops climbing on all 4 positions.
+- 5:01 AM scan: 103 screened, 0 signals. 4/5 slots, 3 still queued.
+
+**Live Portfolio (1:30 AM):**
+| Symbol | Price | P&L | Day | TS | TP | To TP |
+|--------|-------|-----|-----|----|----|-------|
+| HAFN | $9.77 | +9.2% | 8 | $8.80 ↑ | $10.56 | 8.1% |
+| DYN | $17.82 | +4.3% | 8 | $17.27 | $18.80 | 5.5% |
+| ABM | $50.91 | +11.0% | 7 | $45.82 ↑ | $54.11 | 6.3% |
+| ECO | $86.25 | +13.6% | 1 | $77.72 ↑ | $89.59 | 3.9% |
+
+**Realized to date: -$10.86** (1 closed, 0 wins)
+
+**🐛 MAJOR BUG FOUND — Signal queue was write-only:**
+- Symptom: PINS closed Sep 16 freeing a slot, but NTSK/SLDE/RVTY sat queued for days with no promotion
+- Root cause: `load_queue()` was only used by `queue_signal()` (add), `expire_queue()` (drop old), and `print_scorecard()` (display). **No promotion logic existed at all.**
+- Fix: added `promote_queue()` to `daily_report.py` at step [2b], right after `check_open_trades()`
+- Promotion ranks by confluence DESC then age ASC, re-validates the top pick (drift ≤5%, RSI ≤90, price ≥ EMA20), promotes to pending → fills at next open
+- Added `queue_max_drift_pct: 5.0` to strategy_params.json
+
+**Dashboard fixes:**
+- Open positions were showing `0.0%` — was reading `pnl_pct` which only populates on close. Now shows peak % from `peak_price`.
+- Added `RECENT CLOSES` section showing last 3 closed trades with post-mortem verdict and peak %
+
+**New feature — closed trade post-mortem:**
+Auto-generated diagnosis on every close, stored in `trade['post_mortem']`:
+
+| Exit Reason | Verdict | Meaning |
+|-------------|---------|---------|
+| take_profit | `as_expected` | Strategy worked as designed |
+| trailing_stop | `partial_win` | Locked profit after peak |
+| trailing_stop | `reversal` | Peaked but exited below entry |
+| trailing_stop | `immediate_reversal` | Never moved up |
+| stop_loss | `signal_failed` | Never traded above entry |
+| stop_loss | `weak_follow_through` | Peaked <3% then died |
+| stop_loss | `reversal_after_gain` | Peaked >3% then reversed |
+| rsi_extreme | `emotional_exit` | Avoided blow-off top |
+
+Captures `max_favorable_excursion_pct`, `entry_quality_pct`, `rsi_at_entry`, `regime_at_entry`, `confluence`, plus a `manual_note` field for own reflections.
+
+**Known limitations of current promotion logic (pending review):**
+1. Only top-ranked signal is validated — loop breaks when slots fill, so it is "first valid in rank order" not "best among all valid"
+2. Ranking uses frozen `confluence` from signal time, not current data
+3. Stale signals only detected at promotion time — if no slot frees, they expire silently at day 5 with no logged reason
+4. **Monitors cannot promote.** PINS closed during the 10:55 PM monitor but next promotion chance was the 5:01 AM scan — a ~6 hour idle slot during live market hours
+
+**Proposed two-level validation (awaiting reviewer opinion):**
+- Level 1 (scans): validate ALL queued signals regardless of slots, drop stale with logged reason, re-rank on current data, persist to `logs/queue_ranked.json`
+- Level 2 (monitors): if slot freed, re-validate top-ranked with fresh price → promote
+- Main benefit is data generation: builds a record of *why* signals go stale, answering whether queued signals run away or fade. Feeds Phase 3 ML.
+- Deliberately keeping ranking simple until 40-60 trades exist — avoid overfitting on a 5-trade sample.
+
+**Git note:** push from home VPN kept failing (`RPC failed; curl 56/52`). Corporate network suspected. Workaround is to push from office, or scp the file to VPS and push from there.
+
 ---
 
 ### [DATE TEMPLATE — Copy for new days]
