@@ -784,7 +784,35 @@ A grep for every key in that file returns **zero references anywhere in the code
 
 Positions are **50% larger than the stated cap**, and there is **no weekly loss circuit breaker** despite one being written down. Academic on paper money; not academic with real capital in June 2027. A believed-in protection that does not exist is worse than no protection, because it changes behaviour.
 
-Left unfixed pending a decision — consolidating to a single source of truth changes position sizing, which should be deliberate rather than a side effect of a bug hunt.
+**Resolved — file removed rather than corrected.** Two options were weighed:
+
+| Option | Approach | Verdict |
+|--------|----------|---------|
+| A | Remove from the repo; `strategy_params.json` is the sole source of truth; aspirational rules move to ROADMAP | **Chosen** |
+| B | Keep it, renamed `risk_rules.DRAFT.md` or `.unimplemented.json` with a `NOT LOADED BY CODE` header | Rejected — inferior |
+
+Option B still leaves a plausible-looking risk file in the config directory. A header comment is exactly the kind of thing that gets skimmed past six months later. Removing it is unambiguous.
+
+One correction to the plan: the suggested destination `docs/future_risk_controls.md` would have been **gitignored** — `.gitignore` blocks `docs/` as local-only. The file would have existed on one machine and silently vanished from the repo, which is close to the original failure mode. The controls went into `ROADMAP.md` instead, which is tracked.
+
+Changes made:
+- Deleted `config/risk_rules.json`
+- README gained a *Configuration — single source of truth* section, with the rule for adding tunables: config key + `params.get()` default, never a hardcoded value, and anything unimplementable goes to ROADMAP rather than config
+- ROADMAP gained *Unimplemented Risk Controls* — a current-vs-intended table, plus an implementation sketch for the weekly loss circuit breaker
+- `stop_loss_multiplier` promoted from a hardcoded `2` to a config key. It was the only `risk_rules` value the code happened to honour, so it is now explicit and tunable. Behaviour unchanged at 2.0
+- `pending_max_age_days` added to config; it had existed only as a code default, which is the same "value not visible in config" smell
+
+**Position sizing deliberately left at 15%.** Reconciling it to the intended 10% means either raising `max_positions` to 8 or adding an explicit cap. Either changes sizing mid-dataset and splits the trade history into two incomparable regimes. With 1 closed trade the priority is a clean baseline, not optimal sizing. Recorded in ROADMAP as *before live*.
+
+**The weekly loss circuit breaker is the one gap that genuinely matters.** Nothing currently halts trading after a losing streak. Sketched in ROADMAP with a note that a silent halt must be surfaced on the dashboard — otherwise a circuit-breaker trip is indistinguishable from a scan that found no signals, which would be its own debugging nightmare.
+
+### 53 lines of unreachable code in `open_trade()`
+
+Found while wiring up `stop_loss_multiplier`: everything after `return 'pending'` was dead — the pre-pending immediate-open path, left behind when execution moved to next-bar fills.
+
+It was not merely unused but **broken**: it referenced `entry_price`, `shares` and `commission`, none of which exist in that scope. Had control ever reached it, the result would have been `NameError`. Deleted.
+
+Worth noting how it was found — not by reading the file, but by grepping for hardcoded `* 2` while implementing a config key. Dead code hides well from direct reading precisely because it looks plausible in isolation.
 
 ### Repo hygiene — second credential incident
 
