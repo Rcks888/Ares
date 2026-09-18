@@ -631,6 +631,174 @@ The dashboard SYSTEM block surfaces swap daily, so this is now passively monitor
 
 ---
 
+## Sep 18, 2026 — Silent signal loss: eight bugs behind one dashboard symptom
+
+**Symptom.** Comparing two consecutive dashboards showed a pending signal simply disappear:
+
+```
+Sep 17, 09:32 PM   PENDING (1) RVTY -> next open      (no QUEUED section)
+Sep 18, 05:01 AM   PENDING (1) SDGR -> next open      QUEUED (1) TMO
+```
+
+RVTY was not in the portfolio, not pending, not queued, and not in recent closes. Portfolio stayed 4/5, so it never filled. It was simply gone. Separately, the signals queued on Sep 14 — NTSK and SLDE — had also vanished with no visible explanation.
+
+**`queue_events.jsonl` earned its keep on its first real outing.** The audit log added during the queue redesign gave a definitive answer instead of a guess:
+
+```json
+{"symbol":"NTSK","action":"dropped","queued_at":"2026-09-14","confluence":3,
+ "drop_reason":"validation error: Cannot set a DataFrame with multiple columns
+                to the single column vol_ratio"}
+{"symbol":"SLDE","action":"dropped","queued_at":"2026-09-14","confluence":3,
+ "drop_reason":"validation error: ... single column vol_ratio"}
+{"symbol":"RVTY","action":"kept","drift_pct":3.95,"rsi":50.0,"ema20_ok":true}
+{"symbol":"RVTY","action":"promoted","drift_pct":3.95,"live_price":145.73}
+```
+
+**The previously queued signals were dropped by a bug, not by design.** NTSK and SLDE were destroyed by an unhandled exception during validation — they were never evaluated at all, so the `drift_pct`, `rsi` and `ema20_ok` fields are `null`. RVTY validated cleanly, promoted to pending, and then evaporated in the fill path with no event of any kind.
+
+Checked against current prices, all three were still inside both gates when they were destroyed:
+
+| Symbol | Signal price | Price on Sep 18 | Drift | Age | Verdict |
+|--------|-------------|-----------------|-------|-----|---------|
+| NTSK | $17.00 | $17.21 | +1.2% | 4d | still valid — killed by bug |
+| SLDE | $26.23 | $25.00 | −4.7% | 4d | still valid — killed by bug |
+| RVTY | $140.19 | $146.73 | +4.7% | 3d | still valid — killed by bug |
+
+None were legitimately filtered. Three confluence-3 signals lost to defects.
+
+### The unifying defect
+
+Three separate code paths collapsed **"this signal is invalid"** and **"I could not evaluate this signal"** into the same outcome: permanent deletion. A transient yfinance hiccup was treated identically to a genuine trend break.
+
+### Root causes found
+
+**1. Entries were filling at the previous session's open price.** 🔴
+
+`daily_report.py` called `execute_pending_signals()` *before* `refresh_watchlist()`:
+
+```python
+execute_pending_signals()        # reads the cache
+refresh_watchlist(all_symbols)   # refreshes it afterwards
+```
+
+`load_stock()` only re-downloads past a 20 h staleness window, but the gaps between scans are 16.5 h (21:00 → 13:30 UTC) and 7.5 h (13:30 → 21:00 UTC) — both under 20 h. So the fill never triggered a refresh, and `df.iloc[-1]['Open']` was **yesterday's open**, with nothing validating the bar date.
+
+This is the most damaging finding: **every entry price recorded so far is one day stale**, which contaminates `entry_quality_pct` and the post-mortem verdicts for HAFN, DYN, ABM, ECO and PINS.
+
+**2. Pending signals were silently deleted on any data failure.** 🔴 *(this killed RVTY)*
+
+```python
+df = load_stock(sig['symbol'])
+if df is None or len(df) < 2:
+    executed.append(sig)   # → pending.remove(sig) → gone forever
+    continue
+...
+except Exception as e:
+    print(f"❌ Execution failed — {e}")
+executed.append(sig)       # ran even after the exception → gone forever
+```
+
+`download_stock()` swallows its own exceptions and returns `None`, so a single transient fetch failure permanently destroyed the signal — with no log entry, which is why the dashboard showed nothing.
+
+**3. `load_stock()` had two return paths with different column shapes.** 🔴 *(this killed NTSK and SLDE)*
+
+**This was a regression introduced by the stale-cache fix made earlier in this same work.**
+
+```python
+if age_h > max_age_hours:
+    fresh = download_stock(symbol)
+    if fresh is not None:
+        return fresh          # RAW yfinance frame: MultiIndex columns
+df = pd.read_csv(filepath, ...)  # flat columns
+return df
+```
+
+Modern `yf.download()` returns MultiIndex columns such as `('Close','NTSK')`. On that path `df['Volume']` yields a DataFrame rather than a Series, so `add_indicators()` raised *"Cannot set a DataFrame with multiple columns to the single column vol_ratio"*.
+
+Why only NTSK and SLDE? They were queued on Sep 14 and had since dropped out of the screener, so `refresh_watchlist()` no longer touched them and their cache aged past 20 h — the **only** condition that reaches the raw-download return. Screened symbols stay under 20 h and always took the CSV path. The first scan after the staleness fix deployed (13:31:19 on Sep 17) killed precisely the two queued-but-unscreened symbols.
+
+A fix aimed at stale data created a new way to lose signals. The lesson is narrow and useful: **a function must return one shape.** A conditional early-return that produces a structurally different object is a trap, and here it stayed invisible because the failure was caught and converted into a routine-looking "drop".
+
+**4. Queue validation also read stale data.** 🔴
+
+`_validate_queued()` used the default 20 h window, so queued symbols outside the screener were judged on the previous day's close — and a permanent drop decision was made on it.
+
+**5. "Could not check" was treated as "invalid".** 🔴
+
+Both `return False, "no data"` and `return False, f"validation error: {e}"` fed into `maintain_queue()`, which treats every `False` as a permanent drop.
+
+**6. The queue discarded `stdev_20`.** 🟠
+
+`queue_signal()` never stored it and `promote_queue()` never passed it, so `open_trade()` fell back to `0.05` and **every queue-promoted trade received a generic 10% stop** instead of one scaled to its actual volatility — silently corrupting the dataset the queue redesign exists to collect.
+
+**7. `stdev_20` fallback was a price, not a fraction.** 🟠
+
+```python
+stdev_20 = sig.get('stdev_20', entry_price * 0.05)
+stop_loss = entry_price - (entry_price * stdev_20 * 2)
+```
+On a $100 stock the default yields `100 − 100·5·2 = −900` — a stop that can never trigger.
+
+**8. Held/pending queue dedupe removed entries with no log.** 🟡
+
+### Fixes applied
+
+| Area | Change |
+|------|--------|
+| `data_feed` | `download_stock()` flattens MultiIndex columns before caching |
+| `data_feed` | `load_stock()` reduced to a **single parse path**, always reading the cached CSV |
+| `data_feed` | Legacy MultiIndex-header CSVs cleaned by dropping NaN-`Close` rows |
+| `daily_report` | `execute_pending_signals()` moved **after** `refresh_watchlist()` |
+| `tracker` | Fill forces `max_age_hours=0` and asserts `df.index[-1].date() == today` |
+| `tracker` | Fills retry up to `MAX_FILL_ATTEMPTS=3`, retained not discarded, every outcome logged |
+| `tracker` | New `pending_max_age_days` guard (default 4) replaces unbounded pending lifetime |
+| `tracker` | `_validate_queued()` prefixes fetch/exception failures `transient:` |
+| `tracker` | Transient failures retained **unranked** for `MAX_CHECK_FAILURES=3` cycles — kept in `signal_queue.json` but excluded from `queue_ranked.json`, so unpromotable until a check actually passes |
+| `tracker` | Queue validation reads with `max_age_hours=6`, below the 7.5 h scan gap |
+| `tracker` | `stdev_20` and `vol_ratio` preserved through `queue_signal` → `promote_queue` |
+| `tracker` | `stdev_20` fallback corrected to the fraction `0.05` |
+| `tracker` | Held/pending dedupe now logged |
+
+New event actions in `queue_events.jsonl`: `fill_retry`, `fill_dropped`, `check_retry`.
+
+**Verified** the exact call chain that crashed:
+```
+NTSK OK 251 bars, close 17.21
+SLDE OK 314 bars, close 25.0
+RVTY OK 501 bars, close 146.73
+```
+
+**Decided not to restore the three lost signals.** All were still inside both gates, but there are no free slots (4 open + SDGR pending = 5/5), NTSK and SLDE expire at `queue_max_age_days: 5` the following day, TMO is already queued ahead of them, and hand-editing `signal_queue.json` is the same category of risk that produced this. The signals are gone; the bug class that ate them is not.
+
+### `risk_rules.json` is dead config
+
+A grep for every key in that file returns **zero references anywhere in the codebase**. The file is headed *"YOUR RULES. Follow these when trading"* but nothing reads it, and its values contradict actual behaviour:
+
+| Stated rule | Actual behaviour |
+|-------------|------------------|
+| `max_concurrent_positions: 8` | `max_positions: 5` from `strategy_params.json` |
+| `max_position_pct: 0.10` | `(1000 × 0.75) / 5 = $150` = **15%** |
+| `cash_buffer_pct: 0.30` | `cash_reserve_pct: 0.25` = **25%** |
+| `max_weekly_loss_pct: 0.05` | **not implemented — no circuit breaker exists** |
+| `stop_loss_multiplier: 2.0` | hardcoded `* 2` in tracker (matches by coincidence) |
+
+Positions are **50% larger than the stated cap**, and there is **no weekly loss circuit breaker** despite one being written down. Academic on paper money; not academic with real capital in June 2027. A believed-in protection that does not exist is worse than no protection, because it changes behaviour.
+
+Left unfixed pending a decision — consolidating to a single source of truth changes position sizing, which should be deliberate rather than a side effect of a bug hunt.
+
+### Repo hygiene — second credential incident
+
+A GitHub Personal Access Token was found embedded in plaintext in the `origin` remote URL, present in `.git/config` on both the local machine and the VPS. Unlike the Telegram token this was **never published** — `.git/config` is untracked — so exposure was local-disk only. Token to be rotated and the remote switched to SSH so no secret sits in a config file at all.
+
+### Takeaways
+
+- **Distinguish "invalid" from "unknown".** Collapsing them into one outcome destroyed three signals across three independent code paths. Any validation that can fail for infrastructure reasons needs a third state.
+- **One function, one return shape.** The `vol_ratio` regression survived only because the malformed frame was caught downstream and reported as a routine drop.
+- **An audit log is worth more than the feature it audits.** `queue_events.jsonl` cost a few lines and turned "where did RVTY go?" from unanswerable into a five-second grep. The fill path had no logging, which is exactly why RVTY's disappearance was a mystery while NTSK and SLDE's was not.
+- **Order of operations is silent.** Nothing errored when fills ran before the data refresh; entries were merely wrong, every single time, for as long as the system had been running.
+
+---
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
