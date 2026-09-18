@@ -126,7 +126,8 @@ def execute_pending_signals():
             # stdev_20 is a FRACTION of price, not a price. The old default of
             # entry_price*0.05 produced a negative stop_loss when absent.
             stdev_20 = sig.get('stdev_20') or 0.05
-            stop_loss = entry_price - (entry_price * stdev_20 * 2)
+            sl_mult = params.get('stop_loss_multiplier', 2.0)
+            stop_loss = entry_price - (entry_price * stdev_20 * sl_mult)
 
             strategy = sig['strategy']
             if strategy in ('momentum_breakout', 'trend_continuation'):
@@ -604,58 +605,6 @@ def open_trade(signal, from_queue=False):
     })
     save_pending(pending)
     return 'pending'
-    stop_loss = entry_price - (entry_price * signal['stdev_20'] * 2)
-
-    strategy = signal['strategy']
-    if strategy in ('momentum_breakout', 'trend_continuation'):
-        tp_pct = params.get('tp_momentum', 0.18)
-    else:
-        tp_pct = params.get('tp_reversal', 0.10)
-
-    take_profit = entry_price * (1 + tp_pct)
-    trade = {
-        'symbol': signal['symbol'],
-        'strategy': strategy,
-        'trigger': signal.get('trigger', 'unknown'),
-        'regime': signal.get('regime', 'unknown'),
-        'category': signal.get('category', 'unknown'),
-        'confluence': signal.get('confluence', 1),
-        'signal_date': signal['date'],
-        'signal_price': round(raw_price, 2),
-        'entry_date': signal['date'] + ' (next-bar)',
-        'entry_price': round(entry_price, 2),
-        'entry_slippage': round(entry_price - raw_price, 4),
-        'entry_commission': commission,
-        'shares': round(shares, 2),
-        'original_shares': round(shares, 2),
-        'position_size': round(position_size, 2),
-        'stop_loss': round(stop_loss, 2),
-        'take_profit': round(take_profit, 2),
-        'trailing_stop': round(stop_loss, 2),
-        'peak_price': entry_price,
-        'rsi_at_entry': signal['rsi'],
-        'vol_at_entry': signal['vol_ratio'],
-        'strength': signal['strength'],
-        'scaled_out': False,
-        'scale_out_price': None,
-        'scale_out_date': None,
-        'from_queue': from_queue,
-        'status': 'open',
-        'exit_date': None,
-        'exit_price': None,
-        'exit_reason': None,
-        'exit_slippage': None,
-        'exit_commission': None,
-        'total_commission': commission,
-        'pnl': None,
-        'pnl_pct': None,
-        'pnl_after_costs': None,
-        'version': '3.0'
-    }
-
-    trades.append(trade)
-    save_trades(trades)
-    return 'opened'
 
 def _build_post_mortem(trade, reason):
     """Analyze why a trade ended the way it did. Auto-generated diagnostics."""

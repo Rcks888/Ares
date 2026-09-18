@@ -273,6 +273,50 @@ Athena (backtest)           Ares (live)
 
 ---
 
+## Unimplemented Risk Controls
+
+These were previously written in `config/risk_rules.json`, a file no code ever read.
+They are recorded here as **future work**, not as configuration, so they cannot be
+mistaken for active protections. See the Configuration section of the README.
+
+| Intended control | Stated value | Current reality | Priority |
+|------------------|-------------|-----------------|----------|
+| Max position size | 10% of capital | **15%** — `(1000 × 0.75) / 5 = $150` | Before live |
+| Max concurrent positions | 8 | 5 (`max_positions`) | Low — 5 is deliberate at $1K |
+| Cash buffer | 30% | 25% (`cash_reserve_pct`) | Low — reconcile wording |
+| Weekly loss circuit breaker | 5% | **Not implemented** | **Before live** |
+| Stop loss multiplier | 2.0× stdev | ✅ now `stop_loss_multiplier` in `strategy_params.json` | Done |
+
+### Position sizing reconciliation
+
+Sizing is currently `(starting_capital × (1 − cash_reserve_pct)) / max_positions`,
+which yields 15% per position — 50% above the intended 10% cap. Two ways to reconcile:
+
+- Raise `max_positions` to 8 (aligns with the original intent: `0.75 / 8 ≈ 9.4%`)
+- Or add an explicit `max_position_pct` cap applied after the division
+
+Deliberately deferred during the observation phase: changing sizing mid-dataset would
+split the trade history into two incomparable regimes, and with only 1 closed trade the
+priority is a clean baseline, not optimal sizing.
+
+### Weekly loss circuit breaker
+
+The most important gap. Nothing currently halts trading after a losing streak.
+
+Sketch:
+- On each scan, sum `pnl_after_costs` for trades closed within the trailing 7 days
+- If that sum ≤ `−(starting_capital × max_weekly_loss_pct)`, skip new entries for the
+  remainder of the week — exits and monitors must keep running
+- Surface the halt state on the dashboard, since a silent halt is indistinguishable
+  from a scan that simply found no signals
+- Log the trip to `queue_events.jsonl` so the pause is auditable after the fact
+
+Prerequisite: enough closed trades for a 7-day window to be meaningful. Revisit
+alongside the Phase 3 ML work at 40-60 trades, and **implement before any real capital
+is deployed in June 2027.**
+
+---
+
 ## Notes
 - Paper trade minimum 3 months before going live
 - Need 50+ closed trades for statistically meaningful data

@@ -122,7 +122,7 @@ Max 100 candidates per scan (capped from Finviz output).
 Ares/
 ├── config/
 │   ├── watchlist.json          # Fallback fixed watchlist (153 stocks)
-│   └── strategy_params.json    # V3 strategy parameters
+│   └── strategy_params.json    # SOLE source of truth for all tunable parameters
 ├── engine/
 │   ├── screener.py             # Finviz dynamic market screener
 │   ├── data_feed.py            # yfinance + IBKR data
@@ -134,6 +134,8 @@ Ares/
 │   ├── virtual_trades.json     # Active + closed trade log
 │   ├── pending_signals.json    # Signals waiting for next-bar execution
 │   ├── signal_queue.json       # Blocked signals waiting for open slot
+│   ├── queue_ranked.json       # Validated + ranked queue (promotable entries only)
+│   ├── queue_events.jsonl      # Append-only audit log of every queue/fill event
 │   ├── trades_report.csv       # Trade history export
 │   ├── last_scan_summary.txt   # Latest scan results for dashboard
 │   └── archive/                # V1 trade data (archived)
@@ -145,8 +147,31 @@ Ares/
 ├── restart_gateway.sh          # IB Gateway health check + auto-restart
 ├── start_gateway.sh            # IB Gateway background launcher
 ├── Ares_Logbook.md             # Daily trading journal
+├── ROADMAP.md                  # Phased plan + unimplemented risk controls
 └── README.md
 ```
+
+## Configuration — single source of truth
+
+**`config/strategy_params.json` is the only file the runtime reads for tunable behaviour.**
+If a value is not in that file, it is not in effect.
+
+A second file, `config/risk_rules.json`, previously sat alongside it and was headed
+*"YOUR RULES. Follow these when trading."* No code ever read it. Its values also
+contradicted actual behaviour — it declared a 10% position cap while the code sized
+positions at 15%, and declared a 5% weekly loss limit that was never implemented.
+It was removed rather than corrected, because a config file that looks authoritative
+but is inert is worse than no file at all: it invites decisions based on protections
+that do not exist.
+
+Risk controls that are **intended but not yet built** now live in [ROADMAP.md](ROADMAP.md)
+under *Unimplemented Risk Controls*, where they read as future work rather than as
+active configuration.
+
+When adding a new tunable:
+1. Add the key to `strategy_params.json`
+2. Read it via `params.get('key', <sane_default>)` — never hardcode the value
+3. If it cannot be implemented yet, put it in ROADMAP.md, **not** in a config file
 
 ## Version History
 
