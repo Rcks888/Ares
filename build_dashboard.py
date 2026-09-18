@@ -5,6 +5,79 @@ from pathlib import Path
 MYT = timezone(timedelta(hours=8))
 
 LOGS_DIR = Path(__file__).parent / "logs"
+PSI_STATE = LOGS_DIR / "psi_state.json"
+
+STALL_WARN_MS = 1000      # any full-stall second between runs is notable
+PAGES_OUT_WARN = 25600    # ~100 MB at 4 KiB pages — active paging, not drift
+PAGES_PER_MB = 256
+
+def memory_pressure():
+    """Deltas in memory-stall time and pages swapped out since the last run.
+
+    Swap occupancy is a cumulative high-water mark, not a pressure signal. At
+    the default vm.swappiness the kernel evicts idle anonymous pages even with
+    gigabytes free, and those pages are never faulted back in. Equilibrium
+    restoration after a swap clear and a genuine RAM peak produce the same
+    occupancy curve, so occupancy alone cannot tell them apart.
+
+    PSI 'full' total is cumulative stall time, which is the property that
+    matters: a delta between two samples still captures a spike that began and
+    ended between them — something a point-in-time MemAvailable read
+    structurally cannot do.
+
+    Requires kernel 4.20+ with CONFIG_PSI. Returns None if unavailable so the
+    dashboard degrades to a no-op rather than failing.
+    """
+    import json
+    now = {}
+    try:
+        with open('/proc/pressure/memory') as f:
+            for line in f:
+                if line.startswith('full'):
+                    for tok in line.split():
+                        if tok.startswith('total='):
+                            now['stall_us'] = int(tok.split('=', 1)[1])
+    except Exception:
+        pass
+    try:
+        with open('/proc/vmstat') as f:
+            for line in f:
+                if line.startswith('pswpout '):
+                    now['pswpout'] = int(line.split()[1])
+                    break
+    except Exception:
+        pass
+
+    if not now:
+        return None
+
+    prev = {}
+    try:
+        prev = json.loads(PSI_STATE.read_text())
+    except Exception:
+        pass
+
+    now['ts'] = datetime.now(MYT).isoformat(timespec='seconds')
+    try:
+        PSI_STATE.parent.mkdir(parents=True, exist_ok=True)
+        PSI_STATE.write_text(json.dumps(now))
+    except Exception:
+        pass
+
+    if not prev:
+        return {'first_run': True}
+
+    out = {'first_run': False, 'window_h': None}
+    if 'stall_us' in now and 'stall_us' in prev:
+        out['stall_ms'] = max(0, (now['stall_us'] - prev['stall_us']) // 1000)
+    if 'pswpout' in now and 'pswpout' in prev:
+        out['pages_out'] = max(0, now['pswpout'] - prev['pswpout'])
+    try:
+        elapsed = datetime.now(MYT) - datetime.fromisoformat(prev['ts'])
+        out['window_h'] = round(elapsed.total_seconds() / 3600, 1)
+    except Exception:
+        pass
+    return out
 
 def system_health():
     """RAM / swap / disk / cache summary. Returns list of display lines."""
@@ -21,10 +94,37 @@ def system_health():
         used = total - avail
         swap_used = mem.get('SwapTotal', 0) - mem.get('SwapFree', 0)
 
-        ram_icon = "⚠️" if avail < 300 else "✅"
-        swap_icon = "⚠️" if swap_used > 500 else "✅"
+        psi = memory_pressure()
+        pages_out = (psi or {}).get('pages_out')
+        stall_ms = (psi or {}).get('stall_ms')
+        win = (psi or {}).get('window_h')
+        win_txt = f" in {win}h" if win else ""
+
+        # Real pressure is a compound condition. Swap high with RAM free is
+        # inert eviction history; swap high with RAM low is actual distress.
+        pressure = swap_used > 200 and avail < 400
+
+        ram_icon = "⚠️" if pressure else "✅"
         lines.append(f"  {ram_icon} RAM: {used}/{total} MB ({avail} free)")
-        lines.append(f"  {swap_icon} Swap: {swap_used} MB used")
+
+        if pages_out is None:
+            swap_icon = "⚠️" if pressure else "✅"
+            lines.append(f"  {swap_icon} Swap: {swap_used} MB used")
+        elif pages_out > PAGES_OUT_WARN:
+            lines.append(f"  ⚠️ Swap: {swap_used} MB "
+                         f"(+{pages_out // PAGES_PER_MB} MB paged out{win_txt})")
+        else:
+            moved = pages_out // PAGES_PER_MB
+            lines.append(f"  ✅ Swap: {swap_used} MB "
+                         f"(inert — {moved} MB paged out{win_txt})")
+
+        if stall_ms is not None:
+            if stall_ms > STALL_WARN_MS:
+                lines.append(f"  ⚠️ Stall: {stall_ms} ms{win_txt} — memory pressure event")
+            else:
+                lines.append(f"  ✅ Stall: {stall_ms} ms{win_txt}")
+        elif psi and psi.get('first_run'):
+            lines.append("  ✅ Stall: baseline recorded")
     except Exception:
         pass
 

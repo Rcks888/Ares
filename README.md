@@ -173,6 +173,35 @@ When adding a new tunable:
 2. Read it via `params.get('key', <sane_default>)` — never hardcode the value
 3. If it cannot be implemented yet, put it in ROADMAP.md, **not** in a config file
 
+## Operations — memory
+
+**Do not clear swap.** `swapoff -a && swapon -a` force-faults every evicted page
+back into RAM simultaneously — a genuine memory spike, with the IB Gateway JVM
+resident — and the kernel then re-evicts the same idle pages over the following
+hours. It is churn for no benefit. If the occupancy itself is unwanted, reduce the
+cause instead with `sysctl vm.swappiness=10`.
+
+**Swap occupancy is not a pressure signal.** At the default `vm.swappiness=60` the
+kernel evicts idle anonymous pages even with gigabytes free, and those pages are
+never faulted back in. Measured on this host: after a manual swap clear, refill was
+two-phase — 0 → 284 MB rapidly, then 284 → 308 MB over 21 hours (~1 MB/hour) while
+1486 MB of RAM stayed free. Equilibrium restoration and a genuine RAM peak produce
+the same occupancy curve, so occupancy cannot distinguish them. Thrashing looks like
+tens of MB per *minute*, not per day.
+
+The dashboard therefore reports:
+
+| Line | Source | Measures |
+|------|--------|----------|
+| `RAM` | `/proc/meminfo` `MemAvailable` | State, sampled — warns only on the compound condition swap >200 MB **and** free <400 MB |
+| `Swap` | `MemInfo` + `/proc/vmstat` `pswpout` delta | Occupancy, qualified by whether paging is actually happening |
+| `Stall` | `/proc/pressure/memory` `full total=` delta | Cumulative stall time — catches spikes that begin **and end** between samples |
+
+`Stall` is the only one of the three that detects a transient event, which is why
+per-run peak RAM sampling was not needed. Requires kernel 4.20+ with `CONFIG_PSI`
+(Ubuntu 24.04 has it); the block degrades to a no-op if absent. State carries between
+runs in `logs/psi_state.json`.
+
 ## Version History
 
 ### V3.0 — Athena-Optimized (Sep 6, 2026)
