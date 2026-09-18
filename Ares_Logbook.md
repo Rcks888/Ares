@@ -788,7 +788,27 @@ Left unfixed pending a decision — consolidating to a single source of truth ch
 
 ### Repo hygiene — second credential incident
 
-A GitHub Personal Access Token was found embedded in plaintext in the `origin` remote URL, present in `.git/config` on both the local machine and the VPS. Unlike the Telegram token this was **never published** — `.git/config` is untracked — so exposure was local-disk only. Token to be rotated and the remote switched to SSH so no secret sits in a config file at all.
+A GitHub Personal Access Token was found embedded in plaintext in the `origin` remote URL, present in `.git/config` on **all three** local repos (Ares, Athena, Hermes) and on both VPS repos (Ares, Hermes) — five copies in total.
+
+Unlike the Telegram token this was **never published**, since `.git/config` is untracked, so exposure was local-disk only and there was no evidence of abuse. Severity was housekeeping, not emergency. But it was a live credential of unknown scope sitting in plaintext on an internet-facing box, it surfaced in ordinary command output (`git remote -v`), and a classic `ghp_` token typically carries full `repo` scope across *all* repositories — not just the one it is configured for.
+
+**Migrated to SSH keys rather than rotating the token.** Rotation would only have reset the clock on the same design flaw; SSH removes the secret entirely, so there is nothing left to leak or rotate again.
+
+| Step | Detail |
+|------|--------|
+| Laptop key | `ed25519`, comment `ricksonkang-laptop` |
+| VPS key | `ed25519`, comment `ares-vps` — **separate key** |
+| Remotes migrated | 5 total: 3 local (Ares, Athena, Hermes) + 2 VPS (Ares, Hermes) |
+| Verified | `ssh -T git@github.com` on both machines; live `git pull` and `git fetch` on the VPS |
+| PAT | Deleted at GitHub **after** both machines were confirmed working |
+
+**Separate keys per machine matter:** the VPS can now be revoked independently if it is ever compromised, without disturbing laptop access.
+
+**Sequencing was the one real hazard.** Revoking the PAT before SSH was verified would have broken the VPS mid-session — it auto-commits and pushes a report file on every scan, so the failure would have surfaced as silent cron errors rather than an obvious outage. Revocation was deliberately made the last step, after a successful `git pull` over SSH on the VPS.
+
+Confirmed no residue: `grep -rln "ghp_" /root/ares/cron.log /root/Hermes/logs/ /root/ares/.env` returned nothing, so the token was never echoed into a log by a failing git command.
+
+**Pattern across both incidents.** Two credential exposures in one project, from the same underlying habit: **pasting a secret into a config file because it was the fastest way to make something work.** The Telegram token went into `run_ares.sh` to get alerts working; the PAT went into the remote URL to avoid password prompts. Both were expedient, both created a permanent liability. The structural answer is not "be careful with secrets" but **choose mechanisms that have no secret to place** — SSH keys instead of tokens, `.env` outside the repo instead of inline values.
 
 ### Takeaways
 
