@@ -4,3 +4,4 @@
 {"timestamp": "2026-09-17T13:31:20", "symbol": "RVTY", "action": "promoted", "queued_at": "2026-09-15", "confluence": 3, "signal_price": 140.19, "drift_pct": 3.95, "rsi": 50.0, "ema20_ok": true, "live_price": 145.73, "drop_reason": null}
 {"timestamp": "2026-09-17T21:01:29", "symbol": "TMO", "action": "queued", "queued_at": "2026-09-17", "confluence": 3, "signal_price": 658.32, "drift_pct": null, "rsi": null, "ema20_ok": null, "live_price": null, "drop_reason": null}
 {"timestamp": "2026-09-18T13:31:12", "symbol": "TMO", "action": "kept", "queued_at": "2026-09-17", "confluence": 3, "signal_price": 658.32, "drift_pct": -0.4, "rsi": 50.0, "ema20_ok": true, "live_price": 655.66, "drop_reason": null}
+{"timestamp": "2026-09-18T21:01:46", "symbol": "TMO", "action": "kept", "queued_at": "2026-09-17", "confluence": 3, "signal_price": 658.32, "drift_pct": -1.04, "rsi": 50.0, "ema20_ok": true, "live_price": 651.45, "drop_reason": null}

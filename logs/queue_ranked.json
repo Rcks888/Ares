@@ -12,10 +12,10 @@
     "screens": [
       "unusual_volume"
     ],
-    "checked_at": "2026-09-18T13:31:12",
-    "drift_pct": -0.4,
+    "checked_at": "2026-09-18T21:01:46",
+    "drift_pct": -1.04,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 655.66
+    "live_price": 651.45
   }
 ]
