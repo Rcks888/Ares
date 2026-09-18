@@ -633,7 +633,9 @@ The dashboard SYSTEM block surfaces swap daily, so this is now passively monitor
 
 ---
 
-## Sep 18, 2026 — Silent signal loss: eight bugs behind one dashboard symptom
+### Sep 18, 2026 (Friday)
+
+#### Silent signal loss: eight bugs behind one dashboard symptom
 
 **Symptom.** Comparing two consecutive dashboards showed a pending signal simply disappear:
 
@@ -668,11 +670,11 @@ Checked against current prices, all three were still inside both gates when they
 
 None were legitimately filtered. Three confluence-3 signals lost to defects.
 
-### The unifying defect
+##### The unifying defect
 
 Three separate code paths collapsed **"this signal is invalid"** and **"I could not evaluate this signal"** into the same outcome: permanent deletion. A transient yfinance hiccup was treated identically to a genuine trend break.
 
-### Root causes found
+##### Root causes found
 
 **1. Entries were filling at the previous session's open price.** 🔴
 
@@ -743,7 +745,7 @@ On a $100 stock the default yields `100 − 100·5·2 = −900` — a stop that 
 
 **8. Held/pending queue dedupe removed entries with no log.** 🟡
 
-### Fixes applied
+##### Fixes applied
 
 | Area | Change |
 |------|--------|
@@ -772,7 +774,7 @@ RVTY OK 501 bars, close 146.73
 
 **Decided not to restore the three lost signals.** All were still inside both gates, but there are no free slots (4 open + SDGR pending = 5/5), NTSK and SLDE expire at `queue_max_age_days: 5` the following day, TMO is already queued ahead of them, and hand-editing `signal_queue.json` is the same category of risk that produced this. The signals are gone; the bug class that ate them is not.
 
-### `risk_rules.json` is dead config
+##### `risk_rules.json` is dead config
 
 A grep for every key in that file returns **zero references anywhere in the codebase**. The file is headed *"YOUR RULES. Follow these when trading"* but nothing reads it, and its values contradict actual behaviour:
 
@@ -808,7 +810,7 @@ Changes made:
 
 **The weekly loss circuit breaker is the one gap that genuinely matters.** Nothing currently halts trading after a losing streak. Sketched in ROADMAP with a note that a silent halt must be surfaced on the dashboard — otherwise a circuit-breaker trip is indistinguishable from a scan that found no signals, which would be its own debugging nightmare.
 
-### 53 lines of unreachable code in `open_trade()`
+##### 53 lines of unreachable code in `open_trade()`
 
 Found while wiring up `stop_loss_multiplier`: everything after `return 'pending'` was dead — the pre-pending immediate-open path, left behind when execution moved to next-bar fills.
 
@@ -816,7 +818,7 @@ It was not merely unused but **broken**: it referenced `entry_price`, `shares` a
 
 Worth noting how it was found — not by reading the file, but by grepping for hardcoded `* 2` while implementing a config key. Dead code hides well from direct reading precisely because it looks plausible in isolation.
 
-### Repo hygiene — second credential incident
+##### Repo hygiene — second credential incident
 
 A GitHub Personal Access Token was found embedded in plaintext in the `origin` remote URL, present in `.git/config` on **all three** local repos (Ares, Athena, Hermes) and on both VPS repos (Ares, Hermes) — five copies in total.
 
@@ -840,12 +842,65 @@ Confirmed no residue: `grep -rln "ghp_" /root/ares/cron.log /root/Hermes/logs/ /
 
 **Pattern across both incidents.** Two credential exposures in one project, from the same underlying habit: **pasting a secret into a config file because it was the fastest way to make something work.** The Telegram token went into `run_ares.sh` to get alerts working; the PAT went into the remote URL to avoid password prompts. Both were expedient, both created a permanent liability. The structural answer is not "be careful with secrets" but **choose mechanisms that have no secret to place** — SSH keys instead of tokens, `.env` outside the repo instead of inline values.
 
-### Takeaways
+##### Takeaways
 
 - **Distinguish "invalid" from "unknown".** Collapsing them into one outcome destroyed three signals across three independent code paths. Any validation that can fail for infrastructure reasons needs a third state.
 - **One function, one return shape.** The `vol_ratio` regression survived only because the malformed frame was caught downstream and reported as a routine drop.
 - **An audit log is worth more than the feature it audits.** `queue_events.jsonl` cost a few lines and turned "where did RVTY go?" from unanswerable into a five-second grep. The fill path had no logging, which is exactly why RVTY's disappearance was a mystery while NTSK and SLDE's was not.
 - **Order of operations is silent.** Nothing errored when fills ran before the data refresh; entries were merely wrong, every single time, for as long as the system had been running.
+
+#### Memory pressure: PSI replaces swap occupancy
+
+Correction arriving from the Hermes thread, which tested the assumption this logbook recorded earlier and found it does not hold.
+
+**The flawed claim.** Peak RAM tracking was deferred on the reasoning that swap acts as a sufficient proxy: if RAM spiked between dashboard samples, swap would rise and the dashboard would report it. That inference is wrong.
+
+**The measurement that disproves it.** On Hermes, swap sat at 284–308 MB while **1486 MB of RAM was free**. That is not memory pressure. At the default `vm.swappiness=60` the kernel evicts idle anonymous pages even with gigabytes free, and headless Wine/MT5 holds many such pages — GUI code paths, chart rendering, dialog resources that never execute. Once evicted they are never faulted back in, so swap fills and stays filled.
+
+After a manual swap clear the refill was **two-phase**: 0 → 284 MB rapidly, then 284 → 308 MB over 21 hours, roughly 1 MB/hour. Thrashing looks like tens of MB per *minute*, not per day.
+
+**Why the proxy fails.** Equilibrium restoration and a genuine RAM peak produce the *same occupancy curve*. Swap therefore tells you eviction happened at some point — not that pressure is happening now, and not what caused it. The old dashboard threshold (`swap > 500 MB`) would either alarm on inert history or stay silent through a real spike that resolved between two samples.
+
+**The category error:** treating a cumulative state as an event detector.
+
+| Signal | Measures | Catches a spike between samples? |
+|--------|----------|----------------------------------|
+| `MemAvailable` | State, sampled | No — structurally cannot |
+| `swap_used` | Cumulative occupancy | No — cannot distinguish cause |
+| `pswpout` delta | Rate | Yes, while it is happening |
+| PSI `full` delta | Cumulative stall time | **Yes, even after it ends** |
+
+**Fix — Pressure Stall Information.** `/proc/pressure/memory` reports a `full` line measuring time in which *every* runnable task was blocked on memory reclaim. Its `total=` field is cumulative since boot, which is the property that matters: a delta between two samples captures a spike that began **and ended** between them.
+
+Dashboard now reports three distinct things instead of one ambiguous one:
+
+```
+🖥️ SYSTEM
+  ✅ RAM: 913/1967 MB (1054 free)
+  ✅ Swap: 298 MB (inert — 0 MB paged out in 7.5h)
+  ✅ Stall: 0 ms in 7.5h
+```
+
+- **Swap** line qualified by the `pswpout` delta — high occupancy with no recent paging now reads `inert` rather than warning
+- **RAM** warns only on the compound condition `swap > 200 MB` **and** `free < 400 MB`, so an inert high-water mark no longer alarms
+- **Stall** warns above 1 s of full-stall time between runs
+- Degrades to a no-op if PSI is unavailable; state carries in `logs/psi_state.json`
+
+**This retires the deferred peak-RAM question properly** rather than by proxy. No extra cron job was needed — the cumulative counter does the work that per-minute sampling would have.
+
+##### Two pieces of bad advice corrected
+
+**1. `swapoff -a && swapon -a` was wrong and is now documented as a don't.** It force-faults every evicted page back into RAM simultaneously — a genuine spike, with the JVM resident — and the kernel then re-evicts the same idle pages over the following hours. It manufactures the very condition it appears to diagnose. If the occupancy is unwanted, `sysctl vm.swappiness=10` reduces the cause instead.
+
+**2. Threshold shape.** Hermes traced two separate false-positive alert storms to the same root cause: **alerting on a state rather than a transition or a rate.** Anything phrased `if value < threshold` re-fires on every sample for the whole duration of a dip, rather than once on crossing. The Ares `RAM` check had exactly this shape and was the same class of defect as the swap threshold — now a compound condition, which at least requires two independent things to be true before it speaks.
+
+##### Confirmation from the other direction
+
+The *"invalid vs couldn't evaluate"* bug class found in Ares was checked against Hermes and **five instances were found there**, failing in the more dangerous direction — **fail-open rather than fail-closed**. The exact analogue: a broker query failure returned an empty position list, and the risk manager read `len(positions) >= max_open` → `0 >= 1` → `False` → approved. *"I could not check for open trades"* silently became *"there are no open trades."* Harmless while alert-only; it would have permitted double entry on the first day of auto-execution.
+
+Ares failed closed (signals were destroyed), Hermes failed open (gates were bypassed). Same root cause, opposite blast radius. **Fail-closed loses opportunities; fail-open loses money.** Worth remembering which direction each system errs in.
+
+The append-only event log recommendation was also adopted there, and immediately surfaced a three-day silent-no-signal mystery — plus fixed a latent whole-file-rewrite risk in their trade history. The audit-log pattern has now paid for itself twice in two systems.
 
 ---
 
@@ -931,56 +986,3 @@ Confirmed no residue: `grep -rln "ghp_" /root/ares/cron.log /root/Hermes/logs/ /
 
 
 ---
-
-## Sep 18, 2026 — Memory pressure: PSI replaces swap occupancy
-
-Correction arriving from the Hermes thread, which tested the assumption this logbook recorded earlier and found it does not hold.
-
-**The flawed claim.** Peak RAM tracking was deferred on the reasoning that swap acts as a sufficient proxy: if RAM spiked between dashboard samples, swap would rise and the dashboard would report it. That inference is wrong.
-
-**The measurement that disproves it.** On Hermes, swap sat at 284–308 MB while **1486 MB of RAM was free**. That is not memory pressure. At the default `vm.swappiness=60` the kernel evicts idle anonymous pages even with gigabytes free, and headless Wine/MT5 holds many such pages — GUI code paths, chart rendering, dialog resources that never execute. Once evicted they are never faulted back in, so swap fills and stays filled.
-
-After a manual swap clear the refill was **two-phase**: 0 → 284 MB rapidly, then 284 → 308 MB over 21 hours, roughly 1 MB/hour. Thrashing looks like tens of MB per *minute*, not per day.
-
-**Why the proxy fails.** Equilibrium restoration and a genuine RAM peak produce the *same occupancy curve*. Swap therefore tells you eviction happened at some point — not that pressure is happening now, and not what caused it. The old dashboard threshold (`swap > 500 MB`) would either alarm on inert history or stay silent through a real spike that resolved between two samples.
-
-**The category error:** treating a cumulative state as an event detector.
-
-| Signal | Measures | Catches a spike between samples? |
-|--------|----------|----------------------------------|
-| `MemAvailable` | State, sampled | No — structurally cannot |
-| `swap_used` | Cumulative occupancy | No — cannot distinguish cause |
-| `pswpout` delta | Rate | Yes, while it is happening |
-| PSI `full` delta | Cumulative stall time | **Yes, even after it ends** |
-
-**Fix — Pressure Stall Information.** `/proc/pressure/memory` reports a `full` line measuring time in which *every* runnable task was blocked on memory reclaim. Its `total=` field is cumulative since boot, which is the property that matters: a delta between two samples captures a spike that began **and ended** between them.
-
-Dashboard now reports three distinct things instead of one ambiguous one:
-
-```
-🖥️ SYSTEM
-  ✅ RAM: 913/1967 MB (1054 free)
-  ✅ Swap: 298 MB (inert — 0 MB paged out in 7.5h)
-  ✅ Stall: 0 ms in 7.5h
-```
-
-- **Swap** line qualified by the `pswpout` delta — high occupancy with no recent paging now reads `inert` rather than warning
-- **RAM** warns only on the compound condition `swap > 200 MB` **and** `free < 400 MB`, so an inert high-water mark no longer alarms
-- **Stall** warns above 1 s of full-stall time between runs
-- Degrades to a no-op if PSI is unavailable; state carries in `logs/psi_state.json`
-
-**This retires the deferred peak-RAM question properly** rather than by proxy. No extra cron job was needed — the cumulative counter does the work that per-minute sampling would have.
-
-### Two pieces of bad advice corrected
-
-**1. `swapoff -a && swapon -a` was wrong and is now documented as a don't.** It force-faults every evicted page back into RAM simultaneously — a genuine spike, with the JVM resident — and the kernel then re-evicts the same idle pages over the following hours. It manufactures the very condition it appears to diagnose. If the occupancy is unwanted, `sysctl vm.swappiness=10` reduces the cause instead.
-
-**2. Threshold shape.** Hermes traced two separate false-positive alert storms to the same root cause: **alerting on a state rather than a transition or a rate.** Anything phrased `if value < threshold` re-fires on every sample for the whole duration of a dip, rather than once on crossing. The Ares `RAM` check had exactly this shape and was the same class of defect as the swap threshold — now a compound condition, which at least requires two independent things to be true before it speaks.
-
-### Confirmation from the other direction
-
-The *"invalid vs couldn't evaluate"* bug class found in Ares was checked against Hermes and **five instances were found there**, failing in the more dangerous direction — **fail-open rather than fail-closed**. The exact analogue: a broker query failure returned an empty position list, and the risk manager read `len(positions) >= max_open` → `0 >= 1` → `False` → approved. *"I could not check for open trades"* silently became *"there are no open trades."* Harmless while alert-only; it would have permitted double entry on the first day of auto-execution.
-
-Ares failed closed (signals were destroyed), Hermes failed open (gates were bypassed). Same root cause, opposite blast radius. **Fail-closed loses opportunities; fail-open loses money.** Worth remembering which direction each system errs in.
-
-The append-only event log recommendation was also adopted there, and immediately surfaced a three-day silent-no-signal mystery — plus fixed a latent whole-file-rewrite risk in their trade history. The audit-log pattern has now paid for itself twice in two systems.
