@@ -2,6 +2,46 @@
 
 ---
 
+## Index
+
+Quiet stretches are collapsed into a single row. Days with significant changes get
+their own row.
+
+| Date | Type | What happened |
+|------|------|---------------|
+| [Before Sep 3](#history) | 📜 History | V1 → V2 → V2.1 evolution. V1 trade data cleared for a fresh start |
+| [Sep 3](#d-sep03) | 🚀 Deploy | V2.1 live on DigitalOcean VPS. IB Gateway + IBC auto-login, Finviz screener (5 screens) |
+| [Sep 4](#d-sep04) | 📊 Collection | First signals detected — CNH, PYPL. Dynamic screening confirmed working |
+| [Sep 5](#d-sep05) | ✨ Feature | Holding-days tracking + 30-day shadow tracking. Fixed cron missing `PATH`/`DISPLAY` |
+| [Sep 6-7](#d-sep0607) | 💤 Weekend | No scans |
+| [Sep 8-12](#w2) | 🚀 V3 + 📊 | **Ares V3.** True next-bar execution, friction tracking, capital $10K → $1K, Telegram dashboard. 4 positions opened, first scale-out (DYN). Fixed IB Gateway read-only + silent git push failure |
+| [Sep 14-18](#w3) | 🐛 Major | Queue redesign (two-pass). First closed trade (PINS, −5.9%). **IBKR live price fixed — missing `tzdata`.** Telegram token hijacked → rotated. VPS memory cleanup |
+| [Sep 18](#d-sep18) | 🔴 **Critical** | **Eight bugs behind one dashboard symptom** — see bug index below |
+
+### Major bug index
+
+Direct links to the significant defects, newest first.
+
+| Date | Severity | Bug | Impact |
+|------|----------|-----|--------|
+| [Sep 18](#b-signalloss) | 🔴 | Fills ran before the data refresh | **Every entry filled at the previous session's open.** Contaminated `entry_quality_pct` for all 5 trades |
+| [Sep 18](#b-signalloss) | 🔴 | Pending deleted on any data failure | RVTY destroyed by one transient fetch error, with no log |
+| [Sep 18](#b-signalloss) | 🔴 | `load_stock()` returned two column shapes | NTSK + SLDE killed by a `vol_ratio` crash. **Regression from the Sep 17 stale-cache fix** |
+| [Sep 18](#b-signalloss) | 🔴 | "Couldn't evaluate" treated as "invalid" | Silent permanent deletion across 3 code paths — the unifying defect |
+| [Sep 18](#b-signalloss) | 🟠 | Queue discarded `stdev_20` | Promoted trades got a generic 10% stop instead of volatility-scaled |
+| [Sep 18](#b-signalloss) | 🟠 | `stdev_20` default was a price, not a fraction | Would compute a **negative** stop loss |
+| [Sep 18](#b-psi) | 🟠 | Swap occupancy used as a proxy for peak RAM | Wrong signal — replaced with PSI stall-time deltas |
+| [Sep 17](#w3) | 🔴 | Signal queue was write-only | No promotion logic existed; queued signals sat indefinitely |
+| [Sep 17](#w3) | 🔴 | Cache had no staleness check | Queue validation judged signals on weeks-old data |
+| [Sep 16](#w3) | 🔴 | Missing `tzdata` on the VPS | `ZoneInfoNotFoundError` silently turned all IBKR data into `NaN` |
+| [Sep 16](#w3) | 🔴 | Telegram bot token committed publicly | Bot hijacked and renamed to spam. Token rotated, moved to `.env` |
+| [Sep 15](#w3) | 🟠 | Dashboard labelled UTC times as MYT | 8-hour reporting error |
+| [Sep 10](#w2) | 🟠 | IB Gateway read-only API | `ReadOnlyLogin=no` was insufficient; needed `ReadOnlyApi=no` |
+| [Sep 10](#w2) | 🟡 | Silent git push failure | `2>/dev/null` hid the error for two days |
+
+---
+
+<a id="history"></a>
 ## History Summary (Before Sep 3, 2026)
 
 ### V1 (Aug 27 – Sep 2, 2026)
@@ -39,6 +79,7 @@
 
 ## Daily Log
 
+<a id="d-sep03"></a>
 ### Sep 3, 2026 (Wednesday)
 
 **Changes Made:**
@@ -64,6 +105,7 @@
 
 ---
 
+<a id="d-sep04"></a>
 ### Sep 4, 2026 (Thursday)
 
 **Scan Results:**
@@ -98,6 +140,7 @@
 
 ---
 
+<a id="d-sep05"></a>
 ### Sep 5, 2026 (Friday)
 
 **Changes Made:**
@@ -141,6 +184,7 @@
 
 ---
 
+<a id="d-sep0607"></a>
 ### Sep 6-7, 2026 (Saturday-Sunday) — Weekend
 
 **Changes Made:**
@@ -191,6 +235,7 @@
 
 ---
 
+<a id="w2"></a>
 ### Sep 8-12, 2026 (Monday-Friday) — Week 2
 
 **Changes Made:**
@@ -288,6 +333,7 @@ None — all 4 trades still open.
 
 ---
 
+<a id="w3"></a>
 ### Sep 14-18, 2026 (Monday-Friday) — Week 3
 
 **Monday Sep 14:**
@@ -633,8 +679,10 @@ The dashboard SYSTEM block surfaces swap daily, so this is now passively monitor
 
 ---
 
+<a id="d-sep18"></a>
 ### Sep 18, 2026 (Friday)
 
+<a id="b-signalloss"></a>
 #### Silent signal loss: eight bugs behind one dashboard symptom
 
 **Symptom.** Comparing two consecutive dashboards showed a pending signal simply disappear:
@@ -849,6 +897,7 @@ Confirmed no residue: `grep -rln "ghp_" /root/ares/cron.log /root/Hermes/logs/ /
 - **An audit log is worth more than the feature it audits.** `queue_events.jsonl` cost a few lines and turned "where did RVTY go?" from unanswerable into a five-second grep. The fill path had no logging, which is exactly why RVTY's disappearance was a mystery while NTSK and SLDE's was not.
 - **Order of operations is silent.** Nothing errored when fills ran before the data refresh; entries were merely wrong, every single time, for as long as the system had been running.
 
+<a id="b-psi"></a>
 #### Memory pressure: PSI replaces swap occupancy
 
 Correction arriving from the Hermes thread, which tested the assumption this logbook recorded earlier and found it does not hold.
