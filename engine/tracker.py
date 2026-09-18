@@ -35,8 +35,22 @@ def save_pending(pending):
     with open(PENDING_FILE, 'w') as f:
         json.dump(pending, f, indent=2)
 
+MAX_FILL_ATTEMPTS = 3
+MAX_CHECK_FAILURES = 3
+
+def _pending_age_days(sig):
+    """Calendar age of a pending signal, from its signal date."""
+    try:
+        return (date.today() - date.fromisoformat(sig['date'])).days
+    except Exception:
+        return 0
+
 def execute_pending_signals():
-    """Execute pending signals using today's open price. Called at start of each scan."""
+    """Execute pending signals using today's open price.
+
+    Called AFTER refresh_watchlist() so the fill reads a current bar.
+    A pending is only discarded on a logged, explicit reason — never silently.
+    """
     pending = load_pending()
     if not pending:
         return
@@ -65,10 +79,40 @@ def execute_pending_signals():
             executed.append(sig)
             continue
 
+        max_age_d = params.get('pending_max_age_days', 4)
+        if _pending_age_days(sig) > max_age_d:
+            print(f"    ✗ {sig['symbol']}: pending {_pending_age_days(sig)}d old "
+                  f"(max {max_age_d}d) — dropped")
+            _log_queue_event(sig['symbol'], 'fill_dropped',
+                             reason=f"pending aged out ({_pending_age_days(sig)}d)")
+            executed.append(sig)
+            continue
+
         try:
-            df = load_stock(sig['symbol'])
+            # max_age_hours=0 forces a fresh pull: a pending symbol may have
+            # dropped out of the screener and so missed refresh_watchlist().
+            df = load_stock(sig['symbol'], max_age_hours=0)
             if df is None or len(df) < 2:
-                executed.append(sig)
+                sig['fill_attempts'] = sig.get('fill_attempts', 0) + 1
+                if sig['fill_attempts'] >= MAX_FILL_ATTEMPTS:
+                    print(f"    ✗ {sig['symbol']}: no data after "
+                          f"{sig['fill_attempts']} attempts — dropped")
+                    _log_queue_event(sig['symbol'], 'fill_dropped',
+                                     reason=f"no data after {sig['fill_attempts']} attempts")
+                    executed.append(sig)
+                else:
+                    print(f"    ⏳ {sig['symbol']}: no data "
+                          f"(attempt {sig['fill_attempts']}/{MAX_FILL_ATTEMPTS}) — retained")
+                    _log_queue_event(sig['symbol'], 'fill_retry', reason="no data returned")
+                continue
+
+            bar_date = df.index[-1].date()
+            today = datetime.utcnow().date()
+            if bar_date != today:
+                print(f"    ⏳ {sig['symbol']}: last bar {bar_date} != today {today} "
+                      f"— no session yet, retained")
+                _log_queue_event(sig['symbol'], 'fill_retry',
+                                 reason=f"last bar {bar_date} != today {today}")
                 continue
 
             today_open = float(df.iloc[-1]['Open'])
@@ -79,7 +123,9 @@ def execute_pending_signals():
             position_size = (available_capital / max_positions) - commission
             shares = position_size / entry_price
 
-            stdev_20 = sig.get('stdev_20', entry_price * 0.05)
+            # stdev_20 is a FRACTION of price, not a price. The old default of
+            # entry_price*0.05 produced a negative stop_loss when absent.
+            stdev_20 = sig.get('stdev_20') or 0.05
             stop_loss = entry_price - (entry_price * stdev_20 * 2)
 
             strategy = sig['strategy']
@@ -136,10 +182,19 @@ def execute_pending_signals():
             print(f"    ✅ {sig['symbol']}: EXECUTED at ${entry_price:.2f} (open) | "
                   f"Signal was ${sig['price']:.2f} (close) | "
                   f"Diff: {((entry_price - sig['price'])/sig['price']*100):+.2f}%")
+            executed.append(sig)
         except Exception as e:
-            print(f"    ❌ {sig['symbol']}: Execution failed — {e}")
-
-        executed.append(sig)
+            sig['fill_attempts'] = sig.get('fill_attempts', 0) + 1
+            if sig['fill_attempts'] >= MAX_FILL_ATTEMPTS:
+                print(f"    ✗ {sig['symbol']}: fill failed "
+                      f"{sig['fill_attempts']}x — dropped ({e})")
+                _log_queue_event(sig['symbol'], 'fill_dropped',
+                                 reason=f"exception after {sig['fill_attempts']} attempts: {e}")
+                executed.append(sig)
+            else:
+                print(f"    ⏳ {sig['symbol']}: fill error "
+                      f"(attempt {sig['fill_attempts']}/{MAX_FILL_ATTEMPTS}) — retained: {e}")
+                _log_queue_event(sig['symbol'], 'fill_retry', reason=str(e))
 
     for sig in executed:
         pending.remove(sig)
@@ -234,6 +289,8 @@ def queue_signal(signal):
         'confluence': signal.get('confluence', 1),
         'price_at_signal': signal['price'],
         'rsi_at_signal': signal['rsi'],
+        'stdev_20': signal.get('stdev_20'),
+        'vol_ratio': signal.get('vol_ratio'),
         'date_added': signal['date'],
         'screens': signal.get('screens', [])
     }
@@ -283,9 +340,13 @@ def _validate_queued(symbol, q, params, use_live=False):
     """
     checks = {'drift_pct': None, 'rsi': None, 'ema20_ok': None, 'live': None}
     try:
-        df = load_stock(symbol)
+        # 6h window: queued symbols may have left the screener and so miss
+        # refresh_watchlist(). Scan gaps are 7.5h/16.5h, so 6h guarantees a
+        # fresh pull each scan while letting maintain_queue and promote_queue
+        # share one download within the same run.
+        df = load_stock(symbol, max_age_hours=6)
         if df is None or df.empty:
-            return False, "no data", checks
+            return False, "transient: no data", checks
         df = add_indicators(df)
         latest = df.iloc[-1]
 
@@ -316,7 +377,7 @@ def _validate_queued(symbol, q, params, use_live=False):
 
         return True, "valid", checks
     except Exception as e:
-        return False, f"validation error: {e}", checks
+        return False, f"transient: validation error: {e}", checks
 
 def maintain_queue():
     """MAINTENANCE PASS — runs on every scan, regardless of slot availability.
@@ -330,7 +391,7 @@ def maintain_queue():
         return []
 
     params = _load_params()
-    survivors = []
+    survivors, unverified = [], []
 
     print(f"  [Queue maintenance] validating {len(queue)} signal(s)")
 
@@ -344,8 +405,24 @@ def maintain_queue():
             entry['rsi'] = checks['rsi']
             entry['ema20_ok'] = checks['ema20_ok']
             entry['live_price'] = checks['live']
+            entry.pop('check_failures', None)
             survivors.append(entry)
             _log_queue_event(symbol, 'kept', q, checks)
+        elif reason.startswith('transient:'):
+            # Could not evaluate — NOT the same as invalidated. Retain the
+            # signal but keep it out of the ranked list so it is unpromotable
+            # until a real check succeeds.
+            entry = dict(q)
+            entry['check_failures'] = q.get('check_failures', 0) + 1
+            if entry['check_failures'] >= MAX_CHECK_FAILURES:
+                print(f"    ✗ {symbol}: {reason} x{entry['check_failures']} — dropped")
+                _log_queue_event(symbol, 'dropped', q, checks,
+                                 f"{reason} after {entry['check_failures']} attempts")
+            else:
+                print(f"    ⏳ {symbol}: {reason} "
+                      f"({entry['check_failures']}/{MAX_CHECK_FAILURES}) — retained, unranked")
+                _log_queue_event(symbol, 'check_retry', q, checks, reason)
+                unverified.append(entry)
         else:
             print(f"    ✗ {symbol}: {reason} — dropped")
             _log_queue_event(symbol, 'dropped', q, checks, reason)
@@ -357,10 +434,15 @@ def maintain_queue():
         q.get('date_added', '')
     ))
 
+    # Queue keeps survivors AND unverified entries; only survivors are ranked,
+    # so an unverified signal can never be promoted without a passing check.
     save_queue([{k: v for k, v in q.items()
                  if k not in ('checked_at', 'drift_pct', 'rsi', 'ema20_ok', 'live_price')}
-                for q in survivors])
+                for q in survivors + unverified])
     save_ranked(survivors)
+
+    if unverified:
+        print(f"    {len(unverified)} unverified (retained, not promotable)")
 
     if survivors:
         top = survivors[0]
@@ -432,12 +514,19 @@ def promote_queue(source="scan", use_live=False):
             break
         symbol = q['symbol']
         if symbol in held:
+            print(f"    - {symbol}: already held or pending — removed from queue")
+            _log_queue_event(symbol, 'dropped', q, None, "already held or pending")
             dropped.append(symbol)
             continue
 
         # Mandatory execution-time re-validation
         valid, reason, checks = _validate_queued(symbol, q, params, use_live=use_live)
         if not valid:
+            if reason.startswith('transient:'):
+                print(f"    ⏳ {symbol}: {reason} — retained, promotion deferred")
+                _log_queue_event(symbol, 'check_retry', q, checks,
+                                 f"promotion-time: {reason}")
+                continue
             print(f"    ✗ {symbol}: {reason} — dropped at promotion")
             _log_queue_event(symbol, 'dropped', q, checks, f"promotion-time: {reason}")
             dropped.append(symbol)
@@ -453,6 +542,8 @@ def promote_queue(source="scan", use_live=False):
             'date': date.today().isoformat(),
             'price': checks['live'],
             'rsi': q.get('rsi_at_signal'),
+            'stdev_20': q.get('stdev_20'),
+            'vol_ratio': q.get('vol_ratio'),
             'screens': q.get('screens', [])
         }
         result = open_trade(signal, from_queue=True)

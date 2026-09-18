@@ -62,13 +62,22 @@ def get_live_price(symbol):
         return None
 
 def download_stock(symbol, period="2y"):
-    """Download OHLCV daily data from yfinance. Free, no rate limit."""
+    """Download OHLCV daily data from yfinance and cache it as flat-column CSV.
+
+    yfinance returns MultiIndex columns like ('Close', 'AAPL'). Those must be
+    flattened before caching, otherwise df['Volume'] yields a DataFrame rather
+    than a Series and indicator assignment raises
+    "Cannot set a DataFrame with multiple columns to the single column ...".
+    """
     try:
-        df = yf.download(symbol, period=period)
-        if df is not None and len(df) > 0:
-            filepath = DATA_DIR / f"{symbol}.csv"
-            df.to_csv(filepath)
-            return df
+        df = yf.download(symbol, period=period, progress=False)
+        if df is None or len(df) == 0:
+            return None
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        df.columns = [str(c) for c in df.columns]
+        df.to_csv(DATA_DIR / f"{symbol}.csv")
+        return df
     except Exception as e:
         print(f"  yfinance error for {symbol}: {e}")
     return None
@@ -84,20 +93,42 @@ def load_stock(symbol, max_age_hours=CACHE_MAX_AGE_HOURS):
     against old data.
     """
     filepath = DATA_DIR / f"{symbol}.csv"
+
+    need_download = not filepath.exists()
+    age_h = 0.0
+    if not need_download:
+        age_h = (time.time() - filepath.stat().st_mtime) / 3600
+        need_download = age_h > max_age_hours
+
+    if need_download:
+        if download_stock(symbol) is None and filepath.exists():
+            print(f"  [stale cache] {symbol} is {age_h:.0f}h old, "
+                  f"refresh failed — using cached")
+
     if not filepath.exists():
-        return download_stock(symbol)
+        return None
 
-    age_h = (time.time() - filepath.stat().st_mtime) / 3600
-    if age_h > max_age_hours:
-        fresh = download_stock(symbol)
-        if fresh is not None:
-            return fresh
-        print(f"  [stale cache] {symbol} is {age_h:.0f}h old, refresh failed — using cached")
+    # Single parse path. Never return the raw yfinance frame directly: its
+    # column shape differs from the cached CSV and silently breaks indicators.
+    try:
+        df = pd.read_csv(filepath, index_col=0, parse_dates=True, date_format='ISO8601')
+    except Exception as e:
+        print(f"  [cache unreadable] {symbol}: {e}")
+        return None
 
-    df = pd.read_csv(filepath, index_col=0, parse_dates=True, date_format='ISO8601')
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.get_level_values(0)
+
     for col in ['Open', 'High', 'Low', 'Close', 'Volume']:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors='coerce')
+
+    # Legacy CSVs written with MultiIndex headers leave junk rows that coerce
+    # to NaN. Drop them so indicators receive clean numeric data.
+    if 'Close' in df.columns:
+        df = df[df['Close'].notna()]
+    if len(df) < 2:
+        return None
     return df
 
 def refresh_watchlist(symbols):

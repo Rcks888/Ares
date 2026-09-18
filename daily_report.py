@@ -40,14 +40,17 @@ def generate_report():
         if sym not in all_symbols:
             all_symbols.append(sym)
 
-    execute_pending_signals()
-
     print(f"\n[1] Refreshing data ({len(all_symbols)} stocks)...")
     refresh_watchlist(all_symbols)
 
     held = {t['symbol'] for t in load_trades()}
     queued = {q['symbol'] for q in load_queue()}
     prune_cache(set(all_symbols) | held | queued)
+
+    # Must run AFTER refresh_watchlist: fills read today's open price, and
+    # load_stock()'s 20h staleness window is longer than the 7.5h/16.5h gaps
+    # between scans, so a pre-refresh fill silently used yesterday's bar.
+    execute_pending_signals()
 
     print("\n[2] Checking open positions...")
     check_open_trades()
