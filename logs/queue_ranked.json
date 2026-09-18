@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "symbol": "TMO",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "volume_spike",
+    "confluence": 3,
+    "price_at_signal": 658.32,
+    "rsi_at_signal": 71.0,
+    "date_added": "2026-09-17",
+    "screens": [
+      "unusual_volume"
+    ],
+    "checked_at": "2026-09-18T13:31:12",
+    "drift_pct": -0.4,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 655.66
+  }
+]
