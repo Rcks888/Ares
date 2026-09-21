@@ -26,6 +26,7 @@ Direct links to the significant defects, newest first.
 
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
+| [Sep 21](#tmo-nearmiss) | 🟠 | Missing `stdev_20` silently replaced by 0.05 | TMO would have opened trade #1 of `clean_v3` at **3.2x intended risk** under a clean label. Caught before the fill |
 | [Sep 21](#sample-split) | 📐 | Dataset split into pre_clean and clean_v3 | Official edge metrics now filter on `sample_phase`. Clean count is **0**, not 2 — both candidates failed the rules |
 | [Sep 21](#entry-audit) | 🔴 | Stale entry reached into `stop_loss`, not just records | **ABM carried 2.7x intended risk** while shown as +8.5% when actually -1.7%. 4 of 6 entries stale, dispersion ±9.5% |
 | [Sep 21](#b-scaleout) | 🔴 | Scale-out gain computed, printed, then discarded | **$8.06 error on DYN.** Understated every scaled-out winner — would have taught the ML that scaling out destroys returns |
@@ -1223,6 +1224,59 @@ So the official scoreboard reads zero closed trades and states the date it start
 ##### What was deliberately not done
 
 **Closed-trade prices were not rewritten.** DYN and PINS keep the entries and exits they actually had, wrong as those were. Re-basing them would have improved the historical figures while destroying the audit trail - and those figures are excluded from edge metrics anyway, so the only thing such a rewrite could achieve is making old results look better than they were.
+
+<a id="tmo-nearmiss"></a>
+#### A diagnostic aimed at one question found a live problem elsewhere
+
+`analyze_queue_bias.py` was written to test whether queue drift-expiry discards the fastest movers. On its own question it returned **UNDERPOWERED** - 7 queue events in three weeks, zero drift-bearing drops. Correct answer, no information.
+
+But the drop-reason tally showed something unrelated:
+
+```
+2026-09-17T13:31  dropped   NTSK   validation error: Cannot set a DataFrame...
+2026-09-17T13:31  dropped   SLDE   validation error: Cannot set a DataFrame...
+2026-09-17T13:31  kept      RVTY
+2026-09-17T13:31  promoted  RVTY
+2026-09-17T21:01  queued    TMO
+2026-09-18T13:31  kept      TMO
+2026-09-18T21:01  kept      TMO
+```
+
+##### The historical part closed cleanly
+
+Both drops were pandas MultiIndex crashes inside `_validate_queued`, dated **Sep 17** - before the fix - and they are NTSK and SLDE themselves rather than additions to the known losses. `load_stock` and `download_stock` both flatten MultiIndex now, so the mechanism is already repaired.
+
+Worth noting RVTY was **kept and promoted successfully**, then still never became a trade. It reached `pending` and was lost there. So the week-1 signal loss was two independent failures stacked - a validation crash and a separate pending-path loss - not one bug with three victims.
+
+##### The live part: TMO would have poisoned trade #1
+
+TMO had been sitting in the queue since Sep 17 with `stdev_20: None`, from before `queue_signal()` stored the field. With 4/5 slots occupied and one free, tonight's scan was likely to promote it.
+
+| TMO | Fallback | Real |
+|-----|----------|------|
+| `stdev_20` | 0.05 fabricated | **0.0155** |
+| Stop distance | 10.00% | **3.11%** |
+| Stop price | $592.49 | $637.86 |
+| Risk on $149 | ~$14.90 | ~$4.60 |
+
+**3.2x the intended risk** - and because `open_trade()` stamps `sample_phase` from fill context without inspecting the payload, it would have been labelled `clean_v3`. Trade #1 of the official sample, carrying a fabricated stop, under a clean label. Exactly the outcome the dataset split exists to prevent, arriving through a route the split did not cover.
+
+TMO is Thermo Fisher at $658 - a low-volatility large cap. The 5% default was not merely arbitrary, it was **wrong by a factor that varies per symbol**. A fixed default cannot be conservative for every name; it is simply wrong in an unpredictable direction.
+
+##### Fixes
+
+`or 0.05` no longer substitutes silently. A missing `stdev_20` is an absence, not a 5% volatility stock. The fallback still applies so a fill is never lost over it, but `stdev_fallback` is recorded, a warning prints, and the trade is forced to `pre_clean`.
+
+`sample.classify()` preserves a `stdev_fallback` recorded at fill time. The existing 10.00%-stop signature can only *infer* the fallback, and that fingerprint is erased if a trailing ratchet or a re-base later moves the stop. **Recorded evidence does not decay; inferred evidence does.** Same reasoning as retaining `entry_price_original`.
+
+`repair_queue_stdev.py` recomputes the value through `load_stock` then `add_indicators` - the path the scanner itself uses - rather than reimplementing `Close.pct_change().rolling(20).std()` where the two could drift apart.
+
+##### Takeaways
+
+- **Instrumentation pays off sideways.** The diagnostic answered nothing about drift bias and still caught a live defect hours before it would have committed capital. Reason enough to build the instrument even when the question it targets is not yet answerable.
+- **First bug this project caught before the damage, not after.** Every earlier one - stale fills, lost signals, scale-out underbooking - was archaeology. This was prevention, and the difference came entirely from having queue events logged.
+- **A silent default is a third instance of the same pattern.** The discarded scale-out value, `risk_rules.json` wired to nothing, and now `or 0.05` fabricating volatility. All three produced plausible output and raised no error. Worth treating any `or <constant>` on missing input as suspect by default.
+- **Labels applied at one layer do not protect a different layer.** `sample_phase` was stamped correctly from fill context and was still wrong, because the contamination entered through the payload. A gate is only as good as the inputs it actually reads.
 
 ---
 
