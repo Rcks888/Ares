@@ -37,7 +37,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 10,
+    "holding_days": 13,
     "entry_price_original": 8.95,
     "entry_true_open": 8.81,
     "entry_error_pct": 1.47,
@@ -106,7 +106,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 0,
+      "days_tracked": 3,
       "max_days": 30,
       "peak_after_exit": 18.09,
       "trough_after_exit": 17.27,
@@ -114,7 +114,7 @@
       "trough_date": "2026-09-18",
       "missed_upside_pct": 4.87,
       "avoided_downside_pct": -0.12,
-      "latest_price": 18.09
+      "latest_price": 17.31
     },
     "scale_out_shares": 4.36,
     "scale_out_pnl": 9.07,
@@ -167,7 +167,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 9,
+    "holding_days": 12,
     "entry_price_original": 45.86,
     "entry_true_open": 50.6,
     "entry_error_pct": -9.46,
@@ -222,7 +222,7 @@
     "holding_days": 7,
     "shadow": {
       "active": true,
-      "days_tracked": 2,
+      "days_tracked": 5,
       "max_days": 30,
       "peak_after_exit": 18.83,
       "trough_after_exit": 18.31,
@@ -230,7 +230,7 @@
       "trough_date": "2026-09-17",
       "missed_upside_pct": 0.11,
       "avoided_downside_pct": 2.66,
-      "latest_price": 18.41
+      "latest_price": 18.81
     },
     "post_mortem": {
       "exit_reason": "stop_loss",
@@ -292,7 +292,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 3,
+    "holding_days": 6,
     "entry_price_original": 75.93,
     "entry_true_open": 79.7,
     "entry_error_pct": -4.83,
@@ -344,7 +344,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 0,
+    "holding_days": 3,
     "entry_error_pct": 0.0,
     "sample_phase": "pre_clean",
     "contaminated": true,
