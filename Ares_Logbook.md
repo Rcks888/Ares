@@ -1055,6 +1055,41 @@ Exactly the case the Hermes thread predicted: high swap occupancy, **zero** actu
 
 ---
 
+<a id="data-status"></a>
+#### Data status — process validation, not strategy proof
+
+Recording this explicitly so that no edge conclusion is drawn from the current sample later on.
+
+**Treat the sample as mechanically improving but not yet clean enough for edge conclusions.** The scoreboard validates that the machinery works. It does not yet say anything trustworthy about whether the strategy has an edge.
+
+Known contaminants, in order of how much damage they do to conclusions:
+
+| # | Contaminant | Affects | Repairable |
+|---|-------------|---------|------------|
+| 1 | Queue-promoted trades got `stdev_20 = 0.05` instead of real volatility | **Exit behaviour** — stop distance was wrong, so the trade exited where the strategy would not have | ❌ Never — the price path cannot be re-run |
+| 2 | Lost queue/pending signals (NTSK, SLDE, RVTY) | **Selection bias** — the sample is missing trades that should exist | ❌ Never |
+| 3 | Stale entry-open fill path | `entry_price`, and therefore `pnl`, `pnl_pct`, `entry_quality_pct`, post-mortem verdicts | ⚠️ Measurable, not correctable |
+| 4 | Scale-out P&L underbooking | `pnl`, `pnl_after_costs`, win classification | ✅ Repaired for DYN |
+
+**Contaminant 1 is the worst and is the easiest to overlook**, because unlike the accounting bugs it changed *behaviour* rather than reporting. A wrong stop distance decides whether a trade survives a dip. No amount of recomputation recovers what would have happened under the correct stop.
+
+**Contaminant 3 is not uniform**, which is better than first assumed. The fill read the cache written by the *previous* scan:
+
+| Fill scan | Previous refresh | Bar it read | Result |
+|-----------|------------------|-------------|--------|
+| 9:30 PM MYT (13:30 UTC) | 21:00 UTC **yesterday** | yesterday's complete bar | ❌ one session stale |
+| 5:00 AM MYT (21:00 UTC) | 13:30 UTC **today** | today's bar | ✅ correct |
+
+So roughly half of the fills were right, depending on which scan executed each pending. `audit_entry_prices.py` compares each recorded `entry_price` against the true open for its `entry_date` and reports the error per trade, so the sample can be triaged on measurement rather than assumption.
+
+**What the current data is good for:** confirming next-bar execution works, that scale-out triggers, that trailing stops fire, that the queue promotes, that monitors detect closes, that alerts deliver. All process validation — and all of it genuinely established.
+
+**What it is not good for:** win rate, profit factor, average win/loss, strategy comparison, parameter tuning, or any ML training. The clean baseline effectively starts from the Sep 18 fix set, not from Sep 8.
+
+**Practical consequence:** the 40–60 trade threshold for the Phase 3 ML work should count **from the first post-fix entry**, not from the first trade ever. Counting contaminated trades toward that threshold would just deliver a confident conclusion sooner, drawn from bad data.
+
+---
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
