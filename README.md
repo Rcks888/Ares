@@ -4,7 +4,18 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 
 > *Named after Ares, the Greek god of war — disciplined, strategic, and relentless.*
 
-## Current Version: V3.0
+## Current Version: V3.1
+
+**V3.1 corrects the implementation. It does not change the strategy.**
+`config/strategy_params.json` is byte-identical to V3.0 — no signal logic, threshold
+or sizing was touched, deliberately, so the observation dataset is not split into
+incomparable regimes mid-collection.
+
+The `sample_phase` label stays `clean_v3` for the same reason: it tracks the
+**strategy generation** the data belongs to, while the version number tracks the
+**code**. Data produced under the V3 strategy is `clean_v3` whether the code is
+V3.0 or V3.1. A `clean_v4` phase is earned only when parameters actually change.
+If the two moved together, the sample would fragment every time a bug was fixed.
 
 ## How It Works
 
@@ -292,6 +303,44 @@ per-run peak RAM sampling was not needed. Requires kernel 4.20+ with `CONFIG_PSI
 runs in `logs/psi_state.json`.
 
 ## Version History
+
+### V3.1 — Accounting & Data Integrity (Sep 21, 2026)
+
+No strategy change. Eleven defects fixed across execution, accounting and data
+handling, plus the dataset split that separates validated history from the sample
+used for edge measurement. See [Ares_Logbook.md](Ares_Logbook.md) for the
+evidence behind each.
+
+**Accounting**
+- Scale-out P&L was computed, printed and discarded — every scaled-out winner was
+  understated by exactly the amount the scale-out locked in ($8.06 on DYN)
+- `total_commission` was overwritten at close, dropping the scale-out commission
+- Win/loss used gross P&L, realised total used net, the dashboard icon used
+  percent — three verdicts on one trade. Now net everywhere
+
+**Execution & data**
+- Fills ran before the data refresh, so entries could take the previous session's
+  open. 4 of 6 entries measured stale, dispersion ±9.5%
+- Open positions re-based on the true open; stops, targets and share counts
+  re-derived, preserving the volatility-scaled distance
+- A missing `stdev_20` was silently replaced by 0.05, producing a 10% stop where
+  the real figure gave 3-5%. Now flagged rather than substituted quietly
+- pandas MultiIndex column shape broke queue validation and permanently dropped
+  signals; both load paths now flatten
+
+**Data integrity**
+- `sample_phase` / `contaminated` / `contamination_reasons` on every trade
+- `fill_source` stamped at fill time, because a manual fill cannot be
+  reconstructed from a completed record
+- `engine/sample.py` as the sole definition of "clean"
+- Official scoreboard measures the clean sample only; all-history reported
+  separately and labelled as process validation
+
+**Operations**
+- Monitor runs now commit their own log state
+- Tracked log files made explicit in `.gitignore` rather than surviving by
+  having been committed before the ignore rule existed
+- PSI memory-stall detection replacing swap occupancy as the pressure signal
 
 ### V3.0 — Athena-Optimized (Sep 6, 2026)
 - Parameters optimized via 1060+ backtested trades (Athena engine)
