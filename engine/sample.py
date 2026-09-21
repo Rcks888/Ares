@@ -113,6 +113,12 @@ def classify(trade, stale_entry=None):
     if used_fallback_stdev(trade):
         reasons.append('queue_stdev_fallback')
 
+    # A fallback recorded at fill time is direct evidence and outranks the
+    # stop-distance signature, which can only infer it. Preserved so that
+    # re-running this never discards what open_trade already established.
+    if 'stdev_fallback' in set(trade.get('contamination_reasons') or ()):
+        reasons.append('stdev_fallback')
+
     if trade.get('scaled_out') and ed is not None and ed < CLEAN_FROM:
         reasons.append('scaleout_pnl_pre_fix')
 

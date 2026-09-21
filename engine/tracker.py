@@ -126,7 +126,19 @@ def execute_pending_signals():
 
             # stdev_20 is a FRACTION of price, not a price. The old default of
             # entry_price*0.05 produced a negative stop_loss when absent.
-            stdev_20 = sig.get('stdev_20') or 0.05
+            #
+            # A missing stdev_20 is an absence, not a 5% volatility stock.
+            # Substituting one silently yields a 10% stop where the real figure
+            # would have given 4-5%, roughly doubling risk with no complaint
+            # raised anywhere. The fallback still applies so a fill is never
+            # lost over it, but the trade is now labelled so it cannot enter
+            # the clean sample carrying a fabricated stop distance.
+            stdev_20 = sig.get('stdev_20')
+            stdev_missing = not stdev_20 or stdev_20 <= 0
+            if stdev_missing:
+                print(f"    ! {sig['symbol']}: stdev_20 absent — using 0.05 "
+                      f"fallback, trade marked contaminated")
+                stdev_20 = 0.05
             sl_mult = params.get('stop_loss_multiplier', 2.0)
             stop_loss = entry_price - (entry_price * stdev_20 * sl_mult)
 
@@ -144,9 +156,10 @@ def execute_pending_signals():
             # it is marked contaminated on the spot rather than reconstructed
             # from timestamps later, which the audit showed is not possible.
             fill_source, fill_detect = sample.fill_context()
-            phase = (sample.CLEAN_PHASE if fill_source == 'scheduled'
-                     else sample.PRE_PHASE)
             fill_reasons = [] if fill_source == 'scheduled' else ['manual_fill']
+            if stdev_missing:
+                fill_reasons.append('stdev_fallback')
+            phase = sample.PRE_PHASE if fill_reasons else sample.CLEAN_PHASE
 
             trade = {
                 'symbol': sig['symbol'],
