@@ -26,6 +26,7 @@ Direct links to the significant defects, newest first.
 
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
+| [Sep 21](#entry-audit) | 🔴 | Stale entry reached into `stop_loss`, not just records | **ABM carried 2.7x intended risk** while shown as +8.5% when actually -1.7%. 4 of 6 entries stale, dispersion ±9.5% |
 | [Sep 21](#b-scaleout) | 🔴 | Scale-out gain computed, printed, then discarded | **$8.06 error on DYN.** Understated every scaled-out winner — would have taught the ML that scaling out destroys returns |
 | [Sep 21](#b-scaleout) | 🟠 | `total_commission` overwritten at close | Scale-out commission dropped; costs under-counted $1 per scaled trade |
 | [Sep 21](#b-scaleout) | 🟠 | Win/loss used gross, Realized used net, icon used percent | Three verdicts on one trade; `W:` disagreed with `Realized:` |
@@ -1087,6 +1088,81 @@ So roughly half of the fills were right, depending on which scan executed each p
 **What it is not good for:** win rate, profit factor, average win/loss, strategy comparison, parameter tuning, or any ML training. The clean baseline effectively starts from the Sep 18 fix set, not from Sep 8.
 
 **Practical consequence:** the 40–60 trade threshold for the Phase 3 ML work should count **from the first post-fix entry**, not from the first trade ever. Counting contaminated trades toward that threshold would just deliver a confident conclusion sooner, drawn from bad data.
+
+<a id="entry-audit"></a>
+#### Measuring the stale-fill damage instead of assuming it
+
+`audit_entry_prices.py` compared every recorded `entry_price` against the true open for its `entry_date`:
+
+| Symbol | Entry date | Recorded | True open | Error | Verdict |
+|--------|-----------|----------|-----------|-------|---------|
+| ABM | Sep 9 | $45.86 | $50.60 | **−9.46%** | STALE |
+| ECO | Sep 15 | $75.93 | $79.70 | −4.83% | STALE |
+| HAFN | Sep 8 | $8.95 | $8.81 | +1.49% | STALE |
+| PINS | Sep 10 | $20.00 | $18.25 | **+9.48%** | STALE |
+| DYN | Sep 8 | $17.09 | $17.08 | −0.04% | clean |
+| SDGR | Sep 18 | $29.35 | $29.32 | +0.00% | clean |
+
+**4 of 6 stale, dispersion ±9.5% — wider than the stop distance itself.**
+
+Ruled out as a corporate-action artifact before acting: ABM's last split was 2002 and its dividend is $0.29 quarterly with none in the window. The $45.86 was genuinely Sep 8's open used for a Sep 9 fill, amplified by a real earnings gap.
+
+##### The distortion was noise, not bias — which is why it hid
+
+HAFN was understated (+13.1% → +14.7% once corrected) while ABM and ECO were flattered. A consistent bias would have shown up as implausibly good results. Random error in both directions just looks like ordinary variance, so nothing drew attention to it for two weeks.
+
+##### The hypothesis about which scan was stale was wrong
+
+Predicted the 9:30 PM scan would produce stale fills and the 5:00 AM scan clean ones. The data disagreed. Cross-referenced against the fill times in this logbook:
+
+| Trade | Filled by | Result |
+|-------|-----------|--------|
+| DYN | 9:01 PM **cron** | ✅ clean |
+| SDGR | cron | ✅ clean |
+| HAFN | 1:30 AM **manual test** | ❌ stale |
+| ABM | 1:31 PM **manual** | ❌ stale |
+| PINS | 1:32 PM **manual** | ❌ stale |
+
+Contamination tracks **manual off-schedule runs during week one**, not which cron slot. Ad-hoc runs at 1:30 PM MYT read caches written the previous night. **The production path was sound; the bad data came from testing it by hand.** Worth remembering the next time a manual run is used to "just check something" — off-schedule execution reads state the schedule never would.
+
+##### Why the open positions had to be re-based, not merely flagged
+
+Every field derived from `entry_price` inherited the error:
+
+```
+shares      = position_size / entry_price
+stop_loss   = entry_price − entry_price × stdev_20 × sl_mult
+take_profit = entry_price × (1 + tp_pct)
+peak_price  initialised to entry_price
+```
+
+`stop_loss` is the one that matters, because it is **live behaviour rather than reporting**:
+
+| ABM | Recorded | Corrected |
+|-----|----------|-----------|
+| Entry | $45.86 | $50.65 |
+| Stop loss | $44.07 | $48.67 |
+| Stop vs current price | **10.6% below** | 1.3% below |
+| Unrealized | **+8.5%** | **−1.7%** |
+
+ABM was carrying roughly **2.7× its intended risk** while the dashboard called it a winner. Accounting errors can be left flagged and excluded; a wrong stop keeps making new decisions every day the position stays open.
+
+`repair_stale_entries.py` re-bases open positions only, preserving the stop and target as *fractions* of entry so the volatility scaling survives — only the base price moves. Trailing stops were left to their own logic, since `peak_price` is real market data and therefore uncontaminated: HAFN and ECO kept theirs because `peak × 0.90` still cleared the corrected stop, while ABM's rose to meet its new `stop_loss` floor.
+
+**Closed trades were deliberately not touched.** DYN and PINS exited at prices the wrong stops produced. Rewriting them would invent history that never occurred.
+
+##### The trade-off that was accepted
+
+Re-basing makes the *risk* correct and leaves the *history* fictional — ABM now shows a 3.9% stop it never actually had. That is why every corrected trade keeps `entry_price_original` and carries `contaminated: true`. **The tag is what keeps the dataset honest, not the numbers.** Correcting data without marking it corrected would have been the worse outcome of the two.
+
+Net effect on the dashboard: unrealized fell about $21, none of it a loss — just the removal of a number that was never real.
+
+##### Takeaways
+
+- **Measure contamination, don't estimate it.** The blanket assumption was "all entries suspect". The measurement said two were clean, four were not, and one had flipped sign — which changed what needed doing.
+- **Distinguish wrong *records* from wrong *behaviour*.** Three of the four bugs this week were accounting and could be flagged and excluded. The stale entry reached into `stop_loss` and kept acting, so it had to be repaired.
+- **Manual runs are not a safe way to test a scheduled system.** Every stale fill came from one.
+- **Rule out the boring explanation first.** Checking ABM for a split cost one command and would have invalidated the entire repair had it come back positive.
 
 ---
 
