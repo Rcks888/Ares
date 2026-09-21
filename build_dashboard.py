@@ -1,6 +1,10 @@
 import json
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+from engine import sample
 
 MYT = timezone(timedelta(hours=8))
 
@@ -241,15 +245,37 @@ def build_dashboard():
             for detail in sig_details.split('|||'):
                 lines.append(f"  {detail.strip()}")
 
+    # Official scoreboard is the clean sample only. Pre-clean history is
+    # reported separately and labelled, never blended into these figures.
+    clean_closed = sample.clean(closed_trades)
+    excl_closed = sample.excluded(closed_trades)
+    cm = sample.metrics(clean_closed)
+
+    lines.append(f"\n🏛️ OFFICIAL — CLEAN SAMPLE")
+    if cm is None:
+        lines.append(f"  No clean closed trades yet")
+        lines.append(f"  Edge measurement starts {sample.CLEAN_FROM.isoformat()}")
+    else:
+        lines.append(f"  Closed: {cm['n']} (W: {cm['wins']}/{cm['n']}, "
+                     f"{cm['win_rate']:.0f}%)")
+        lines.append(f"  Realized: ${cm['realized']:+.2f}")
+        lines.append(f"  Expectancy: ${cm['expectancy']:+.2f}/trade")
+        if cm['profit_factor'] is not None:
+            lines.append(f"  Profit factor: {cm['profit_factor']:.2f}")
+        lines.append(f"  Progress: {cm['n']}/40 trades")
+    if excl_closed:
+        em = sample.metrics(excl_closed)
+        lines.append(f"\n📦 Pre-clean history (excluded from above)")
+        lines.append(f"  {len(excl_closed)} closed | Realized: "
+                     f"${em['realized']:+.2f} | W/L: {em['wins']}/{em['losses']}")
+        lines.append(f"  Process validation only — not an edge measurement")
+
     total_closed = len(closed_trades)
-    # Net, not gross: a trade whose gain is smaller than its commissions is
-    # not a win, and counting it as one made W: disagree with Realized:.
     def _net(t):
-        v = t.get('pnl_after_costs')
-        return (v if v is not None else t.get('pnl', 0)) or 0
+        return sample.net_pnl(t)
     wins = len([t for t in closed_trades if _net(t) > 0])
     wr = f"{wins}/{total_closed}" if total_closed > 0 else "0"
-    lines.append(f"\n🏛️ Trades completed: {total_closed} (W: {wr})")
+    lines.append(f"\n🗂️ All history combined: {total_closed} (W: {wr})")
     if total_closed > 0:
         total_pnl = sum(t.get('pnl_after_costs', t.get('pnl', 0)) or 0 for t in closed_trades)
         lines.append(f"  Realized: ${total_pnl:+.2f}")

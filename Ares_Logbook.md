@@ -26,6 +26,7 @@ Direct links to the significant defects, newest first.
 
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
+| [Sep 21](#sample-split) | 📐 | Dataset split into pre_clean and clean_v3 | Official edge metrics now filter on `sample_phase`. Clean count is **0**, not 2 — both candidates failed the rules |
 | [Sep 21](#entry-audit) | 🔴 | Stale entry reached into `stop_loss`, not just records | **ABM carried 2.7x intended risk** while shown as +8.5% when actually -1.7%. 4 of 6 entries stale, dispersion ±9.5% |
 | [Sep 21](#b-scaleout) | 🔴 | Scale-out gain computed, printed, then discarded | **$8.06 error on DYN.** Understated every scaled-out winner — would have taught the ML that scaling out destroys returns |
 | [Sep 21](#b-scaleout) | 🟠 | `total_commission` overwritten at close | Scale-out commission dropped; costs under-counted $1 per scaled trade |
@@ -1163,6 +1164,65 @@ Net effect on the dashboard: unrealized fell about $21, none of it a loss — ju
 - **Distinguish wrong *records* from wrong *behaviour*.** Three of the four bugs this week were accounting and could be flagged and excluded. The stale entry reached into `stop_loss` and kept acting, so it had to be repaired.
 - **Manual runs are not a safe way to test a scheduled system.** Every stale fill came from one.
 - **Rule out the boring explanation first.** Checking ABM for a split cost one command and would have invalidated the entire repair had it come back positive.
+
+<a id="sample-split"></a>
+#### Dataset split: pre-clean history vs clean sample
+
+**Weeks 1-3 retained as process-validation history. Official edge measurement begins from the first clean scheduled fill after the Sep 18-21 fixes. Contaminated trades remain labelled and excluded from edge/ML metrics.**
+
+No reset, no deletions, no strategy parameter changes. The history stays exactly where it is and keeps its original values; what changes is that every trade now carries a label saying whether it may enter a performance figure.
+
+##### A trade counts as clean only if all four hold
+
+1. Filled by the scheduled production path, not a manual off-schedule run
+2. Entered after the Sep 18-21 fixes
+3. Not marked `contaminated: true`
+4. Uses current accounting end to end - entry, stops, scale-out, close, net P&L
+
+##### Fields added to every trade record
+
+| Field | Meaning |
+|-------|---------|
+| `sample_phase` | `pre_clean` or `clean_v3` |
+| `contaminated` | boolean gate |
+| `contamination_reasons` | list, e.g. `stale_entry`, `manual_fill`, `scaleout_pnl_pre_fix` |
+| `fill_source` | `scheduled` or `manual`, stamped at fill time |
+| `fill_detect` | `env` or `tty_inferred` - how `fill_source` was determined |
+| `fill_run_ts` | timestamp of the run that produced the fill |
+| `entry_price_original` | retained wherever a position was re-based |
+
+##### Why the labelling happens at fill time, not afterwards
+
+The audit established that a manual fill cannot be reconstructed from a completed record - `entry_date` stores a date and no time, so there is nothing to distinguish a 1:31 PM ad-hoc run from a 9:01 PM cron run. Rather than infer it later, `open_trade()` now stamps the fill context as it happens.
+
+`ARES_SCHEDULED=1` is authoritative when set. Absent it, the fallback is whether stdin is a TTY: cron has none, an interactive shell does. **`fill_detect` records which method was used**, so an inferred classification is never silently mistaken for a verified one.
+
+##### The queue stdev bug turned out to be detectable after the fact
+
+The fallback was `stdev_20 = 0.05` against `stop_loss_multiplier = 2.0`, which places the stop at *exactly* 10.00% below entry. Real volatility virtually never lands there - the measured trades sit at 3.90%, 4.92% and 5.03%. So `from_queue` combined with a 10.00% stop distance is a **signature**, not a suspicion, and `queue_stdev_fallback` is assigned on evidence.
+
+##### Consequence: the clean count is zero, not two
+
+The working assumption had been that DYN and SDGR would survive as the clean baseline. Applying the rules as written, neither does:
+
+| Trade | Verdict | Why |
+|-------|---------|-----|
+| DYN | `pre_clean` | Entered Sep 8; scaled out under the pre-fix booking; fill path unverifiable |
+| SDGR | `pre_clean` | Entered **on** the fix day - the record stores no time, so a post-deployment fill cannot be proven |
+
+`CLEAN_FROM` was therefore set to **Sep 19**, the day after the fixes, rather than Sep 18. A trade entered on the fix day itself is unprovable either way, and **unprovable is treated as contaminated.** Choosing the generous boundary would have seeded the official sample with exactly the kind of trade this split exists to keep out.
+
+So the official scoreboard reads zero closed trades and states the date it starts from. That is the correct and honest output, and it is preferable to a win rate computed from one trade.
+
+##### Where the filter lives
+
+`engine/sample.py` holds the predicate, the phase constants and the metrics function. The scorecard, the dashboard, and any future ML training import it rather than reimplementing the test. Three copies of `is_clean()` would eventually disagree, and the disagreement would surface as an unexplained discrepancy between two reports months from now.
+
+`metrics()` returns `None` for an empty sample rather than zeros, and leaves profit factor undefined when nothing has lost yet. A displayed `0.0%` win rate is indistinguishable from a real result; an absent one is not.
+
+##### What was deliberately not done
+
+**Closed-trade prices were not rewritten.** DYN and PINS keep the entries and exits they actually had, wrong as those were. Re-basing them would have improved the historical figures while destroying the audit trail - and those figures are excluded from edge metrics anyway, so the only thing such a rewrite could achieve is making old results look better than they were.
 
 ---
 

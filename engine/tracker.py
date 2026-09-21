@@ -4,6 +4,7 @@ from datetime import datetime, date
 from pathlib import Path
 from engine.data_feed import load_stock, get_live_price
 from engine.indicators import add_indicators
+from engine import sample
 
 def _holding_days(entry_date_str):
     """Calculate number of days held from entry date to today."""
@@ -138,6 +139,15 @@ def execute_pending_signals():
             take_profit = entry_price * (1 + tp_pct)
             today_str = datetime.now().strftime("%Y-%m-%d")
 
+            # Label the fill at the moment it happens. A manual off-schedule
+            # run reads whatever state the schedule has not yet refreshed, so
+            # it is marked contaminated on the spot rather than reconstructed
+            # from timestamps later, which the audit showed is not possible.
+            fill_source, fill_detect = sample.fill_context()
+            phase = (sample.CLEAN_PHASE if fill_source == 'scheduled'
+                     else sample.PRE_PHASE)
+            fill_reasons = [] if fill_source == 'scheduled' else ['manual_fill']
+
             trade = {
                 'symbol': sig['symbol'],
                 'strategy': strategy,
@@ -165,6 +175,12 @@ def execute_pending_signals():
                 'scale_out_price': None,
                 'scale_out_date': None,
                 'from_queue': sig.get('from_queue', False),
+                'sample_phase': phase,
+                'contaminated': bool(fill_reasons),
+                'contamination_reasons': fill_reasons,
+                'fill_source': fill_source,
+                'fill_detect': fill_detect,
+                'fill_run_ts': datetime.now().isoformat(timespec='seconds'),
                 'status': 'open',
                 'exit_date': None,
                 'exit_price': None,
@@ -880,11 +896,50 @@ def print_scorecard():
                   f"${q['price_at_signal']:.2f} | queued {age}d ago")
 
     if closed:
-        # Classify on net P&L so win rate and realised total cannot disagree.
-        wins = [t for t in closed
-                if (t.get('pnl_after_costs') if t.get('pnl_after_costs') is not None
-                    else t.get('pnl', 0)) > 0]
-        losses = [t for t in closed if t['pnl'] <= 0]
+        # Official figures come from the clean sample only. All-history is
+        # shown underneath for continuity, clearly marked as not an edge
+        # measurement, so the two can never be read as the same number.
+        clean_closed = sample.clean(closed)
+        excl_closed = sample.excluded(closed)
+        m = sample.metrics(clean_closed)
+
+        print(f"\n  OFFICIAL — CLEAN SAMPLE ({sample.CLEAN_PHASE})")
+        if m is None:
+            print(f"    No clean closed trades yet.")
+            print(f"    Edge measurement begins with the first scheduled fill")
+            print(f"    on or after {sample.CLEAN_FROM.isoformat()}.")
+        else:
+            print(f"    Closed: {m['n']}   W/L: {m['wins']}/{m['losses']}   "
+                  f"Win rate: {m['win_rate']:.0f}%")
+            print(f"    Realized: ${m['realized']:+.2f}   "
+                  f"Expectancy: ${m['expectancy']:+.2f}/trade")
+            if m['avg_win'] is not None:
+                print(f"    Avg win: ${m['avg_win']:+.2f}", end="")
+                if m['avg_loss'] is not None:
+                    print(f"   Avg loss: ${-m['avg_loss']:+.2f}", end="")
+                print()
+            pf = m['profit_factor']
+            print(f"    Profit factor: "
+                  f"{f'{pf:.2f}' if pf is not None else 'n/a (no losses yet)'}")
+            target = 40
+            print(f"    Progress to edge assessment: {m['n']}/{target} trades")
+
+        if excl_closed:
+            em = sample.metrics(excl_closed)
+            print(f"\n  Pre-clean history ({len(excl_closed)} closed) — "
+                  f"process validation only, NOT an edge measurement")
+            print(f"    Realized: ${em['realized']:+.2f}   "
+                  f"W/L: {em['wins']}/{em['losses']}")
+            tally = {}
+            for t in excl_closed:
+                for r in t.get('contamination_reasons') or ['unlabelled']:
+                    tally[r] = tally.get(r, 0) + 1
+            print(f"    Excluded for: "
+                  + ", ".join(f"{k} x{v}" for k, v in sorted(tally.items())))
+
+        # Retained for the lines below, which report combined history.
+        wins = [t for t in closed if sample.net_pnl(t) > 0]
+        losses = [t for t in closed if sample.net_pnl(t) <= 0]
         total_pnl = sum(t['pnl'] for t in closed)
         avg_win = (sum(t['pnl_pct'] for t in wins) / len(wins)
                    if wins else 0)
