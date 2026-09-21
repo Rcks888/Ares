@@ -1,4 +1,5 @@
 #!/bin/bash
+export ARES_SCHEDULED=1
 export PATH=/root/jdk-17.0.12/bin:$PATH
 export DISPLAY=:1
 
@@ -18,6 +19,6 @@ curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
     -d text="${MSG}"
 
 cd /root/ares/Ares
-git add logs/ -f
+git add logs/
 git diff --cached --quiet || git commit -m "Ares V3 report $(date +%Y-%m-%d_%H:%M)"
 git push 2>&1 || echo "[$(date)] Git push FAILED"
