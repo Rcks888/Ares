@@ -17,6 +17,8 @@ their own row.
 | [Sep 8-12](#w2) | 🚀 V3 + 📊 | **Ares V3.** True next-bar execution, friction tracking, capital $10K → $1K, Telegram dashboard. 4 positions opened, first scale-out (DYN). Fixed IB Gateway read-only + silent git push failure |
 | [Sep 14-18](#w3) | 🐛 Major | Queue redesign (two-pass). First closed trade (PINS, −5.9%). **IBKR live price fixed — missing `tzdata`.** Telegram token hijacked → rotated. VPS memory cleanup |
 | [Sep 18](#d-sep18) | 🔴 **Critical** | **Eight bugs behind one dashboard symptom** — see bug index below |
+| [Sep 19](#d-sep21) | 📊 Collection | DYN closed on trailing stop. SDGR opened. PSI reported its first real deltas |
+| [Sep 21](#d-sep21) | 🔴 **Critical** | **Scale-out gain never booked** — a winning trade made realised P&L worse. Silent bias in the ML training data |
 
 ### Major bug index
 
@@ -24,6 +26,9 @@ Direct links to the significant defects, newest first.
 
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
+| [Sep 21](#b-scaleout) | 🔴 | Scale-out gain computed, printed, then discarded | **$8.06 error on DYN.** Understated every scaled-out winner — would have taught the ML that scaling out destroys returns |
+| [Sep 21](#b-scaleout) | 🟠 | `total_commission` overwritten at close | Scale-out commission dropped; costs under-counted $1 per scaled trade |
+| [Sep 21](#b-scaleout) | 🟠 | Win/loss used gross, Realized used net, icon used percent | Three verdicts on one trade; `W:` disagreed with `Realized:` |
 | [Sep 18](#b-signalloss) | 🔴 | Fills ran before the data refresh | **Every entry filled at the previous session's open.** Contaminated `entry_quality_pct` for all 5 trades |
 | [Sep 18](#b-signalloss) | 🔴 | Pending deleted on any data failure | RVTY destroyed by one transient fetch error, with no log |
 | [Sep 18](#b-signalloss) | 🔴 | `load_stock()` returned two column shapes | NTSK + SLDE killed by a `vol_ratio` crash. **Regression from the Sep 17 stale-cache fix** |
@@ -950,6 +955,103 @@ The *"invalid vs couldn't evaluate"* bug class found in Ares was checked against
 Ares failed closed (signals were destroyed), Hermes failed open (gates were bypassed). Same root cause, opposite blast radius. **Fail-closed loses opportunities; fail-open loses money.** Worth remembering which direction each system errs in.
 
 The append-only event log recommendation was also adopted there, and immediately surfaced a three-day silent-no-signal mystery — plus fixed a latent whole-file-rewrite risk in their trade history. The audit-log pattern has now paid for itself twice in two systems.
+
+---
+
+<a id="d-sep21"></a>
+### Sep 21, 2026 (Monday)
+
+<a id="b-scaleout"></a>
+#### A winning trade made realised P&L worse
+
+**Symptom spotted from the dashboard**, not from the logs:
+
+```
+Sep 18, 09:32 PM   Trades completed: 1           Realized: -$10.86
+Sep 19, 05:02 AM   Trades completed: 2 (W: 1/2)  Realized: -$12.15
+                   ✅ DYN 0.9% (trailing_stop) partial_win | peak 12.29%
+```
+
+DYN closed as a **win** — flagged ✅, counted in `W: 1/2` — yet the realised total moved **$1.29 further into the red**. A winning trade cannot make realised P&L worse. That contradiction was the whole tell.
+
+**Root cause: the scale-out gain was never booked.**
+
+DYN scaled out 50% at $19.17 on Sep 9, locking in **+$9.07**. The handler reduced `trade['shares']` from 8.72 → 4.36 and stored `scale_out_price`, but the realised dollars went into a local variable that was printed and then discarded:
+
+```python
+pnl_pct = (scale_price - trade['entry_price']) / trade['entry_price'] * 100
+print(f"SCALED OUT 50% at ${scale_price:.2f} (+{pnl_pct:.1f}%)")   # printed, then lost
+```
+
+`_close_trade()` therefore measured P&L on the **remaining 4.36 shares only**:
+
+```
+pnl_raw = (17.2527 − 17.09) × 4.36        = +$0.71
+pnl_after_costs = 0.71 − $2.00 commission = −$1.29
+```
+
+Which is exactly the observed move. The arithmetic confirmed the hypothesis before a line was changed.
+
+| DYN | Booked | Correct |
+|-----|--------|---------|
+| Scale-out tranche | **unbooked** | +$9.07 locked |
+| Gross P&L | +$0.71 | +$9.77 |
+| Commission | $2.00 | $3.00 |
+| **Net** | **−$1.29** | **+$6.77** |
+| Percent | +0.95% | **+6.56%** |
+
+**An $8.06 error on a single trade.**
+
+##### Why this one mattered more than its size
+
+`scale_out: true` is enabled, so **every** winner that scaled out was being understated by precisely the amount the scale-out locked in. The mechanism working as designed was being recorded as a failure.
+
+Left in place, the Phase 3 ML at 40–60 trades would have examined the data and concluded that scaling out destroys returns — exactly backwards. This is the most dangerous class of bug for this project: not a crash, not a lost signal, but **a silent bias in the training data**. It would have produced a confident, well-evidenced, wrong conclusion.
+
+##### Two further bugs found alongside it
+
+**Commission was overwritten, not accumulated.** `_close_trade()` set `total_commission = entry + exit`, discarding the scale-out commission recorded earlier. Costs under-counted by $1 on every scaled trade — partially masking the larger error above.
+
+**Three fields gave three verdicts on the same trade.** `wins` counted gross `pnl` (+$0.71 → win), `Realized` summed `pnl_after_costs` (−$1.29 → loss), and the ✅ icon used `pnl_pct` (+0.95% → win). A trade whose gain is smaller than its commissions is not a win. Classification now uses net P&L everywhere, so the win count and the realised total cannot disagree again.
+
+##### Fixes
+
+| Area | Change |
+|------|--------|
+| Scale-out | Stores `scale_out_shares`, `scale_out_pnl`, `scale_out_pnl_pct`; log line now reports the locked dollar amount |
+| `_close_trade` | Sums the sold tranche and the remainder |
+| `_close_trade` | Accumulates commission instead of overwriting it |
+| `pnl_pct` | Blended over the original cost basis so percent and dollars agree — identical to the old formula for trades that never scaled out |
+| Dashboard + scorecard | Win/loss classified on net P&L |
+| `repair_scaled_pnl.py` | Rebooks already-closed trades from stored fields; dry run by default, backs up before writing |
+
+The repair was recoverable only because `scale_out_price` and `original_shares` were being stored even though they were unused — `sell_shares = original_shares − shares` reconstructs the tranche exactly. **Storing more than you currently consume paid off.**
+
+##### Corrected record
+
+```
+DYN   +6.56%  +$6.77  trailing_stop  partial_win
+PINS  −5.9%   −$10.86 stop_loss      signal_failed
+Realised: −$4.09   (was −$12.15)
+```
+
+1 win / 1 loss with a small net loss — not the two-trade bloodbath the dashboard implied.
+
+##### PSI validated on its first real reading
+
+```
+✅ Swap: 310 MB (inert — 0 MB paged out in 7.5h)
+✅ Stall: 128 ms in 7.5h
+```
+
+Exactly the case the Hermes thread predicted: high swap occupancy, **zero** actual paging, negligible stall. The old `swap > 500 MB` threshold was heading toward a warning on inert history; the new detector correctly reports nothing wrong. 128 ms of stall across 7.5 hours is noise.
+
+##### Takeaways
+
+- **Arithmetic that cannot be true is the cheapest bug detector there is.** No log, trace, or debugger was needed — "a win made the total worse" is self-contradictory, and the $1.29 delta then matched the remaining-shares calculation on the first try.
+- **Silent data bias is worse than a crash.** A crash announces itself. This produced plausible numbers that would have taught the ML the opposite of the truth.
+- **Compute-print-discard is a recurring shape.** The value existed, was formatted for a human, and was never persisted. Same family as the earlier `risk_rules.json` problem: something that looks accounted for but isn't.
+- **Store fields before you need them.** The repair was only possible because unused fields were already being written.
 
 ---
 
