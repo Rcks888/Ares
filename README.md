@@ -36,15 +36,25 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 └─────────────────────────────────────────────────────┘
 ```
 
-## Scan Schedule (5x Daily, Mon-Fri)
+## Schedule (Mon-Fri)
+
+The VPS clock is UTC; cron is written in UTC. MYT is UTC+8.
 
 | Time (MYT) | UTC | Type | Description |
 |------------|-----|------|-------------|
-| 9:00 PM | 13:00 | **Gateway Check** | Auto-restart IB Gateway if down |
-| 9:30 PM | 13:30 | **Full Scan** | Market open — Finviz screen + signal detection + execute pending |
-| 11:30 PM | 15:30 | **Monitor** | IBKR live price check on open trades |
+| 9:00 PM | 13:00 | **Gateway restart** | IB Gateway health check + restart |
+| 9:30 PM | 13:30 | **Full Scan** | Market open — screen, exits, queue maintenance, promote |
+| 11:45 PM | 15:45 | *(IBKR daily kill)* | Broker-side; the gateway does **not** restart itself |
+| 12:00 AM | 16:00 | **Gateway restart** | Recovers from the daily kill |
+| 12:10 AM | 16:10 | **Monitor** | IBKR live price check on open trades |
+| 1:25 AM | 17:25 | **Gateway restart** | |
 | 1:30 AM | 17:30 | **Monitor** | IBKR live price check on open trades |
 | 5:00 AM | 21:00 | **Full Scan** | Market close — new daily candle + signals |
+
+A gateway restart precedes every run that needs IBKR, because the 11:45 PM
+broker-side kill leaves the gateway down and it has no self-recovery. Hermes
+(the XAU/USD sibling system) shares this VPS and is scheduled off the `:00`,
+`:10`, `:25` and `:30` marks to avoid colliding with these.
 
 ## Strategies
 
@@ -89,6 +99,19 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 
 Every trade logs: `signal_price`, `entry_price` (after slippage), `entry_commission`, `exit_slippage`, `exit_commission`, `total_commission`, `pnl_after_costs` — directly comparable to Athena V5 backtest.
 
+Scaled-out trades additionally log `scale_out_shares`, `scale_out_pnl`,
+`scale_out_pnl_pct` and `pnl_remaining`. **P&L spans the whole original
+position** — the tranche sold at the scale-out plus whatever remains at exit.
+`trade['shares']` holds only the remainder after a scale-out, so measuring on it
+alone understates every scaled-out winner by exactly the amount the scale-out
+locked in. `pnl_pct` is blended over the original cost basis so percent and
+dollars agree; for a trade that never scaled out it is identical to the plain
+formula.
+
+**Win/loss is classified on net P&L everywhere** — dashboard, scorecard and
+export. A trade whose gain is smaller than its commissions is not a win, and
+classifying on gross made the win count disagree with the realised total.
+
 > **Note on capital tracking:** Position sizing uses a fixed $1,000 base (not dynamic equity). This is acceptable for the observation phase data collection. Dynamic equity tracking will be added when transitioning to live execution (Phase 4).
 
 ## Finviz Screens (V3 — Loosened)
@@ -128,7 +151,8 @@ Ares/
 │   ├── data_feed.py            # yfinance + IBKR data
 │   ├── indicators.py           # RSI 21, MACD, divergence, regime
 │   ├── signals.py              # Strategy logic + confluence check
-│   └── tracker.py              # Virtual trade tracking + exits + pending signals
+│   ├── tracker.py              # Virtual trade tracking + exits + pending signals
+│   └── sample.py               # SOLE definition of which trades count as clean
 ├── data/ohlcv/                 # Cached OHLCV CSV files
 ├── logs/
 │   ├── virtual_trades.json     # Active + closed trade log
@@ -138,6 +162,7 @@ Ares/
 │   ├── queue_events.jsonl      # Append-only audit log of every queue/fill event
 │   ├── trades_report.csv       # Trade history export
 │   ├── last_scan_summary.txt   # Latest scan results for dashboard
+│   ├── psi_state.json          # Memory-stall counters (per-host, NOT tracked)
 │   └── archive/                # V1 trade data (archived)
 ├── daily_report.py             # Full scan + execute pending + new signals
 ├── build_dashboard.py          # Compact Telegram dashboard builder
@@ -146,9 +171,23 @@ Ares/
 ├── run_monitor.sh              # Monitor + Telegram
 ├── restart_gateway.sh          # IB Gateway health check + auto-restart
 ├── start_gateway.sh            # IB Gateway background launcher
+├── audit_entry_prices.py       # Measure stale-fill damage vs the true open
+├── analyze_queue_bias.py       # Test queue drift-expiry for selection bias
+├── backfill_sample_phase.py    # Label trades pre_clean / clean_v3
+├── repair_scaled_pnl.py        # One-off: rebook unbooked scale-out gains
+├── repair_stale_entries.py     # One-off: re-base open positions on true open
+├── repair_queue_stdev.py       # One-off: backfill stdev_20 into legacy queue
 ├── Ares_Logbook.md             # Daily trading journal
 ├── ROADMAP.md                  # Phased plan + unimplemented risk controls
 └── README.md
+```
+
+The `repair_*.py` and `audit_*.py` scripts are diagnostics and one-off repairs,
+not part of the scheduled path. All default to a dry run and back up before
+writing. They are kept in the repo rather than deleted because each documents a
+specific defect and the evidence used to establish it.
+
+```
 ```
 
 ## Configuration — single source of truth
@@ -172,6 +211,56 @@ When adding a new tunable:
 1. Add the key to `strategy_params.json`
 2. Read it via `params.get('key', <sane_default>)` — never hardcode the value
 3. If it cannot be implemented yet, put it in ROADMAP.md, **not** in a config file
+
+## Data integrity — `pre_clean` vs `clean_v3`
+
+Weeks 1-3 are retained as process-validation history. **Official edge measurement
+begins from the first clean scheduled fill after the Sep 18-21 fixes.**
+Contaminated trades stay labelled and are excluded from edge and ML metrics.
+Nothing is deleted and no closed-trade price is rewritten, so the record stays
+auditable.
+
+A trade counts as clean only when all four hold:
+
+1. Filled by the scheduled production path, not a manual off-schedule run
+2. Entered after the Sep 18-21 fixes (`CLEAN_FROM`, currently 2026-09-19)
+3. Not marked `contaminated`
+4. Uses current accounting end to end — entry, stops, scale-out, close, net P&L
+
+| Field | Meaning |
+|-------|---------|
+| `sample_phase` | `pre_clean` or `clean_v3` |
+| `contaminated` | boolean gate |
+| `contamination_reasons` | e.g. `stale_entry`, `manual_fill`, `stdev_fallback` |
+| `fill_source` | `scheduled` or `manual`, stamped at fill time |
+| `fill_detect` | `env` or `tty_inferred` — how `fill_source` was decided |
+| `entry_price_original` | retained wherever a position was re-based |
+
+**`engine/sample.py` is the only definition of "clean."** The scorecard, the
+dashboard and any future ML training import it rather than reimplementing the
+test, because three copies of the predicate would eventually disagree and the
+disagreement would surface as an unexplained gap between two reports.
+
+`metrics()` returns `None` for an empty sample instead of zeros, and leaves
+profit factor undefined when nothing has lost yet — an absent result must not be
+readable as a real one.
+
+`CLEAN_FROM` is deliberately the day **after** the fixes. A trade entered on the
+fix day itself cannot be proven to have filled post-deployment, because the
+record stores a date and no time, and **unprovable is treated as contaminated.**
+
+### Why fill context is stamped, not inferred
+
+A manual fill cannot be reconstructed from a completed record. `open_trade()`
+therefore stamps it as it happens: `ARES_SCHEDULED=1` (exported by the cron
+scripts) is authoritative, and absent it, whether stdin is a TTY distinguishes
+cron from an interactive shell. `fill_detect` records which method decided, so
+an inferred classification is never mistaken for a verified one.
+
+For the same reason, a `stdev_fallback` recorded at fill time outranks the
+stop-distance signature that can only infer it — a later trailing ratchet or
+re-base erases the fingerprint. **Recorded evidence does not decay; inferred
+evidence does.**
 
 ## Operations — memory
 
@@ -240,7 +329,7 @@ runs in `logs/psi_state.json`.
 |-------|-------------|--------|
 | 1 | Signal scanner + Telegram alerts | ✅ Complete |
 | 2 | Virtual paper trading + performance tracking | ✅ Complete |
-| 3 | Observation phase — collect 40-60 trades with realistic friction | 🔄 In Progress |
+| 3 | Observation phase — collect 40-60 **clean** trades with realistic friction | 🔄 In Progress |
 | 4 | AI/ML signal validation (Athena ML pipeline) | 🔜 Next |
 | 5 | Live execution with real capital ($1K ESPP, June 2027) | ⏳ Planned |
 
@@ -248,7 +337,9 @@ runs in `logs/psi_state.json`.
 
 | Period | Milestone |
 |--------|-----------|
-| Sep 2026 - May 2027 | Paper trading observation (~9 months, 40-60 trades) |
+| Sep 2026 | Weeks 1-3: process validation. 11 defects found; data retained as `pre_clean` |
+| Sep 19, 2026 | `clean_v3` sample opens — trade counting starts here, not from the first trade ever |
+| Sep 2026 - May 2027 | Paper trading observation (~9 months, 40-60 clean trades) |
 | June 2027 | Go live with $1,000 (ESPP bonus) |
 | Dec 2027+ | +$500 capital injection every 6 months via ESPP |
 
