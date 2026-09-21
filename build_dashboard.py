@@ -242,7 +242,12 @@ def build_dashboard():
                 lines.append(f"  {detail.strip()}")
 
     total_closed = len(closed_trades)
-    wins = len([t for t in closed_trades if (t.get('pnl', 0) or 0) > 0])
+    # Net, not gross: a trade whose gain is smaller than its commissions is
+    # not a win, and counting it as one made W: disagree with Realized:.
+    def _net(t):
+        v = t.get('pnl_after_costs')
+        return (v if v is not None else t.get('pnl', 0)) or 0
+    wins = len([t for t in closed_trades if _net(t) > 0])
     wr = f"{wins}/{total_closed}" if total_closed > 0 else "0"
     lines.append(f"\n🏛️ Trades completed: {total_closed} (W: {wr})")
     if total_closed > 0:
@@ -254,7 +259,7 @@ def build_dashboard():
         for t in recent:
             pm = t.get('post_mortem', {})
             pnl_pct = t.get('pnl_pct', 0) or 0
-            icon = "✅" if pnl_pct > 0 else "❌"
+            icon = "✅" if _net(t) > 0 else "❌"
             lines.append(f"  {icon} {t['symbol']} {pnl_pct:+.1f}% ({t.get('exit_reason', '?')})")
             if pm.get('verdict'):
                 lines.append(f"     {pm['verdict']} | peak +{pm.get('max_favorable_excursion_pct', 0)}%")

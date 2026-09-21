@@ -686,18 +686,29 @@ def _close_trade(trade, today, exit_price, reason):
     trade['exit_reason'] = reason
     trade['exit_slippage'] = round(raw_exit - exit_price_after_slippage, 4)
     trade['exit_commission'] = commission
-    trade['total_commission'] = trade.get('entry_commission', commission) + commission
+    # Accumulate, never overwrite: overwriting dropped the scale-out commission.
+    prior = trade.get('total_commission', trade.get('entry_commission', commission))
+    trade['total_commission'] = round(prior + commission, 2)
 
     entry_date = trade.get('signal_date', trade['entry_date'])
     if ' (next-bar)' in str(entry_date):
         entry_date = entry_date.replace(' (next-bar)', '')
     trade['holding_days'] = _holding_days(entry_date)
 
-    pnl_raw = (exit_price_after_slippage - trade['entry_price']) * trade['shares']
+    # Total P&L spans the whole original position: the tranche sold at the
+    # scale-out plus whatever remains at exit. trade['shares'] holds only the
+    # remainder, so using it alone understated every scaled-out winner.
+    remaining_pnl = (exit_price_after_slippage - trade['entry_price']) * trade['shares']
+    scale_pnl = trade.get('scale_out_pnl') or 0
+    pnl_raw = remaining_pnl + scale_pnl
     trade['pnl'] = round(pnl_raw, 2)
-    trade['pnl_pct'] = round(
-        (exit_price_after_slippage - trade['entry_price'])
-        / trade['entry_price'] * 100, 2)
+    trade['pnl_remaining'] = round(remaining_pnl, 2)
+
+    # Percentage is blended over the original cost basis so % and $ agree.
+    # For a trade that never scaled out this is identical to the old formula.
+    original = trade.get('original_shares') or trade['shares']
+    cost_basis = trade['entry_price'] * original
+    trade['pnl_pct'] = round(pnl_raw / cost_basis * 100, 2) if cost_basis else 0.0
     trade['pnl_after_costs'] = round(pnl_raw - trade['total_commission'], 2)
     trade['post_mortem'] = _build_post_mortem(trade, reason)
     trade['shadow'] = {
@@ -772,8 +783,17 @@ def check_open_trades():
                     trade['scale_out_date'] = today
                     trade['scale_out_commission'] = scale_commission
                     trade['total_commission'] = trade.get('total_commission', 1.0) + scale_commission
+                    # Book the realised gain on the sold tranche. Previously this
+                    # was computed into a local, printed, and discarded — so the
+                    # locked-in profit never reached pnl at close.
+                    trade['scale_out_shares'] = round(sell_shares, 2)
+                    trade['scale_out_pnl'] = round(
+                        (scale_price - trade['entry_price']) * sell_shares, 2)
                     pnl_pct = (scale_price - trade['entry_price']) / trade['entry_price'] * 100
-                    print(f"  📈 {trade['symbol']}: SCALED OUT 50% at ${scale_price:.2f} (+{pnl_pct:.1f}%) [comm: ${scale_commission}]")
+                    trade['scale_out_pnl_pct'] = round(pnl_pct, 2)
+                    print(f"  📈 {trade['symbol']}: SCALED OUT 50% at ${scale_price:.2f} "
+                          f"(+{pnl_pct:.1f}%, +${trade['scale_out_pnl']:.2f} locked) "
+                          f"[comm: ${scale_commission}]")
                     updated = True
                     continue
 
@@ -860,7 +880,10 @@ def print_scorecard():
                   f"${q['price_at_signal']:.2f} | queued {age}d ago")
 
     if closed:
-        wins = [t for t in closed if t['pnl'] > 0]
+        # Classify on net P&L so win rate and realised total cannot disagree.
+        wins = [t for t in closed
+                if (t.get('pnl_after_costs') if t.get('pnl_after_costs') is not None
+                    else t.get('pnl', 0)) > 0]
         losses = [t for t in closed if t['pnl'] <= 0]
         total_pnl = sum(t['pnl'] for t in closed)
         avg_win = (sum(t['pnl_pct'] for t in wins) / len(wins)
