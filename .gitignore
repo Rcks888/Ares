@@ -22,7 +22,25 @@ engine/__pycache__/
 
 # Data and temp
 data/ohlcv/
-logs/
 *.log
 /tmp/
 gateway.log
+
+# Logs directory: ignore by default, then re-include the state files that are
+# the dataset rather than noise. These seven were already tracked and were
+# surviving only because .gitignore does not apply to tracked files — the
+# intent is now explicit so a future cleanup cannot drop them by accident.
+#
+# Note 'logs/*' not 'logs/': an excluded *directory* is never descended into,
+# so a '!logs/x' negation under a bare 'logs/' rule silently does nothing.
+logs/*
+!logs/virtual_trades.json
+!logs/trades_report.csv
+!logs/pending_signals.json
+!logs/signal_queue.json
+!logs/queue_ranked.json
+!logs/queue_events.jsonl
+!logs/last_scan_summary.txt
+
+# Deliberately NOT re-included: logs/psi_state.json (per-host counter
+# baseline), logs/archive/ (V1 data), *.bak (repair backups), cron.log.
