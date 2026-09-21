@@ -21,7 +21,7 @@ If the two moved together, the sample would fragment every time a bug was fixed.
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                  ARES V3.0 PIPELINE                  │
+│                  ARES V3.1 PIPELINE                  │
 ├─────────────────────────────────────────────────────┤
 │                                                     │
 │  Finviz (entire US market)                          │
@@ -197,9 +197,6 @@ The `repair_*.py` and `audit_*.py` scripts are diagnostics and one-off repairs,
 not part of the scheduled path. All default to a dry run and back up before
 writing. They are kept in the repo rather than deleted because each documents a
 specific defect and the evidence used to establish it.
-
-```
-```
 
 ## Configuration — single source of truth
 
