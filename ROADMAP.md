@@ -324,3 +324,25 @@ is deployed in June 2027.**
 - Start real money only when profit factor > 1.3 consistently
 - ML model only useful with sufficient data — never trust models trained on <50 trades
 - Backtest results ≠ live results (slippage, timing, emotions) — use as guidance only
+
+## De-duplicate the launcher scripts
+
+`/root/ares/run_ares.sh` is what cron executes. `Ares/run_ares.sh` is the copy
+under version control. They are currently identical, having been re-synced by
+hand on Sep 21 after the tracked copy was found to be missing two changes.
+
+**Why this matters:** only one of the two runs, and the failure mode is silent.
+A fix applied to the tracked copy would show up correctly in git, read correctly
+in review, and have no effect on the running system. That is the same shape as
+the `risk_rules.json` problem and the discarded scale-out value: something that
+looks accounted for but is not wired to anything.
+
+**Intended fix:** reduce the outside copy to a thin wrapper that sources
+`/root/ares/.env`, activates the venv, and delegates to the repo copy, so there
+is exactly one place where the logic lives.
+
+Deliberately deferred past Sep 21: cron fires the first run under fully correct
+accounting that evening, and changing how the launcher resolves paths hours
+beforehand risks a silent failure at the worst moment. Low urgency now that the
+two are in sync, but it will drift again.
+
