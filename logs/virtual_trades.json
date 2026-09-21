@@ -43,7 +43,13 @@
     "entry_error_pct": 1.47,
     "entry_corrected": true,
     "contaminated": true,
-    "contamination_reason": "stale_cached_bar_at_fill"
+    "contamination_reason": "stale_cached_bar_at_fill",
+    "sample_phase": "pre_clean",
+    "contamination_reasons": [
+      "pre_fix_accounting",
+      "stale_entry",
+      "unverified_fill_path"
+    ]
   },
   {
     "symbol": "DYN",
@@ -113,7 +119,15 @@
     "scale_out_shares": 4.36,
     "scale_out_pnl": 9.07,
     "scale_out_pnl_pct": 12.17,
-    "pnl_remaining": 0.7
+    "pnl_remaining": 0.7,
+    "entry_error_pct": -0.04,
+    "sample_phase": "pre_clean",
+    "contaminated": true,
+    "contamination_reasons": [
+      "pre_fix_accounting",
+      "scaleout_pnl_pre_fix",
+      "unverified_fill_path"
+    ]
   },
   {
     "symbol": "ABM",
@@ -159,7 +173,13 @@
     "entry_error_pct": -9.46,
     "entry_corrected": true,
     "contaminated": true,
-    "contamination_reason": "stale_cached_bar_at_fill"
+    "contamination_reason": "stale_cached_bar_at_fill",
+    "sample_phase": "pre_clean",
+    "contamination_reasons": [
+      "pre_fix_accounting",
+      "stale_entry",
+      "unverified_fill_path"
+    ]
   },
   {
     "symbol": "PINS",
@@ -224,7 +244,15 @@
       "verdict": "signal_failed",
       "analysis": "Never traded above entry. Signal was wrong from the start. RSI 29.1, regime range, confluence 3.",
       "manual_note": ""
-    }
+    },
+    "entry_error_pct": 9.48,
+    "sample_phase": "pre_clean",
+    "contaminated": true,
+    "contamination_reasons": [
+      "pre_fix_accounting",
+      "stale_entry",
+      "unverified_fill_path"
+    ]
   },
   {
     "symbol": "ECO",
@@ -270,7 +298,13 @@
     "entry_error_pct": -4.83,
     "entry_corrected": true,
     "contaminated": true,
-    "contamination_reason": "stale_cached_bar_at_fill"
+    "contamination_reason": "stale_cached_bar_at_fill",
+    "sample_phase": "pre_clean",
+    "contamination_reasons": [
+      "pre_fix_accounting",
+      "stale_entry",
+      "unverified_fill_path"
+    ]
   },
   {
     "symbol": "SDGR",
@@ -310,6 +344,13 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 0
+    "holding_days": 0,
+    "entry_error_pct": 0.0,
+    "sample_phase": "pre_clean",
+    "contaminated": true,
+    "contamination_reasons": [
+      "pre_fix_accounting",
+      "unverified_fill_path"
+    ]
   }
 ]
