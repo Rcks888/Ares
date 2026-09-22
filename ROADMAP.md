@@ -1192,12 +1192,126 @@ gross on deployed capital is **+42.68% versus SPY +85.55%** — behind by **half
 not by the ~91 points the raw framing implied, and still not clearing the benchmark.
 **Third consecutive instance of the raw framing overstating the gap.**
 
+## Run B — RESULT: FAILURE, and the most informative run in the sequence
+
+Executed 2026-09-22 under the pre-registered rule, Athena `5d44cce`.
+
+| Primary metric, Universe A | Run B | Threshold | |
+|---|---|---|---|
+| Annualised α vs MTUM | **−16.06%** | ≥ −2% | **FAIL** |
+| Net excess vs SPY on deployed capital | **−146.17%** | ≥ 0% | **FAIL** |
+
+α CI **[−25.43%, −5.61%]**, p=**0.0040** — entirely negative and significant. The
+anticipated awkward case, a drift to somewhere between −7% and −2%, **did not
+arise.** Alpha moved **twice as far negative** and became significant.
+
+### The defect was load-bearing
+
+Repairing causal divergence made the strategy **substantially worse.** Gross P&L
+collapsed from **+$273.21 to +$8.27**, and Universe B moved the same direction
+(−20.93% → −27.40%).
+
+> **The residual belongs to the concept, not the defect. The permanently-`False`
+> divergence columns were the only thing keeping Universe A near flat. The strategy
+> as designed is worse than the strategy as accidentally built.**
+
+Three properties make this a finding rather than an artifact:
+
+1. **The changed variable genuinely fired** — 28 divergence-triggered entries on A
+   (−$111.74) and 27 on B (−$223.12). A null from a change that did nothing would be
+   uninformative; this one had power.
+2. **Both universes moved the same direction**, so it is not a single-universe
+   accident.
+3. **The mechanism was not over-claimed.** The +$250.63 of `bearish_divergence` exits
+   was *not* asserted as the cause: counterfactual exits are unmeasured and the
+   totals do not decompose additively. Declining to explain a result that cannot be
+   decomposed is what makes the headline credible.
+
+Exactly one variable changed, **asserted rather than trusted** — the driver diffs the
+Run B config against A′'s and exits if anything else differs. The detector was
+already causal, so Run B simply stops A′'s masking. Parity md5 on `signals.py`
+stayed active and passed; `indicators.py`'s intended divergence is recorded in
+`parity.py` with both hashes pinned and scope enumerated — **reported, not asserted**,
+since this divergence is deliberate.
+
+**Per the rule: no strategy-continuation case arises.** Divergence stays dead in
+live and is **not** repaired mid-`clean_v3`.
+
+### CONSEQUENCE — defect repair is not improvement, and the V4 plan changes
+
+A known defect was **protecting** the system. That reaches further than Run B.
+
+The three live defects were recorded as things to repair at a declared V4 boundary.
+Run B demonstrates that **repair is not the same as improvement** in a system whose
+behaviour is only understood empirically. If the inert queue gates started working,
+promotion would tighten from drift-only — and there is now **direct evidence that
+tightening this strategy's entry conditions destroys what little it has.**
+
+**A V4 that fixes all three defects could perform worse than V3.1.** Every repair
+must be measured against the same bar Run B just failed, never assumed beneficial.
+
+The one exception is **defect 3, unfunded constant sizing.** That is a correctness bug
+with an external deadline, not a behavioural tuning knob, and it is fixed on its own
+merits.
+
+## Task 1 — strategy split, slot study permanently closed
+
+| | momentum_breakout | mean_reversion |
+|---|---|---|
+| Universe A (145) | **114 (78.6%)** | 31 (21.4%) |
+| Universe B (148) | **123 (83.1%)** | 25 (16.9%) |
+
+`momentum_breakout` confluence observed as **[3] only** — the `signals.py:126`
+hardcode confirmed **empirically**, not just by reading the source. So eviction by
+`(-confluence, date_added)` degenerates to **date order for ~80% of the
+population.** `mean_reversion` spans [2,3], two levels across 17-21% of trades.
+
+**The objection does not weaken. The slot study is permanently closed** — there is no
+signal-quality axis to concentrate along for four trades in five.
+
+## Task 2 — all four verdicts ADVERSE under the corrected gate
+
+Both verdicts retained side by side; neither overwrites the other, because the point
+on record is that the same data yields opposite conclusions under the two rules and
+the first rule was mine.
+
+| Universe / proxy | α ann. | α 95% CI | α p | Originally registered | **Option A** |
+|---|---|---|---|---|---|
+| **A / MTUM** *(primary)* | −7.27% | [−17.50%, +4.10%] | 0.197 | POSSIBLE_IDIOSYNCRATIC | **ADVERSE** |
+| A / QQQ−SPY | −4.17% | [−16.26%, +9.49%] | 0.526 | POSSIBLE_IDIOSYNCRATIC | **ADVERSE** |
+| B / MTUM | −20.93% | [−34.63%, −4.64%] | 0.0147 | INCONCLUSIVE | **ADVERSE** |
+| B / QQQ−SPY | −17.57% | [−33.00%, +1.05%] | 0.063 | POSSIBLE_IDIOSYNCRATIC | **ADVERSE** |
+
+**Three of the four passed the original gate purely because a wide CI crossed zero —
+and the width was the reason for caution, not grounds for a pass.** That is the
+clearest statement of the specification error available.
+
+## Closing position on the strategy
+
+| Question | Status |
+|---|---|
+| Momentum replica, own the ETF instead? | **No** — rejected at ~98%, P(R² > 0.5) = 0.02 |
+| Residual: concept or defect? | **Concept.** Answered by Run B, both universes |
+| Slot study | **Permanently closed** — no quality axis for ~80% of trades |
+| Finviz objection's one legitimate branch | **Closed.** The gap was real and contains no rescue |
+| Alpha under a correctly specified gate | **All four ADVERSE** |
+
+> **Momentum as a factor works. This active implementation subtracts from it.**
+
+That is a complete answer, obtained cheaply, and it is not a failure. The
+`clean_v3` live sample cannot overturn it — it was never powered to, which is why it
+was demoted to process and integrity observation.
+
 ### Open items, in priority order
 
-1. **Nothing urgent.** No sweep, no slot study, no new strategy.
-2. **Run B** — only under the pre-registered rule above, with its failure branch
-   accepted in advance. Optional.
-3. Cost and account arithmetic in closed form, not as a search.
+1. **Nothing.** No sweep, no slot study, no Run C, no new strategy. The research
+   question on this configuration is **closed**.
+2. Ares V3.1 continues untouched. `clean_v3` runs as process observation.
+3. **Defect 3, unfunded constant sizing** — the only repair justified on its own
+   merits, before live capital ever arrives. Defects 1 and 2 stay dead and
+   documented, because Run B showed repairing them is not obviously improvement.
+4. Cost and account arithmetic in closed form, if ever needed.
+5. The **LIVE CAPITAL BAR** above stands. This configuration cannot clear it.
 4. Credit idle cash at a T-bill proxy in V6, or report the omission explicitly
    alongside every net figure.
 5. Nothing in Ares. It continues on V3.1 untouched, `clean_v3` demoted but running.
