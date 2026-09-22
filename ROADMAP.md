@@ -1,6 +1,31 @@
 # Ares — Future Plans & Ideas
 
-## Capital Planning
+## Status — 2026-09-22
+
+| | |
+|---|---|
+| **ARES** | V3.1 running. Strategy frozen. `clean_v3` open 2026-09-19 |
+| **Clean sample** | 1 open (TMO), **0 closed**. No edge measurement exists yet |
+| **Pre-clean history** | 6 trades retained, labelled, excluded from edge metrics |
+| **ATHENA** | Unaudited. V3 parameters are frozen against its output |
+| **HERMES** | **Running, unaudited, by decision** — mid data-collection, needs several more weeks. Not frozen |
+
+**HERMES is not frozen.** A freeze was proposed and declined: it is collecting
+its own sample and pausing would cost weeks. The consequence accepted in
+exchange is that its data is unaudited, so **the date of its eventual checklist
+pass becomes its clean-data boundary**, the same way 2026-09-19 became ARES's.
+Recorded now because that boundary is far cheaper to know than to reconstruct.
+
+Sections below marked *(historical intent)* predate V3.1 and are kept for the
+reasoning they contain. They are **not** the current active plan — where they
+disagree with the Status table or the Change Policy, those win.
+
+## Capital Planning *(historical intent — pre-V3.1)*
+
+> Written when per-position sizing was assumed to be ~$200 / 20%. Actual sizing
+> is `(1000 × 0.75) / 5 = $149`, i.e. ~15%. See *Unimplemented Risk Controls*
+> for the reconciliation, and note that per-trade **dollar risk** varies 4.7x
+> because size is fixed while stops are volatility-scaled.
 
 ### Starting Capital: $1,000
 - 5 positions max at ~$200 each (20% per trade)
@@ -18,7 +43,11 @@
 
 ---
 
-## Slot Management (When All Positions Full)
+## Slot Management (When All Positions Full) *(historical intent — pre-V3.1)*
+
+> Solutions A and B were implemented: the watchlist queue with drift validation
+> and expiry, and scale-out at TP. Solution C (replace weakest) was not, and is
+> not planned — it would change which trades are held mid-sample.
 
 ### Problem
 With max 5-8 positions and 2-4 week holds, system will be fully loaded
@@ -122,8 +151,10 @@ Risk engine = final gate (slots, sizing, stops)
 
 ### Prerequisites
 1. ✅ Ares V3 running stable
-2. ⏳ Collect 40-60 trades baseline (currently 4/40)
-3. ⏳ Establish win rate / PF without Claude (control group)
+2. ⏳ Collect 40-60 **clean closed** trades (currently **0**, sample opened 2026-09-19)
+   - the earlier "4/40" counted pre-clean trades, which are excluded from edge
+     metrics and cannot serve as a control group
+3. ⏳ Establish win rate / PF without Claude (control group) — needs item 2 first
 4. Then add Claude layer and compare performance
 
 ### Estimated Cost
@@ -429,8 +460,9 @@ its own phase label.
 Eleven defects surfaced in ARES over three weeks. None announced itself; every
 one produced plausible numbers. They were not ARES-specific — they came from
 authoring habits, so the same classes are likely wherever the same hands wrote
-the same idioms. This is the resumption gate for HERMES and the scope for the
-ATHENA audit.
+the same idioms. This is the scope for the ATHENA audit, and the audit gate for
+HERMES — which is running rather than frozen, so the gate marks where its data
+becomes trustworthy rather than where it restarts.
 
 Read as: **pattern** → *how it appeared here* → **what to check elsewhere**.
 
@@ -536,9 +568,10 @@ For ATHENA specifically, items 1, 5, 6, 10 and 11 are the highest yield: a
 backtest defect is worse than a live one because no broker contradicts it.
 Findings become knowledge, not an immediate re-tune.
 
-For HERMES, add item 15 — if it is still running while unaudited, the audit date
-becomes its `CLEAN_FROM` boundary, and knowing that now is cheaper than
-reconstructing it later.
+For HERMES, add item 15. It is running while unaudited by decision, so the date
+of its checklist pass becomes its `CLEAN_FROM` boundary — everything before that
+is process-validation history, exactly as ARES weeks 1-3 became. Knowing the
+boundary now is cheaper than reconstructing it later.
 
 ## Rule for new work during the observation phase
 
