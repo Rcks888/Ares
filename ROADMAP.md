@@ -424,6 +424,144 @@ Findings become knowledge, not an immediate re-tune. Correcting a parameter
 mid-sample would fragment the data; corrections belong at the V4 boundary with
 its own phase label.
 
+## Defect checklist — derived from ARES, reusable
+
+Eleven defects surfaced in ARES over three weeks. None announced itself; every
+one produced plausible numbers. They were not ARES-specific — they came from
+authoring habits, so the same classes are likely wherever the same hands wrote
+the same idioms. This is the resumption gate for HERMES and the scope for the
+ATHENA audit.
+
+Read as: **pattern** → *how it appeared here* → **what to check elsewhere**.
+
+Keep the pass short. The point is a reusable artifact, not a second project.
+
+### A. Fabrication and absence
+
+**1. Silent default on a missing input.** *`stdev_20 = sig.get('stdev_20') or
+0.05` turned an absent volatility reading into a 5% one, producing a 10% stop
+where the truth gave 3.1% — 3.2x the intended risk.* Grep every
+`.get(k, <constant>)` and `or <constant>` on a value that feeds a
+calculation. Ask whether the constant is a legitimate value for that field. If it
+is, you cannot distinguish absence from data.
+
+**2. Fabricated sentinels.** *Pending records default `rsi` and `vol_ratio` to
+`0` — both impossible in practice, both indistinguishable from a reading.* Any
+numeric default that is a physically possible value is a future silent error.
+Prefer `None`.
+
+**3. A gate reading pre-sanitised input.** *The absence guard for `stdev_20`
+could never fire, because one function earlier the pending record had already
+replaced the absence with `0.05`. The gate was correct and useless.* For every
+validation, trace where its input was last written. A gate only protects the
+inputs it reads.
+
+**4. Empty results reported as zero.** *Metrics over an empty sample must return
+`None`, not zeros, and profit factor must be undefined rather than 0 when
+nothing has lost yet.* An absent result must never be readable as a real one.
+
+### B. Value computed then lost
+
+**5. Compute, print, discard.** *Scale-out P&L was calculated, printed to the log,
+and assigned to a local that went out of scope. Every scaled winner was
+understated by exactly the amount the scale-out locked in — $8.06 on one trade.*
+Grep for values that appear only inside an f-string. If a number is worth
+printing it is usually worth storing.
+
+**6. Partial exits not booked.** *P&L was measured on `trade['shares']`, which
+holds only the remainder after a scale-out, so the tranche already sold was
+invisible.* Wherever a position can be reduced, confirm P&L spans the original
+size, and that percentage and dollar figures share one cost basis.
+
+**7. Field overwritten instead of accumulated.** *`total_commission` was set to
+entry+exit at close, dropping the scale-out commission.* Any running total that
+is assigned rather than incremented.
+
+### C. One quantity, several answers
+
+**8. The same fact measured three ways.** *Win count used gross P&L, the realised
+total summed net, the dashboard icon used percent — three verdicts on one trade,
+so the win count disagreed with the realised figure.* Pick one definition,
+centralise it, and have every consumer import it.
+
+**9. Labels that do not travel.** *`trades_report.csv` omitted
+`sample_phase` and `contaminated`, so the file most likely to reach a
+spreadsheet or a model invited aggregating contaminated rows into an edge
+figure.* Every export must carry the fields that determine whether a row is
+usable.
+
+### D. Ordering, shape, and retries
+
+**10. Action before refresh.** *Fills ran before the data update, so an entry
+could take the previous session's open. 4 of 6 entries were stale, dispersion
+±9.5% — wider than the stop distance itself.* For any read-then-act sequence,
+confirm the read happened after the most recent write.
+
+**11. Library shape assumptions.** *yfinance returns MultiIndex columns; `df['Volume']`
+then yields a DataFrame, and indicator assignment raised
+"Cannot set a DataFrame with multiple columns to the single column ...",
+permanently dropping signals.* Normalise external data shape at every ingress,
+not at first use.
+
+**12. Retry budgets against deterministic faults.** *`MAX_CHECK_FAILURES = 3`
+assumes failure is transient. A code defect fails identically every attempt, so
+the retry only postponed the same permanent drop by three scans.* Distinguish
+transient from permanent before deciding to retry; the budget protects against
+network flakiness, not logic errors.
+
+### E. Configuration and operations
+
+**13. Config that looks authoritative but is inert.** *`risk_rules.json`
+declared a 10% position cap and a 5% weekly loss limit; no code read either, and
+actual sizing was 15%. Six keys in `strategy_params.json` were likewise unread,
+three of them shadowing hardcoded literals.* Diff every config key against the
+source. Delete or implement; never leave a third state.
+
+**14. Silent publish failure.** *`git push` with no preceding pull was rejected
+non-fast-forward, the commit stayed local, the error went to a log nobody reads,
+the script exited 0 and the notification reported success. Ten failures
+accumulated before anyone noticed.* Any step that ships data must fail loudly
+where the failure will be seen, and must not report success on a non-zero path.
+
+**15. Provenance inferred rather than stamped.** *Whether a fill came from the
+schedule or a manual run cannot be reconstructed from a finished record, so it is
+stamped at fill time with a second field recording how it was determined.*
+Anything you will later need to know about how a record was produced must be
+written when it is produced. Recorded evidence does not decay; inferred evidence
+does.
+
+### Applying it
+
+For ATHENA specifically, items 1, 5, 6, 10 and 11 are the highest yield: a
+backtest defect is worse than a live one because no broker contradicts it.
+Findings become knowledge, not an immediate re-tune.
+
+For HERMES, add item 15 — if it is still running while unaudited, the audit date
+becomes its `CLEAN_FROM` boundary, and knowing that now is cheaper than
+reconstructing it later.
+
+## Rule for new work during the observation phase
+
+> New code is justified only if it measures something `clean_v3` cannot measure
+> **and** does not change which official trades are taken.
+
+Agreed externally after three weeks in which bug-hunting was genuinely
+productive — which is precisely why it then feels productive beyond the point
+where it is. The default action is to let the sample accumulate.
+
+Priority order from 2026-09-22:
+
+| Rank | Action | Why |
+|------|--------|-----|
+| 1 | Keep ARES V3.1 running, no strategy changes | the official sample only grows this way |
+| 2 | Defect checklist (above) — artifact only | cheap, reusable, no code |
+| 3 | ATHENA read-only audit | the frozen parameters sit on unaudited ground |
+| 4 | Shadow module, capacity-only | answers V4 questions without breaking `clean_v3` |
+| 5 | Everything else | later |
+
+Cut first if forced: near-miss confluence tracking. Cut second: delay the shadow
+module until the ATHENA audit is done. Never delay *running* ARES.
+
 ## Unimplemented Risk Controls
 
 These were previously written in `config/risk_rules.json`, a file no code ever read.
