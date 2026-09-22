@@ -1031,10 +1031,172 @@ costs in honest tests, **or** the sleeve is explicitly accepted as tuition and
 telemetry rather than wealth optimisation. Otherwise paper continues and capital
 stays on the index path.
 
+## Momentum substitution test — RESULT, 2026-09-22
+
+Executed without modification to the registered spec. Reviewed externally.
+
+| Universe / proxy | R² | β | α annualised | α p | Registered verdict |
+|---|---|---|---|---|---|
+| **A / MTUM** *(primary)* | 0.2946 | +0.391 | **−7.27%** | 0.197 | POSSIBLE_IDIOSYNCRATIC |
+| A / QQQ−SPY | 0.0431 | +0.345 | −4.17% | 0.526 | POSSIBLE_IDIOSYNCRATIC |
+| B / MTUM | 0.1909 | +0.471 | **−20.93%** | 0.0147 | INCONCLUSIVE |
+| B / QQQ−SPY | 0.0205 | +0.356 | −17.57% | 0.063 | POSSIBLE_IDIOSYNCRATIC |
+
+Bootstrap **P(R² > 0.5) = 0.02** on the primary proxy. The substitution branch —
+*"it is a momentum replica, own the ETF instead"* — is **rejected at ~98%**.
+Momentum explains a fifth to a third of monthly variance, not most of it. HAC(3)
+errors changed no verdict (A/MTUM α p 0.218 vs 0.197).
+
+Data catch made before any coefficient was read: an unfiltered resample gave 60
+observations, not 59, because the equity curve ends 2026-09-01 while factors run to
+2026-09-21 — September compared **one day** of strategy against twenty-one of MTUM.
+Partial months excluded; both variants recorded; all four verdicts identical either
+way.
+
+### The recorded conclusion
+
+Not a replica, and not an idiosyncratic edge either. β on deployed capital ≈**0.61**
+(A, t=4.88) and ≈**0.81** (B, t=3.67), with the residual **negative everywhere
+measurable** — −7.3%/yr and −20.9%/yr.
+
+> **Not a pure momentum ETF substitute; a partial-momentum process with a negative
+> residual — dominated by a cheaper passive blend with similar factor loading.**
+
+A static ~39% MTUM / ~61% T-bill mix matches the beta **without** the negative
+residual, the code, the commissions or the operational risk. That is **economic
+dominance**, not a statistical identity — R² ≈ 0.29 means most variance is not MTUM,
+so *"it is MTUM"* cannot be claimed.
+
+### The decision rule was correctly executed and badly specified
+
+My error, recorded in full. The gate read *"R² < 0.3 and alpha not significantly
+negative → proceed."* A's alpha is **−7.27%/yr at p=0.197**, so it passed and
+returned POSSIBLE_IDIOSYNCRATIC — on a margin of **0.0054** from the threshold,
+with bootstrap CI [0.131, 0.488] and **P(R² > 0.3) = 0.50**. A coin flip.
+
+The substantive defect is worse than the margin. **Testing "is alpha significantly
+negative?" under low power, then reading failure-to-reject as "not harmful,"
+converts noise into permission.** −7.27%/yr is economically decisive and
+statistically invisible at n=60 with ~2.5 trades a month. This is the same
+low-power error identified for `clean_v3`'s 40-60 trade target earlier in the same
+session, written into the rule anyway — **fourth instance of the bias in one
+analysis, every one leaning toward the cleaner narrative.**
+
+### CORRECTED ALPHA CONDITION — binding on all future pre-registration
+
+Choose one primary and write it down **before** running. Preferred here is **Option
+A**, an economic threshold:
+
+| Option | Rule |
+|---|---|
+| **A — economic threshold** *(preferred)* | Annualised α ≤ **−3%/yr** on the primary universe and proxy → **adverse**, regardless of p-value. Report the CI; do not require p < 0.05 |
+| **B — interval** | 90% CI for annualised α entirely below 0 → adverse. CI covers 0 but point estimate ≤ −X%/yr → **inconclusive adverse**, never green. Benign only if point estimate ≥ −X *and* CI not entirely negative |
+| **C — equivalence** | Pre-define an indifference band, e.g. α ∈ [−2%, +2%]. Below → adverse; inside → practically zero; above → interesting |
+
+**The standing principle: economic magnitude first, significance second, and low
+power never reads as absolution.**
+
+Under Option A at −3%/yr, Universe A returns **adverse**, not
+POSSIBLE_IDIOSYNCRATIC.
+
+### Slot study — SKIPPED
+
+Three reasons stacking:
+
+1. The decision margin on the factor test was noise-level.
+2. **The mechanism does not exist in the code.** `signals.py:126` hardcodes
+   `'confluence': 3` for every `momentum_breakout` signal, and queue eviction ranks
+   by `(-confluence, date_added)`, so with a constant it degenerates to **date
+   order**. Cutting 5 slots to 2 concentrates into *arbitrary* signals, not stronger
+   ones.
+3. `mean_reversion` does compute real confluence, so the objection weakens in
+   proportion to its share of the population — but the share is not yet known.
+
+Revisit only after confluence becomes a real ranking axis with genuine variance,
+and then as a single pre-registered hypothesis.
+
+## PRE-REGISTERED — Run B, concept versus defect
+
+**Registered 2026-09-22 before execution.** Legitimate but easy to abuse, so the
+fail branch is fixed first.
+
+**Question:** does repairing causal divergence — confirm at `i+window`, fire on the
+**confirmation bar only** — move the residual from economically negative to
+non-negative?
+
+The motivation is real: all four divergence columns are permanently `False` in
+production, so `bullish_div` and `hidden_bull_div` never reach confluence. Live
+*and* every backtest have measured a **crippled** version of the designed strategy.
+Whether the −7.3% belongs to the concept or to the defect is genuinely open.
+
+| Item | Fixed in advance |
+|---|---|
+| Implementation | Causal confirmation only. **No other parameter changes** |
+| Primary universe | **A** — declared now, not after seeing results |
+| Primary metric | Annualised α versus MTUM, plus net excess versus SPY on deployed capital |
+| **Success** | α ≥ **−2%/yr** *and* net excess vs SPY ≥ **0** on Universe A |
+| **Failure** | Anything else → **no strategy-continuation case arises from Run B** |
+| Ban | No re-optimisation of TP, trailing stop or confluence on this window |
+
+**Explicitly barred:** running Run B until something looks less bad, then continuing.
+**If α moves from −7% to −3%, that is *less bad*, not *worth continuing*.**
+
+Default if Run B is not run: divergence stays dead and documented in live, and is
+**not repaired mid-`clean_v3`**.
+
+## The Finviz gap — real, weak as a rescue
+
+The owner's objection: the study cannot condemn Ares because live uses a Finviz
+screen and confluence filters not represented in it. Adjudicated:
+
+| Component | Status |
+|---|---|
+| Confluence and all entry filters | **Already in the study.** V6 imports live `signals.py` under an md5 parity assertion, so these are priced into the −7.3%, not missing from it |
+| Divergence columns `False` | **Real live-versus-design gap.** This is the concept-versus-defect question Run B addresses |
+| Finviz dynamic candidate pool | **Genuinely unmeasured.** No point-in-time screen history exists without paid data |
+
+But Universe A is already hindsight-friendly — NVDA, PLTR, SMCI are there because
+they went up. **A blind live screen is more likely to be harder than that list, not
+easier.** So *"Finviz might save it"* is a weak prior, not a plan. Recorded as
+**unquantified and likely non-rescuing** unless point-in-time screen history is ever
+purchased.
+
+## LIVE CAPITAL BAR — falsifiable, replaces the calendar
+
+Paper research platform is the **default state**. Live capital requires a written bar
+cleared, never a date reached. **All four must hold:**
+
+1. Honest sim, V6-class with live code imported: **net excess versus SPY ≥ 0** over
+   a pre-specified window, after costs, with the cash-interest policy stated up
+   front.
+2. Residual versus the MTUM blend: **annualised α ≥ −2%/yr**, by economic rule, not
+   p-value games.
+3. At the intended size and frequency, cost drag leaves room for (1).
+4. `clean_v3` or a later phase shows no operational contradiction — a **process**
+   gate, not edge proof.
+
+**If the bar is never cleared, indefinite paper plus an index and ESPP core is the
+rational shape. That is a completed insight, not a failed project.**
+
+## Side items — both suspicions confirmed
+
+**Idle cash.** +$50.14 on Universe A, so net **−$57.79 becomes −$7.65** — five
+years, $1,000, **essentially flat rather than losing**, exactly as the raw figures
+failed to say. B: +$35.66 → −$560.19. Reported as an adjustment rather than credited
+inside `run_sim`, because paying interest would relax the funding gate and supersede
+the A′ population again for a second-order reason.
+
+**Exposure.** Mean **64.0%** and 58.4% — higher than the ~50% assumed at
+registration, so deployed-capital betas are ≈0.61 and ≈0.81 rather than ≈0.8. A's
+gross on deployed capital is **+42.68% versus SPY +85.55%** — behind by **half**,
+not by the ~91 points the raw framing implied, and still not clearing the benchmark.
+**Third consecutive instance of the raw framing overstating the gap.**
+
 ### Open items, in priority order
 
-1. **Momentum factor correlation test** — pre-registered above. Afternoon scale.
-2. Only if uncorrelated: the **one** pre-registered slot study. Not a grid.
+1. **Nothing urgent.** No sweep, no slot study, no new strategy.
+2. **Run B** — only under the pre-registered rule above, with its failure branch
+   accepted in advance. Optional.
 3. Cost and account arithmetic in closed form, not as a search.
 4. Credit idle cash at a T-bill proxy in V6, or report the omission explicitly
    alongside every net figure.
