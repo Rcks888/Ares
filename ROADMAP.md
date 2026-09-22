@@ -555,7 +555,9 @@ V5's remaining exits are trailing stop +3.82% and stop loss −6.38%, which is n
 obviously an edge. But that autopsy comes from the same contaminated engine, so
 it is not reliable evidence of absence. The honest finding is *"Athena's
 published edge was largely an artifact; residual edge is unknown"* — not
-*"abandon the family."* Abandonment becomes rational only if Run A and the clean
+*"abandon the family."* **Run A did not settle this** — it measured entry
+predicates that differ from live in 88% of cases, so it is not the autopsy it
+looks like. Abandonment becomes rational only if Run A′ and the clean
 live sample both show no usable expectancy after costs.
 
 ## Athena V6 — the first honest backtest
@@ -594,13 +596,91 @@ none of them individually moves the reported figure much.
 | `run_backtest_v4_compare.py:52,82` | the base `config/strategy_params.json` is overwritten in place and restored **outside** any try/finally, so a crash mid-loop leaves $10K/15-slot parameters in the file every other run reads | latent corruption |
 | Athena `config/*.json` | the same **six dead keys** as Ares had — `rsi_source`, `rsi_overbought`, `rsi_midline`, `rsi_extreme_low`, `macd_threshold`, `lookback_days` — each shadowing a hardcoded literal. Also `disable_tp` is read **only** by `backtester.py:85`; both portfolio sims ignore it and always apply the scale-out TP, so V5's claim to run "V3 logic" is false | tuning does nothing |
 | `backtester.py:64` | `spy_rsi` is hardcoded to `0` — a dead market-context feature, constant in every CSV, and a useless ML column | dead feature |
+| Athena `engine/_check_entry` | omits live's 52-week-high gate (`signals.py:105`, `pct_from_high >= -0.01`) and `near_sma_support`, and adds an `rsi > 50` filter live lacks. **88% of Run A trades are unreachable live.** Fixed in Run A′, not retrofitted | measures the wrong rule |
+| snapshot / bootstrap | Yahoo returns HTTP 429 to yfinance's default session from this egress and serves a browser-shaped one normally; unpatched, the snapshot produced **zero rows for every symbol** — the silent-skip class, recurring during its own repair. Requires a curl_cffi Chrome-impersonating session, and the row-count check is now load-bearing: zero rows fails loudly rather than skipping | silent total failure |
+| `vendor/` pins | `pandas_ta 0.3.x` no longer exists on PyPI, so live↔backtest parity was one version away from unreachable. Pins (numpy 2.2.6, pandas 3.0.5, pandas_ta 0.4.71b0, yfinance 1.6.0) are now **load-bearing for comparability**; Ares' versions must not drift without re-snapshotting Athena | unhedged dependency |
 
-**Run A — "as-live"** is mandatory and comes first: divergence removed from the
-decision set entirely, matching what Ares structurally does today. This is the
-honest benchmark for the system currently collecting.
+### Run A — complete 2026-09-22
 
-**Run B — "divergence repaired"**, flags confirmed at `i+5` and firing five bars
-late, is optional and secondary. It answers a V4 question — repair the detector or
+Must-fixes 1-7 implemented and verified by 16 checks in `validate_v6.py`,
+including a truncation test proving that flags at bar `i` do not move when the
+future is removed. OHLCV snapshot committed — 217/227 symbols, with a manifest
+recording library versions, download date and per-symbol spans. V1-V5 simulators
+left byte-identical; their six runners now `raise SystemExit`. No Ares files
+touched. Frozen parameters, no re-optimisation, no alternative values tried.
+
+Period 2021-09-01 → 2026-09-01 (4.92y), Universe A (130), divergence out of the
+decision set:
+
+| | |
+|---|---|
+| $1,000 → | **$843.37** |
+| CAGR | **−3.40%** |
+| Max drawdown (running peak) | −30.23% |
+| Trades / win rate | 156 / 26.9% |
+| Profit factor (dollar) | **0.853** |
+| Expectancy per trade | −$1.04 (−0.41%) |
+
+Exit structure: `stop_loss` 89 trades, −$873.21, **0% win rate**; `trailing_stop`
+59 trades, +$520.22, 59.3%. The trailing stop cannot cover the stops — the shape
+the audit predicted from V5's residual exits.
+
+**Not a friction problem.** At zero commission with every decision held fixed,
+A = +$183.78 (≈+3.5%/yr against SPY's +13.39%). Commission turns weak into losing;
+removing it does not create an edge.
+
+**It bleeds in ordinary conditions.** 2022 was −22.78%, but 2025 was −18.28% —
+and 2025 was not a bear market.
+
+### Run A measured the wrong entry rule — read before concluding anything
+
+Found during Run A: only **12.2% (18/148)** of its `momentum_breakout` entries
+satisfy live Ares' 52-week-high gate at `signals.py:105`
+(`pct_from_high >= -0.01`). Athena's `_check_entry` never implemented that gate,
+and adds an `rsi > 50` filter live does not have. The range branch omits live's
+`near_sma_support` confluence term, which 75% of Run A's 8 `mean_reversion`
+entries would have satisfied.
+
+So Run A is causal and internally valid, but **88% of its trades are entries live
+Ares would refuse.** It measures the rule Athena implements. It is *not* the
+as-live benchmark this section asked for.
+
+Deliberately not fixed in place: changing an entry predicate changes the trade
+population, which belongs at a declared boundary.
+
+Two further confidence limits: the 11 excluded symbols are all corporate actions,
+putting a **≥4.8%/5yr floor on survivorship bias** — which flatters, so the true
+result is likely worse; and the 5-slot cap rejected **95% of signals** (3,135
+generated → 156 filled, queue fired 0 times), so the exact figures rest on
+slot-arrival luck.
+
+**Honest conclusion, and the only one supported:** the rule Athena implements
+loses money causally. **The live rule has never been measured.** This is not
+"the strategy family is dead" — that claim would require measuring the actual
+live predicates on a survivorship-corrected universe without a binding slot cap.
+
+### Structural finding — account size, not parameters
+
+Independent of entry rule, universe and divergence, and therefore the most
+durable result of the whole exercise:
+
+At $1,000 with 5 slots, **95% of generated signals are unreachable**, and
+commission over the period was **$346 — 34.6% of starting capital**, roughly
+7%/yr of drag. Beating SPY's 13.4% would require >20% gross. Even a genuine edge
+could not be *expressed* at this account size.
+
+Not a parameter change and not an argument to widen the slot cap. It is a
+viability observation that belongs in the June 2027 live-capital plan, where the
+same $1,000 figure appears.
+
+### Open — Run A′, now above Run B
+
+**Run A′:** same V6 engine, live Ares' actual entry predicates — the 52-week-high
+gate added, the phantom `rsi > 50` removed, `near_sma_support` restored to the
+range branch. This is a correctness fix, and it would be **the first time live
+Ares has actually been measured**.
+
+**Run B** — divergence repaired at `i+5` — drops below it. It answers a V4 question — repair the detector or
 delete the dead code — and is explicitly **not** required to judge whether the
 live collection is meaningful. If effort is limited, Run A only. Run B must not
 become a stealth re-fit toward a nicer story.
