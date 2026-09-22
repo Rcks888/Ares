@@ -574,6 +574,26 @@ Must-fix before any run:
 | 4 | Max drawdown from the running peak | `portfolio_sim.py:405`, `v5:392` |
 | 5 | `peak_after_exit` / `missed_upside_pct` never touch parameter selection | `backtester.py:111` |
 | 6 | Stop distance from returns stdev, matching live Ares | all three simulators |
+| 7 | Make V5 exits next-bar too — currently entries fill at the next open while **every exit uses the signal day's close**, a one-sided hindsight on all exits | `portfolio_sim_v5.py:222-239` |
+
+### Secondary defects — fix during V6, none change the headline alone
+
+These were found in the same audit and are recorded so they are not rediscovered.
+They matter for correctness and for trusting the V6 output, but unlike items 1-7
+none of them individually moves the reported figure much.
+
+| Location | Defect | Effect |
+|---|---|---|
+| `portfolio_sim_v5.py:151-154` vs `:251` | cash is charged the $1 entry commission but `total_invested = original_shares * entry_price` omits it, so reported P&L beats the real cash result on every trade | inflates ~0.5-1% per trade |
+| `portfolio_sim_v5.py:239` vs `:254` | scale-out commission leaves cash but `total_returned` adds back the **gross** proceeds, so scaled winners gain another $1 — while the printed `Commissions: $X` line makes it look accounted for | inflates |
+| `portfolio_sim.py:185` | `pos['scale_out_pnl']` and `scale_out_date` are computed and never written to the trade record, so the scale-out leg is unauditable from the CSV. V5 also drops `scale_out_price` and `remaining_shares`, which is why the two defects above cannot be detected from the output files | audit blindness |
+| `backtester.py:43`, `portfolio_sim.py:275,329`, `v5:304` | volatility fabricated as `Close * 0.05` when fewer than 20 prior bars exist — the same silent-default class as the live `stdev_20` bug, bounded here to each window's warm-up | inflates |
+| `data_feed.py:12-26` | yfinance MultiIndex columns are stored verbatim then re-read with `header=0`, so ticker rows become data rows. On a **cache miss** the raw MultiIndex frame is returned and `df['Close']` yields a DataFrame, not a Series — so the first run differs from every later run. `signals.py:192`'s bare `except` swallows it per symbol | nondeterminism |
+| `data_feed.py:19`, `backtester.py:22,28` | symbols are skipped silently on download failure or insufficient bars, and the count of symbols *attempted* versus *contributing* is never persisted anywhere — a partial download silently yields a smaller "clean" backtest | unquantified |
+| `run_backtest_v5.py:39` | `UNIVERSE_B` contains `"FIVERR"`, which is not a ticker (`FVRR` is already listed), and duplicates `RIVN` and `ROKU`. 100 entries, 99 unique, only 82 produced trades | overstated universe |
+| `run_backtest_v4_compare.py:52,82` | the base `config/strategy_params.json` is overwritten in place and restored **outside** any try/finally, so a crash mid-loop leaves $10K/15-slot parameters in the file every other run reads | latent corruption |
+| Athena `config/*.json` | the same **six dead keys** as Ares had — `rsi_source`, `rsi_overbought`, `rsi_midline`, `rsi_extreme_low`, `macd_threshold`, `lookback_days` — each shadowing a hardcoded literal. Also `disable_tp` is read **only** by `backtester.py:85`; both portfolio sims ignore it and always apply the scale-out TP, so V5's claim to run "V3 logic" is false | tuning does nothing |
+| `backtester.py:64` | `spy_rsi` is hardcoded to `0` — a dead market-context feature, constant in every CSV, and a useless ML column | dead feature |
 
 **Run A — "as-live"** is mandatory and comes first: divergence removed from the
 decision set entirely, matching what Ares structurally does today. This is the
