@@ -769,13 +769,145 @@ V2.1 values (`trailing_stop_pct 0.08`, `tp_momentum 0.12`), not
 `strategy_params_v6.json`. The three keys it uses agree today, so no numeric
 error — one config change from biting.
 
-### Consequence for Run A′
+### Consequence for Run A′ — resolved, see below
 
-Not a patch. `portfolio_sim_v6.py` needs to **call live's predicates** and adopt
-live's sizing, queue admission and scale-out ordering. Run A′ is then the first
-measurement in this project where the backtest and the live system are the same
-system. Until it exists, **no statement about this strategy's expectancy is
-supported in either direction.** It answers a V4 question — repair the detector or
+Not a patch. `portfolio_sim_v6.py` needed to **call live's predicates** and adopt
+live's sizing, queue admission and scale-out ordering. That restructure was done;
+Run A′ is recorded in the next section. **Outcome: the parity audit's mismatches
+moved the result in both directions and did not cancel, exactly as expected.**
+
+## Athena V6 Run A′ — complete 2026-09-22, Athena `1804721`
+
+**The first measurement in this project where the backtest and the live system are
+the same system.** `portfolio_sim_v6.py` now imports live Ares' `signals.py`
+through an adapter, with an md5 `ParityDrift` assertion at import that fails the
+run if the two ever diverge. No local `_check_entry` survives, and
+`validate_v6.py` asserts its absence. 33 validation checks, all passing.
+
+Fixed stake $149, non-compounding, matching live. Period 2021-09-01 → 2026-09-01.
+Frozen parameters, no re-optimisation, no alternative values tried. CAGR is not
+reported and the field is deleted, because a fixed-stake system does not compound.
+`return_basis: fixed_stake_non_compounding` and `comparable_to_run_a: false` are
+recorded in the summary so Run A and Run A′ cannot later be tabulated together.
+
+### The funded variant is the result
+
+Live Ares tracks no cash balance, but it trades through IBKR, **which does**. An
+order live cannot fund is rejected by the broker whether or not Ares knows it, so
+modelling that constraint completes the model rather than departing from live. The
+first A′ pass had no funding gate and ran Universe B insolvent for 309 of 1241 days
+at a minimum of −$356; it is preserved under
+`results/superseded_runA2_no_cash_gate/` with a `SUPERSEDED.md`.
+
+Gate is `cash >= stake + commission` — commission included because it is part of
+the debit; gating on the stake alone leaves cash at −$1.00 per fill.
+
+| | A′ ungated *(superseded)* | **A′ funded (final)** |
+|---|---|---|
+| Universe A (130) | −8.46% | **−5.58%** |
+| Universe B (98) | −43.89% | **−57.32%** |
+| Max drawdown | −38.01% / −59.75% | **−34.65% / −67.55%** |
+| Profit factor | 0.922 / 0.702 | **0.941 / 0.537** |
+| Entries refused, no cash | — | **16 / 305** |
+
+Minimum cash moved from −$105.15 and −$356.00 to **+$10.20 and +$0.14**, zero
+overdrawn days, asserted daily rather than only on the final bar.
+
+**Universe B got worse, not better.** The constraint bit hardest exactly where
+equity had already collapsed to ~$340 — denying new entries while existing losers
+continued to run. A funding constraint does not protect a losing system; it
+removes its chance to recover while leaving its damage in place. Worth
+remembering: it is the same asymmetry a real account would experience.
+
+### The headline — costs exceed the edge, and the edge loses to passive anyway
+
+| Universe A (130) | |
+|---|---|
+| Gross P&L before commission | **+$273.21** |
+| Commission (145 trades) | **−$331.00** |
+| Net | **−$57.79** |
+| Commission as % of gross profit | **121.2%** |
+| Gross edge vs cost per trade | **+$1.88 vs −$2.28** |
+
+At $149 per position, $1 each way is **1.34% round-trip against a 1.26% gross
+edge**. Commission alone flips 2.1% of trades from winner to loser — win rate
+32.4% before costs, 30.3% after. `pnl_before_commission` and
+`win_before_commission` are now trade-level fields, so the split is auditable from
+the CSV rather than the summary.
+
+Universe B is **gross-negative at −$269.85**, so **no edge is established**.
+Universe A is the survivorship-flattered mega-cap list, which is where a positive
+gross figure would be expected to appear whether or not the strategy works.
+
+**And the deeper finding, which the commission story can obscure:** Universe A's
+gross P&L is +$273.21 on $1,000 of notional over 4.92 years — roughly **+5.5% a
+year before costs**, against **SPY +85.66% and QQQ +97.72%** over the same window,
+about 13-14% a year. So even a **commission-free** version of this strategy, run on
+the universe most flattering to it, would have lost badly to simply buying the
+index. Removing every cost does not produce a competitive system. That is a more
+fundamental problem than the cost structure, and it is the finding to carry
+forward.
+
+Year shape: **2024 was solidly profitable on both universes (+23.70%, +37.66%) and
+every other year lost.** That is the signature of a momentum strategy fitted to a
+trend that has since stopped — and explicitly **not** an invitation to re-fit on
+2024.
+
+### Three live Ares defects found by Athena — recorded, not fixed
+
+All three are reproduced in the backtest rather than corrected, because fixing live
+behaviour inside the backtest is how the two systems drifted apart originally.
+Recorded here because they are **live** defects and Athena is not where Ares' owner
+would find them.
+
+**1. Queue promotion gates are inert.** `tracker.py:400,403` read
+`latest.get('RSI', 50)` and `latest.get('EMA_20', 0)`, but `add_indicators`
+produces lowercase `rsi` and **never produces `EMA_20` at all**. So the RSI check
+always sees 50 and can never reject, and the EMA-20 check always compares against
+0 and can never reject. **Live queue promotion is `|drift| <= 5%` and nothing
+else.** Third instance of the inert-gate class in this project, after the six dead
+config keys and the `hidden_*_div` key mismatch.
+
+**2. Structural divergence blindness.** Already documented above: the pivot loop
+stops at `len - window - 1` while live reads `len - 1`, so all four divergence
+columns are permanently `False` in production.
+
+**3. Unfunded constant sizing.** `tracker.py:119-123` computes position size from
+`starting_capital` as a **constant**, and live performs **no balance check
+anywhere**. As the account declines the static $149 becomes a growing fraction of
+equity, and live will attempt orders IBKR rejects — at $427 equity, 5 × $149 =
+$745 is unfundable. This has real consequences before live capital arrives in June
+2027 and was not in the parity audit's list either.
+
+### What this does and does not change for Ares
+
+| | |
+|---|---|
+| Parameters | **unchanged.** Run A′ does not license a change, and re-tuning against these numbers is how the original figure was manufactured |
+| `clean_v3` | **not restarted.** Still the only uncontaminated live evidence; a disappointing backtest is explicitly not grounds |
+| "Strategy family is dead" | **still not recorded.** Universe B is gross-negative and A is survivorship-flattered, so the honest statement is that no edge is established — not that its absence is proven |
+| June 2027 capital plan | **materially affected.** See below |
+
+**The viability question is now measured rather than asserted.** At $1,000 with 5
+slots and $1/trade, this trade frequency costs ~1.34% round-trip per position, and
+121% of gross profit went to commission. Combined with a gross return far below
+passive, the honest conclusion is that **this configuration cannot work at this
+account size**, and that raising the account size fixes the cost ratio without
+creating an edge. Both would have to change.
+
+Earlier in this thread I twice over-read a structural number before it was
+measured — first claiming the commission drag was entry-rule-independent, then
+predicting live's trade count would be an order of magnitude higher when live's
+52-week-high gate actually cut signal volume from 3,135 to 935. **Structural
+claims from this project should not be trusted until they appear in a run.**
+
+### Open items, in priority order
+
+1. Nothing in Ares. It continues on V3.1 untouched.
+2. **Run B** — divergence repaired at `i+5` — remains optional and must not be
+   used to manufacture a nicer number.
+3. The three live defects above stay **documented and unrepaired** until a declared
+   V4 boundary. Defect 3 is the one with a hard external deadline. It answers a V4 question — repair the detector or
 delete the dead code — and is explicitly **not** required to judge whether the
 live collection is meaningful. If effort is limited, Run A only. Run B must not
 become a stealth re-fit toward a nicer story.
