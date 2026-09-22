@@ -32,5 +32,13 @@ curl -s -X POST "https://api.telegram.org/bot${BOT_TOKEN}/sendMessage" \
 
 cd /root/ares/Ares
 git add logs/
-git diff --cached --quiet || git commit -m "Ares V3 monitor $(date +%Y-%m-%d_%H:%M)"
-git push 2>&1 || echo "[$(date)] Git push FAILED"
+git diff --cached --quiet || git commit -q -m "Ares V3 monitor $(date +%Y-%m-%d_%H:%M)"
+
+# See run_ares.sh for why the bare push is not sufficient.
+if ! git push -q 2>/dev/null; then
+    if git pull -q --rebase --autostash && git push -q 2>/dev/null; then
+        echo "[$(date)] Git push succeeded after rebase onto origin"
+    else
+        echo "[$(date)] Git push FAILED -- logs are committed locally but not backed up"
+    fi
+fi
