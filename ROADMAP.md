@@ -901,13 +901,153 @@ predicting live's trade count would be an order of magnitude higher when live's
 52-week-high gate actually cut signal volume from 3,135 to 935. **Structural
 claims from this project should not be trusted until they appear in a run.**
 
+## Strategic reassessment — 2026-09-22, after Run A′
+
+Reviewed externally. The conclusion is a change of **role**, not a panic rewrite.
+
+### What Run A′ settles and what it leaves open
+
+**Settled:** this frozen configuration is not a credible index-beater at $1,000
+scale. Gross is below SPY on the *flattering* universe, costs turn it negative, and
+the control universe is worse.
+
+**Not settled:** whether any momentum process can work. Survivorship is present and
+unquantified in both universes, so −5.58% is not a precise estimate of a true edge.
+
+### `clean_v3` is demoted, not deleted
+
+It targets 40-60 closed trades. With ~30% win rate, fat tails and regime
+dependence, **that sample cannot separate +5%/yr from +15%/yr** — hundreds of
+independent closes would be needed, often 200-500, and even then path dependence
+and regime clustering remain. At ~10-30 trades a year that is not reachable on any
+practical calendar.
+
+So `clean_v3` was always under-specified for the claim *"beats SPY."* Its new label:
+
+> **Process and integrity observation — not edge certification.**
+
+Keep it running: cost is near zero, it is the only live causal stream, and it keeps
+surfacing implementation defects. Stop treating it as the validation path, because
+doing so manufactures the feeling of progress.
+
+### The structural constraint
+
+At $1,000 across 5 slots a position is $149; $1 each way is **1.34% round-trip**; at
+~30 trades/yr that is **~7%/yr of drag**, so beating SPY needs roughly **20%/yr
+gross**. That is a property of **account size and turnover**, not of momentum
+breakouts. Changing strategy while keeping $1,000 / 5 slots / ~30 trades a year
+mostly re-runs the same cost experiment.
+
+### Three corrections to the analysis itself
+
+**1. A structural sweep would repeat the original sin.** Sweeping account size,
+frequency, commission and slot count across one window and two hindsight universes
+is a four-dimensional search on one dataset — the same pattern that manufactured
+PF 2.42, with better manners. Separate them properly:
+
+| Question | Method |
+|---|---|
+| Cost drag vs size, frequency, commission | **Closed form arithmetic.** No sim, no sweep |
+| Slot count and which trades get funded | **Sim** — one **pre-registered** dimension |
+
+Never grid-search and crown the best cell.
+
+**2. The sim pays 0% on idle cash, and that is not neutral.** Maximum deployment is
+5 × $149 = $745 of $1,000, and actual deployment is well below that most days. Over
+2021-2026, with T-bills at 4-5% for much of the window, idle cash should have
+earned plausibly **$60-80** against a net result of −$57.79. Universe A is therefore
+**closer to flat than to losing.** Still behind SPY — not a rescue — but the
+description was wrong.
+
+Related: comparing a partly-invested strategy to 100%-invested SPY is not
+apples-to-apples. At ~50% average exposure, 5.5% gross is ~11% on **deployed**
+capital against SPY's 13.4%. Still behind; **"loses badly" was an overstatement.**
+
+**3. Three overstatements in one analysis, all in the same direction.** The
+commission-independence claim, the trade-count prediction, and now the
+exposure-unadjusted benchmark comparison. Each overreached toward the cleaner
+narrative. **Structural claims from this analysis should be discounted until they
+appear in a run**, and the error bars deserve more weight than the story.
+
+## PRE-REGISTERED TEST — momentum factor substitution
+
+**Registered 2026-09-22, before the result is known.** Highest-leverage next step
+and it runs before any structural work.
+
+**Motivation:** 2024 carried both universes (+23.70%, +37.66%) and every other year
+lost. 2024 was a strong momentum year. So:
+
+> **Is this strategy an expensive, high-maintenance way to buy momentum factor
+> exposure that an ETF provides for 0.15%?**
+
+**Data:** `results/v6_runA2_*_equity.csv` for strategy returns; MTUM, SPY, QQQ over
+2021-09-01 → 2026-09-01. Monthly returns (~59 observations; annual gives only 5 and
+is unusable).
+
+**Method:** regress strategy monthly excess return on a momentum proxy — MTUM
+excess return, and separately `QQQ − SPY`. Report R², beta and alpha with standard
+errors.
+
+**Decision rule, fixed in advance:**
+
+| Outcome | Conclusion | Action |
+|---|---|---|
+| **R² > 0.5 and alpha not significantly positive** | Strategy is momentum beta | **Question closes.** Own the factor or the index; do not operate a costly replica. No structural study |
+| **R² < 0.3 and alpha not significantly negative** | Something idiosyncratic may exist | Proceed to the **one** pre-registered slot study |
+| **Anything in between** | Inconclusive | Report as inconclusive. **Do not proceed to sweeps** and do not re-cut the test to resolve it |
+
+**Caveats to state with the result:** ~2.5 trades/month makes monthly returns lumpy;
+partial investment attenuates beta, so a beta of 0.4 at ~50% exposure implies ~0.8
+on deployed capital; and the universes remain hindsight-selected, which flatters any
+momentum loading.
+
+**If it correlates, that is not failure — it is substitution.** A definite answer
+obtained cheaply is the best outcome available here.
+
+### Mandatory discipline for any future strategy work
+
+From the first line, not retrofitted: explicit **SPY total-return benchmark**; a
+realistic cost model tied to the intended account size; **holdout or walk-forward**,
+never tune-on-full-sample; **causal features only**; **import live entry/exit code
+into the sim** rather than reimplementing it; snapshot the OHLCV; report net of
+costs **and** excess return versus benchmark; and open a new `clean_vN` phase on any
+rule change.
+
+Reuse the **infrastructure** — measurement, labelling, parity assertions. Do **not**
+reuse the parameter set, and do not assume the strategy family is validated.
+
+### The role of each layer, restated
+
+| Layer | Role |
+|---|---|
+| **Core wealth** | Index and ESPP discipline — the real edge, on savings rate |
+| **Ares** | Paper research platform and integrity lab. Live only if the structural economics change |
+| **Optional satellite** | A small live sleeve later, **only** if a configuration clears cost and benchmark bars in V6-class tests — never *"because June 2027"* |
+| **Hermes** | Optional side learning, not the mainline |
+
+**June 2027 is a review gate, not a deployment promise.** Deploy $1,000 live only if
+by then a specified configuration shows credible excess return versus SPY after
+costs in honest tests, **or** the sleeve is explicitly accepted as tuition and
+telemetry rather than wealth optimisation. Otherwise paper continues and capital
+stays on the index path.
+
 ### Open items, in priority order
 
-1. Nothing in Ares. It continues on V3.1 untouched.
-2. **Run B** — divergence repaired at `i+5` — remains optional and must not be
-   used to manufacture a nicer number.
-3. The three live defects above stay **documented and unrepaired** until a declared
-   V4 boundary. Defect 3 is the one with a hard external deadline. It answers a V4 question — repair the detector or
+1. **Momentum factor correlation test** — pre-registered above. Afternoon scale.
+2. Only if uncorrelated: the **one** pre-registered slot study. Not a grid.
+3. Cost and account arithmetic in closed form, not as a search.
+4. Credit idle cash at a T-bill proxy in V6, or report the omission explicitly
+   alongside every net figure.
+5. Nothing in Ares. It continues on V3.1 untouched, `clean_v3` demoted but running.
+6. **Run B** — divergence repaired at `i+5` — remains optional and must not be used
+   to manufacture a nicer number.
+7. The three live defects stay **documented and unrepaired** until a declared V4
+   boundary. Defect 3 — unfunded constant sizing — is the only one with a hard
+   external deadline.
+
+**The honest measurement stack is the asset this project has produced.** It is not
+the asset it set out to build, and that is a successful audit outcome rather than a
+failed plan. It answers a V4 question — repair the detector or
 delete the dead code — and is explicitly **not** required to judge whether the
 live collection is meaningful. If effort is limited, Run A only. Run B must not
 become a stealth re-fit toward a nicer story.
