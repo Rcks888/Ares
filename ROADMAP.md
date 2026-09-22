@@ -273,6 +273,157 @@ Athena (backtest)           Ares (live)
 
 ---
 
+## Change policy during the observation phase
+
+The clean sample measures one fixed system. Any change that alters **which trades
+are taken, at what price, or in what size** makes the trades before and after it
+non-comparable, so it must wait for a deliberate version boundary with its own
+sample phase (`clean_v4`). Reviewed and agreed externally.
+
+| Fix now | Defer to V4 |
+|---------|-------------|
+| Measurement, labelling, logging, docs | The trade population |
+| Accounting correctness for *already-defined* rules | Entry / exit prices |
+| Crashes and silent data corruption | Position sizing and risk model |
+| Ops reliability (push retries, alerts) | New filters that accept or reject setups |
+
+The line is whether the change corrects **how the system is measured** or changes
+**what the system does**. Fixing an unbooked scale-out is the former: the rule
+always said P&L spans the whole position, and the code failed to implement it.
+Adding a gap filter is the latter: no rule ever said gapped fills are declined.
+
+Forced exception: a defect that mis-executes a *stated* rule, or damage severe
+enough to end the observation, is fixed immediately regardless of sample cost.
+
+## Deferred to V4 — reviewed, accepted as known behaviour
+
+### 1. No price-gap guard on pending fills
+
+`execute_pending_signals()` checks slots, duplicates, pending age, data
+availability and session freshness, then fills at `today_open × (1 + slippage)`
+**without comparing that open to the signal price.** The queue path does check
+drift (±`queue_max_drift_pct`, 5%), so a signal blocked by full slots is
+guarded while one about to commit capital is not.
+
+Arguments both ways, both judged real:
+
+- **For a guard:** filling 8-12% above signal price buys a different setup. RSI,
+  extension and volume context have all moved, so the confluence that justified
+  the trade may no longer hold.
+- **Against:** a signal gaps up *because the stock moved as predicted.*
+  Rejecting gaps discards the fastest movers, which for `momentum_breakout` may
+  be discarding the trades that work. This is the same selection-bias mechanism
+  already flagged for queue drift expiry — adding the filter introduces
+  deliberately what we are watching for accidentally.
+
+**Decision: leave open for `clean_v3`, documented as known behaviour.** The
+clean sample must not be described as if a gap guard exists.
+
+When designed at V4, prefer **re-validating confluence and regime at the open**
+over a blunt drift cut, which is momentum-hostile. Testable in Athena using
+signal-day close to next open, applying the filter only on information available
+at the open. Look-ahead traps to avoid: using the same-day close after the open;
+using future bars to set filter parameters; and **tuning the threshold on the
+same 1060 trades then reporting those trades as proof.**
+
+No new instrumentation is required. `signal_price` is already stored on every
+trade, so gap-at-fill is derivable retroactively and the V4 decision can be made
+from data already being collected. Measured so far: TMO −0.24%, DYN +0.37%. The
+−9.46% and +9.30% figures on ABM and PINS measure the since-fixed stale-data
+bug, not real gaps.
+
+### 2. Per-trade dollar risk varies 4.7×
+
+Position size is fixed at ~$149 regardless of stop distance, while stops are
+volatility-scaled with no cap. Observed across five concurrent positions:
+
+| Symbol | Stop distance | Position | Dollar risk |
+|--------|---------------|----------|-------------|
+| TMO    | 3.10%         | $149     | $4.62       |
+| ABM    | 3.91%         | $149     | $5.82       |
+| HAFN   | 4.88%         | $149     | $7.27       |
+| ECO    | 5.03%         | $149     | $7.49       |
+| SDGR   | 14.62%        | $149     | $21.88      |
+
+SDGR's wide stop is correct (~7.3% daily stdev, volatile biotech), not a
+fallback. But the most dangerous trade receives the same capital as the safest,
+and five SDGR-like positions would risk ~10.9% of the portfolio at once.
+
+Risk parity would size by `shares = (capital × risk_pct) / (entry − stop)`,
+making TMO large and SDGR small.
+
+**Reviewed as the highest-priority risk item for live readiness**, ahead of the
+portfolio circuit breaker, correlation caps and time-stops. Still deferred:
+choosing `risk_pct` sensibly requires the empirical stop-distance distribution
+this sample is producing, and $1K paper across 5 slots is not ruin-scale.
+
+Related friction: at $149 with $1 commission each way, round-trip cost is ~1.5%
+of position value. Against TMO's 3.10% stop, costs are nearly half the risk
+budget. Volatility-scaled stops tighten on quiet stocks while fixed commissions
+do not shrink with them. This argues for larger notional when live, a minimum
+stop distance, or fewer and larger positions — as **live sizing design**, not a
+mid-sample patch.
+
+### 3. Signal generation is once daily — accepted as correct
+
+Only the 21:00 UTC pass finds signals; the 13:30 UTC pass structurally cannot,
+because the daily candle barely exists at the opening bell. See README. Reviewed
+conclusion: the morning pass is a legitimate operations pass, and moving signal
+generation intraday would be a different system with a different edge definition
+and greater data dependency. Throughput is signal-limited, not scan-limited.
+
+## Removed inert configuration keys
+
+Six keys in `strategy_params.json` were read by no code. Three shadowed
+hardcoded literals, so editing them silently did nothing:
+
+| Key | Reality |
+|-----|---------|
+| `rsi_source: ohlc4` | RSI does use OHLC4 (`indicators.py:16`), but the key does not control it |
+| `rsi_overbought: 70` | `current_rsi > 70` hardcoded, tracker.py |
+| `rsi_midline: 50` | `40 <= rsi <= 50` hardcoded, signals.py |
+| `macd_threshold: 0` | comparison hardcoded |
+| `rsi_extreme_low: 10` | unused entirely |
+| `lookback_days: 252` | unused entirely |
+
+Deleted rather than wired. Wiring all six would have added surface area for a
+future silent divergence without changing any behaviour, and the same reasoning
+retired `risk_rules.json`: a config that looks authoritative but is inert is
+worse than no config, because it invites decisions based on settings that do not
+apply. If any becomes a real knob later, it gets added when the code reads it.
+
+Remaining lower-priority instance of the same shape: the pending record still
+defaults `rsi` and `vol_ratio` to `0`, values that are impossible in
+practice and so indistinguishable from real readings. Lower stakes than the
+`stdev_20` case because neither feeds sizing, but changing them requires
+checking every format site that would receive `None`.
+
+## Athena — audit before any V6
+
+`strategy_params.json` is frozen against Athena's output: `tp_momentum: 0.18`,
+`trailing_stop_pct: 0.10`, reported profit factor 2.41 over 1060 trades. Athena
+has never been audited the way Ares was, and Ares yielded 11 defects in three
+weeks from the same author, idioms and libraries — a discarded scale-out value,
+overwritten commissions, a silent `or 0.05`, a pandas column-shape error. None
+announced itself; all produced plausible numbers.
+
+A backtest defect is worse than a live one because no broker contradicts it.
+
+Audit scope, read-only, before any feature work: next-bar fills with matching
+slippage and commission; scale-out tranches actually booked; `or <constant>`
+defaults on missing indicators; any indicator reading a bar it should not.
+
+**Those parameters are also in-sample fitted.** TP 18% and trailing 10% were
+selected on the same 1060 trades that reported PF 2.41, with no holdout. The
+clean live sample is therefore the first genuine out-of-sample test of fitted
+parameters, and falling short of 2.41 is the **expected** result rather than
+evidence of a broken implementation. Recorded before collection so the eventual
+number is not misread.
+
+Findings become knowledge, not an immediate re-tune. Correcting a parameter
+mid-sample would fragment the data; corrections belong at the V4 boundary with
+its own phase label.
+
 ## Unimplemented Risk Controls
 
 These were previously written in `config/risk_rules.json`, a file no code ever read.

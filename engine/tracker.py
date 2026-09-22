@@ -183,6 +183,12 @@ def execute_pending_signals():
                 'peak_price': entry_price,
                 'rsi_at_entry': sig.get('rsi', 0),
                 'vol_at_entry': sig.get('vol_ratio', 0),
+                # The volatility actually used for this stop. Recorded because
+                # it is the feature a ranker will want, and because inferring it
+                # from stop distance only works until a trailing stop ratchets
+                # or an entry is re-based. Recorded evidence does not decay.
+                'stdev_20': stdev_20,
+                'stdev_fallback': stdev_missing,
                 'strength': sig.get('strength', 'unknown'),
                 'scaled_out': False,
                 'scale_out_price': None,
@@ -627,7 +633,13 @@ def open_trade(signal, from_queue=False):
         'price': signal['price'],
         'rsi': signal.get('rsi', 0),
         'vol_ratio': signal.get('vol_ratio', 0),
-        'stdev_20': signal.get('stdev_20', 0.05),
+        # No default. A 0.05 written here is indistinguishable from a real
+        # reading by the time execute_pending_signals() checks it, so the
+        # absence guard there (`not stdev_20 or stdev_20 <= 0`) never fires and
+        # the trade enters the clean sample carrying a fabricated 10% stop with
+        # no contamination reason. The fallback belongs at the point of use,
+        # where it is logged and labelled -- not here, where it is silent.
+        'stdev_20': signal.get('stdev_20'),
         'strength': signal.get('strength', 'unknown'),
         'screens': signal.get('screens', []),
         'from_queue': from_queue
@@ -1060,12 +1072,17 @@ def export_csv():
         'entry_slippage', 'entry_commission',
         'shares', 'original_shares', 'position_size',
         'stop_loss', 'trailing_stop', 'take_profit', 'peak_price',
-        'rsi_at_entry', 'vol_at_entry', 'strength',
+        'rsi_at_entry', 'vol_at_entry', 'stdev_20', 'stdev_fallback', 'strength',
         'scaled_out', 'scale_out_price', 'scale_out_date',
         'from_queue',
         'status', 'exit_date', 'exit_price', 'exit_reason',
         'exit_slippage', 'exit_commission', 'total_commission',
         'holding_days', 'pnl', 'pnl_pct', 'pnl_after_costs', 'version',
+        # The labels travel with the data. Without them this export invites
+        # aggregating contaminated rows into an edge figure, which is the exact
+        # error the labelling exists to prevent.
+        'sample_phase', 'contaminated', 'contamination_reasons',
+        'fill_source', 'fill_detect',
         'shadow_days', 'shadow_peak', 'shadow_missed_pct',
         'shadow_trough', 'shadow_avoided_pct', 'shadow_verdict'
     ]
@@ -1075,6 +1092,9 @@ def export_csv():
         writer.writeheader()
         for t in trades:
             row = {col: t.get(col, '') for col in columns}
+            reasons = t.get('contamination_reasons')
+            if isinstance(reasons, list):
+                row['contamination_reasons'] = ';'.join(reasons)
             shadow = t.get('shadow', {})
             if shadow:
                 row['shadow_days'] = shadow.get('days_tracked', '')

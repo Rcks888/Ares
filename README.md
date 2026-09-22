@@ -54,18 +54,31 @@ The VPS clock is UTC; cron is written in UTC. MYT is UTC+8.
 | Time (MYT) | UTC | Type | Description |
 |------------|-----|------|-------------|
 | 9:00 PM | 13:00 | **Gateway restart** | IB Gateway health check + restart |
-| 9:30 PM | 13:30 | **Full Scan** | Market open — screen, exits, queue maintenance, promote |
+| 9:30 PM | 13:30 | **Ops pass** | Market open — exits, queue validation, promote, pending fills |
 | 11:45 PM | 15:45 | *(IBKR daily kill)* | Broker-side; the gateway does **not** restart itself |
 | 12:00 AM | 16:00 | **Gateway restart** | Recovers from the daily kill |
 | 12:10 AM | 16:10 | **Monitor** | IBKR live price check on open trades |
 | 1:25 AM | 17:25 | **Gateway restart** | |
 | 1:30 AM | 17:30 | **Monitor** | IBKR live price check on open trades |
-| 5:00 AM | 21:00 | **Full Scan** | Market close — new daily candle + signals |
+| 5:00 AM | 21:00 | **Signal scan** | Market close — new daily candle, the only pass that finds signals |
 
 A gateway restart precedes every run that needs IBKR, because the 11:45 PM
 broker-side kill leaves the gateway down and it has no self-recovery. Hermes
 (the XAU/USD sibling system) shares this VPS and is scheduled off the `:00`,
 `:10`, `:25` and `:30` marks to avoid colliding with these.
+
+**Only the 5:00 AM pass generates signals.** Measured across three weeks, the
+9:30 PM pass found 0 signals every time while the 5:00 AM pass found 2-4. At
+13:30 UTC the US market is opening, so today's daily candle barely exists and
+the scan re-reads the previous session's bars — the same data the prior 5:00 AM
+pass already acted on. The morning pass still earns its slot: it processes
+exits, re-validates queued signals against current prices, promotes the top
+ranked entry, and fills pendings at the open. It is an operations pass, not a
+second signal generator, and the effective signal cadence is **once per day**.
+
+This also means throughput is signal-limited rather than scan-limited: roughly
+11-12 signals a month against about 12.5 trade-slots a month at current hold
+times. Adding a third scan would not obviously produce more trades.
 
 ## Strategies
 
