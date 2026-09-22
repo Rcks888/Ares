@@ -680,7 +680,102 @@ gate added, the phantom `rsi > 50` removed, `near_sma_support` restored to the
 range branch. This is a correctness fix, and it would be **the first time live
 Ares has actually been measured**.
 
-**Run B** — divergence repaired at `i+5` — drops below it. It answers a V4 question — repair the detector or
+**Run B** — divergence repaired at `i+5` — drops below it.
+
+### Parity audit 2026-09-22 — the mismatch is ~30 items, not 3
+
+Independent read-only audit of V6 against live Ares, run because the V6 thread's
+own report disclosed three entry mismatches and the lesson of this project is that
+author-side parity checking is the control that already failed. It found roughly
+thirty, plus a new causality defect introduced in V6.
+
+**Root cause is structural.** `portfolio_sim_v6.py` imports only `data_feed` and
+`indicators` and **reimplements** entry logic in its own `_check_entry`. Athena's
+`engine/signals.py` is a near-copy of Ares' and **nothing imports it** — dead
+code. Every Athena run ever made measured a hand-written parallel implementation
+of the strategy. Patching individual predicates leaves the defect class intact;
+the fix is to **call the live predicates**, not re-express them.
+
+#### The four that move the number
+
+| | Live Ares | Athena V6 | Effect |
+|---|---|---|---|
+| **Position sizing** | `tracker.py:123` — static **$149, non-compounding**, no cash tracking at all | `:304` — `min(cash − equity×0.25, equity×0.20)`, **compounding** | V6 positions start ~33% larger and grow with the curve. Run A's CAGR was produced under sizing Ares does not use |
+| **Queue promotion** | `_validate_queued` — promotes on `|drift| ≤ 5%`, `rsi ≤ 90`, `price ≥ EMA_20`. Never re-requires the signal | `:415` — requires a **full fresh `_check_entry` signal** to reoccur | **~2,900 signals live would have promoted expired unentered.** 3,135 generated → 156 filled, queue fired 0 times. The largest population difference in the run |
+| **Scale-out vs exit order** | `:814-839` — scale-out checked **first**, then `continue`, so exits are skipped on a TP bar | `:365` — exits checked first, scale-out only if no exit fired | An `emotional_extreme` (rsi > 90, common exactly at TP) closes the **whole** position where live banks 50% and rides. Hits winners specifically |
+| **Missing `stdev_20`** | `tracker.py:136` — substitutes `0.05`, flags `contaminated`, **fills** | `:313` — refuses the entry | Live's real population contains wide-stop trades the backtest excludes |
+
+#### New defect introduced in V6
+
+`portfolio_sim_v6.py:300` sizes the position from **today's Close** for an order
+filling at **today's Open** — a genuine look-ahead, and `validate_v6.py` does not
+catch it.
+
+#### Entry predicate differences beyond the known three
+
+`pct_from_high` and `sma_50` are loaded into `_NUM_COLS` and never read.
+`vol_ratio` and `macd_hist` use `>` where live uses `>=`/`<` (boundary-only,
+backtest stricter). V6 rejects NaN bars; live passes them and emits a signal.
+V6 gates momentum on `min_confluence` where live has no confluence test for that
+branch and hardcodes `confluence: 3` — no effect at `min_confluence: 2`, but at 3
+the backtest emits **zero** breakouts while live emits many. `bearish_div` and
+`hidden_bear_div` are **hard vetoes live** but **positive confluence credit** in
+V6 — a sign inversion. Trigger strings differ (live joins all satisfied terms,
+V6 emits one token), so `trigger` columns are not comparable across systems.
+
+#### Exit and lifecycle differences beyond sizing and ordering
+
+Live suppresses all exit logic on the entry bar (`tracker.py:788`); V6 can decide
+an exit from the entry bar, permitting 1-bar trades live cannot produce. Live's
+`bearish_div` `elif` swallows `mean_reversion` positions so they never reach
+`mean_reversion_complete`; V6 folds the strategy test into the condition and falls
+through. V6 adds an `end_of_sim` forced liquidation with no live analogue. Live's
+pending-order lifecycle — `pending_max_age_days: 4`, `MAX_FILL_ATTEMPTS: 3`, the
+48-hour weekend gap guard — is not modelled; V6 keeps a pending entry one bar and
+drops it silently. `queue_max_size: 10`, confluence/age eviction, symbol
+de-duplication and the `(-confluence, |drift|, date_added)` ranking key are all
+unmodelled. V6 refuses positions under $20; live has no such floor.
+
+#### validate_v6.py is weaker than 16/16 implies
+
+About nine checks are tautological or unreachable: several recompute `_book`'s own
+expression from `_book`'s own fields; "stop exits do not fill at the stop price"
+passes for *any* open-based fill including a look-ahead one; the pivot-lag check is
+pure algebra testing no code; the reconcile check is unreachable because
+`run_sim` raises in `reconcile()` first. The causality truncation test is genuine
+but narrow — one symbol, `bearish_div` only, last 8 hits — and irrelevant to Run A
+because divergence is disabled. Genuine and load-bearing: running-peak drawdown,
+entry-after-signal, column absence, and `reconcile()` itself.
+
+#### Verified correct and matching live
+
+All indicator formulas and `detect_market_regime` (byte-identical), the
+trailing-stop ratchet and its seeding, `rsi_extreme_high: 90`,
+`mean_reversion_complete > 70`, **the exit chain order**, the fractional
+`stdev_20` stop formula and `2.0` multiplier, must-fixes 1-5 and 7 as claimed,
+`data_feed`'s single flatten-and-raise path with a load-bearing row count,
+`universe.py` (130/98, 11 known-unavailable), and `snapshot_data.py`.
+**Must-fix 6 is partial** — the formula matches, the missing-stdev behaviour does
+not.
+
+#### Two operational items
+
+**Nothing is committed.** `portfolio_sim_v6.py`, `universe.py`, all 217 snapshot
+CSVs, the manifest and every result file are untracked. The reproducibility claim
+is unmet until they are — one `git clean` loses the run.
+
+`indicators.load_params()` reads `config/strategy_params.json`, which still holds
+V2.1 values (`trailing_stop_pct 0.08`, `tp_momentum 0.12`), not
+`strategy_params_v6.json`. The three keys it uses agree today, so no numeric
+error — one config change from biting.
+
+### Consequence for Run A′
+
+Not a patch. `portfolio_sim_v6.py` needs to **call live's predicates** and adopt
+live's sizing, queue admission and scale-out ordering. Run A′ is then the first
+measurement in this project where the backtest and the live system are the same
+system. Until it exists, **no statement about this strategy's expectancy is
+supported in either direction.** It answers a V4 question — repair the detector or
 delete the dead code — and is explicitly **not** required to judge whether the
 live collection is meaningful. If effort is limited, Run A only. Run B must not
 become a stealth re-fit toward a nicer story.
