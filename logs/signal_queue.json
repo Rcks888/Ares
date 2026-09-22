@@ -17,23 +17,6 @@
     ]
   },
   {
-    "symbol": "BETA",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 22.07,
-    "rsi_at_signal": 52.3,
-    "stdev_20": 0.0455,
-    "vol_ratio": 1.51,
-    "date_added": "2026-09-21",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
     "symbol": "SECZ",
     "strategy": "momentum_breakout",
     "trigger": "breakout",

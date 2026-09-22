@@ -15,33 +15,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-09-22T13:31:18",
-    "drift_pct": 0.11,
+    "checked_at": "2026-09-22T21:01:09",
+    "drift_pct": 2.72,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 13.62
-  },
-  {
-    "symbol": "BETA",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 22.07,
-    "rsi_at_signal": 52.3,
-    "stdev_20": 0.0455,
-    "vol_ratio": 1.51,
-    "date_added": "2026-09-21",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-09-22T13:31:16",
-    "drift_pct": 1.97,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 22.5
+    "live_price": 13.98
   },
   {
     "symbol": "SECZ",
@@ -59,10 +37,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-09-22T13:31:18",
-    "drift_pct": -3.07,
+    "checked_at": "2026-09-22T21:01:09",
+    "drift_pct": -3.7,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 13.09
+    "live_price": 13.0
   }
 ]
