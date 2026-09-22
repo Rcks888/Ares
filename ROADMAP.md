@@ -429,27 +429,177 @@ practice and so indistinguishable from real readings. Lower stakes than the
 `stdev_20` case because neither feeds sizing, but changing them requires
 checking every format site that would receive `None`.
 
-## Athena — audit before any V6
+## Athena audit — completed 2026-09-22, result: V1-V5 contaminated
 
-`strategy_params.json` is frozen against Athena's output: `tp_momentum: 0.18`,
-`trailing_stop_pct: 0.10`, reported profit factor 2.41 over 1060 trades. Athena
-has never been audited the way Ares was, and Ares yielded 11 defects in three
-weeks from the same author, idioms and libraries — a discarded scale-out value,
-overwritten commissions, a silent `or 0.05`, a pandas column-shape error. None
-announced itself; all produced plausible numbers.
+One-line summary for the logbook:
 
-A backtest defect is worse than a live one because no broker contradicts it.
+> Athena's reported edge was materially driven by look-ahead divergence
+> labelling; V1-V5 are contaminated. Ares continues as a fixed live process under
+> `clean_v3`. Next step is Athena V6 Run A (as-live, causal), not parameter churn.
 
-Audit scope, read-only, before any feature work: next-bar fills with matching
-slippage and commission; scale-out tranches actually booked; `or <constant>`
-defaults on missing indicators; any indicator reading a bar it should not.
+### The defect
 
-**Those parameters are also in-sample fitted.** TP 18% and trailing 10% were
-selected on the same 1060 trades that reported PF 2.41, with no holdout. The
-clean live sample is therefore the first genuine out-of-sample test of fitted
-parameters, and falling short of 2.41 is the **expected** result rather than
-evidence of a broken implementation. Recorded before collection so the eventual
-number is not misread.
+`engine/indicators.py:74-102` — `_find_swing_highs` / `_find_swing_lows` compare
+`series.iloc[i]` against `series.iloc[i + j]` for `j = 1..5`, then write the
+result onto bar `i`. So `bearish_div[i] == True` asserts that bar `i` is the
+highest close of the surrounding 11 days — unknowable until bar `i+5`. The
+simulators use that flag as an **exit on bar `i`**, selling at a confirmed local
+top with hindsight.
+
+| Run | `bearish_divergence` exits | Avg P&L | Contribution |
+|---|---|---|---|
+| Athena V3 (829 trades) | 260 (31%) | +12.53% | ~89% of per-trade edge |
+| Athena V5 "realistic" (209) | 74 (36%) | +12.25% | **96% of dollar P&L** |
+
+The true edge under causal rules is **unknown and materially lower**. It is not
+recoverable by re-pricing those exits: removing an exit changes hold times,
+capital occupancy and which later trades get funded.
+
+### Why it matters more to Ares than it first appears
+
+`Ares/engine/indicators.py` and `Athena/engine/indicators.py` are
+**byte-identical** (md5 `f2cf8af8`). The same function runs live — but live the
+effect inverts.
+
+The loop is `range(window, len(series) - window)`, so the highest index that can
+ever receive a flag is `len-6`. Live code reads `latest`, which is index
+`len-1`. Therefore:
+
+**`latest['bearish_div']`, `latest['bullish_div']` and both `latest['hidden_*_div']`
+are structurally always `False`.**
+
+Confirmed empirically:
+
+| | divergence triggers | divergence exits |
+|---|---|---|
+| Athena V2 backtest (930 trades) | 6 | 228 |
+| Athena V5 backtest (209 trades) | 1 | 74 |
+| **Ares live (7 trades)** | **0** | **0** |
+
+Consequences in live code, all currently **inert**:
+- `tracker.py:851` — the `bearish_divergence` exit can never fire
+- `signals.py:66,81` — `bullish_div` never contributes mean-reversion confluence
+- `signals.py:27,39` — the `hidden_bull_div` trigger never fires
+- `signals.py:111,113` — the two divergence *rejection* filters never reject
+
+**The exit that produced ~96% of backtested profit cannot occur live at all.** The
+frozen parameters were tuned against an effect the live system is structurally
+incapable of reproducing.
+
+### Decision: document, do not repair
+
+Leaving it inert, deliberately. Repairing the detector would change which trades
+exit and when — that is the trade population, so it belongs at the V4 boundary.
+This is **not** the same class as the unbooked scale-out: that corrected the
+measurement of an already-stated accounting rule, whereas enabling a working
+causal divergence exit changes what the system does.
+
+Reviewed externally and endorsed: *"Leave it. Document it. Do not repair
+mid-sample."*
+
+### Supporting findings
+
+- **Zero holdout.** V1/V2/V3 all ran `2024-01-01 → 2026-09-01` on the same 130
+  symbols; parameters were chosen by re-running identical data and keeping the
+  better number. That window **excludes 2022**, the only losing year in the
+  5-year sample.
+- **Ares runs Athena V2, not V3.** The README crowns V3 (PF 3.00), which requires
+  `disable_tp: true`. Ares has `tp_momentum: 0.18` — that is V2, PF 2.42. The
+  figure carried in this repo as "2.41 over 1060 trades" conflated V5's profit
+  factor with V1's trade count.
+- **Max drawdown computed wrong** (`portfolio_sim.py:405`) — measures only the
+  drawdown after the global equity peak. True V4 = −17.8%, V5 = −20.2%, against
+  −5.0% and −15.9% reported. Understated ~3.6x.
+- **`hidden_bullish_div` vs `hidden_bull_div` key mismatch** in all three
+  simulators — the confluence gate is inoperative, always exactly 3, so
+  `min_confluence: 2` never binds. Ares' `signals.py` uses the correct names, so
+  live and backtest evaluate different entry rules.
+- **The V5 "no friction" control never ran** — dead branch at
+  `portfolio_sim_v5.py:319`. The "friction costs ~10% annual" claim compares two
+  different engines.
+- **Stop distance from `Close.std()` of dollar price levels**, not returns. Ares
+  live uses the fractional `pct_change().rolling(20).std()`. A live↔backtest
+  mismatch independent of the look-ahead.
+- **Not reproducible** — `data/ohlcv/` is empty and gitignored, and yfinance
+  adjusts retroactively.
+- **Verified clean:** scale-out tranche booking (better than Ares was), slippage
+  direction, commission accumulation, cash solvency, conservative
+  stop-before-target ordering, V5's next-bar *entry*, and the trailing indicator
+  set — RSI, MACD, SMA slope, regime — which is properly causal. The defect is
+  confined to one function pair reused in four places.
+
+### What this does and does not change
+
+| | |
+|---|---|
+| Live divergence entries and exits | structurally inert, documented, unrepaired |
+| Ares as a defined process | intact — every other rule operates as written |
+| `clean_v3` validity | **intact.** It measures this live system, which is causal end-to-end |
+| "Parameters validated by Athena" | **retracted everywhere** |
+| Need to change Ares today | **no** |
+
+Replacement language, to be used consistently: not *"Athena-optimized
+parameters"* but *"parameters selected under a backtest later found contaminated
+by look-ahead; the live sample is the out-of-sample test."*
+
+**`clean_v3` is not restarted.** The sample is 1 open trade and 0 closed, which
+makes restarting look cheap, and that is precisely the trap. Live Ares is now the
+only uncontaminated evidence stream in the project. A restart is justified only by
+a deliberate V4 change after honest measurement — never by the discovery that
+Athena was wrong.
+
+### Is the strategy family dead?
+
+**Not proven either way, and that distinction matters.** Without the look-ahead,
+V5's remaining exits are trailing stop +3.82% and stop loss −6.38%, which is not
+obviously an edge. But that autopsy comes from the same contaminated engine, so
+it is not reliable evidence of absence. The honest finding is *"Athena's
+published edge was largely an artifact; residual edge is unknown"* — not
+*"abandon the family."* Abandonment becomes rational only if Run A and the clean
+live sample both show no usable expectancy after costs.
+
+## Athena V6 — the first honest backtest
+
+Scope agreed and deliberately narrow. Passes the rule for new work: it measures
+something `clean_v3` cannot measure for years — five years including the 2022
+bear market — and changes zero live trades.
+
+Must-fix before any run:
+
+| # | Fix | Location |
+|---|---|---|
+| 1 | Confirm swings at `i+window`; never back-date onto bar `i` | `indicators.py:74-102` |
+| 2 | Book stop exits at `Close`, not at the unreachable stop price | `backtester.py:89`, `portfolio_sim.py:164`, `v5:222` |
+| 3 | Correct the `hidden_*_div` key names | all three simulators |
+| 4 | Max drawdown from the running peak | `portfolio_sim.py:405`, `v5:392` |
+| 5 | `peak_after_exit` / `missed_upside_pct` never touch parameter selection | `backtester.py:111` |
+| 6 | Stop distance from returns stdev, matching live Ares | all three simulators |
+
+**Run A — "as-live"** is mandatory and comes first: divergence removed from the
+decision set entirely, matching what Ares structurally does today. This is the
+honest benchmark for the system currently collecting.
+
+**Run B — "divergence repaired"**, flags confirmed at `i+5` and firing five bars
+late, is optional and secondary. It answers a V4 question — repair the detector or
+delete the dead code — and is explicitly **not** required to judge whether the
+live collection is meaningful. If effort is limited, Run A only. Run B must not
+become a stealth re-fit toward a nicer story.
+
+Two disciplines, both non-negotiable:
+- **No re-optimisation.** The output is *"what the frozen parameters actually
+  do,"* not *"here are better parameters."* Re-tuning on the same window is how
+  the original figure was manufactured. Any future re-fit needs a real holdout —
+  fit 2021-2024, test 2024-2026, report only the test result — and would open its
+  own sample phase.
+- **Snapshot the OHLCV data.** V1-V5 are unreproducible because
+  `data/ohlcv/` is gitignored and empty, and yfinance adjusts retroactively.
+
+Survivorship is the one item that cannot be fixed without paid point-in-time
+index membership. V6 states it as a known, unquantified limitation and retracts
+the "disproven" claim rather than pretending to have controlled for it.
+
+Priority if forced to choose one destination for effort: **Athena V6 Run A** >
+shadow module > Hermes work.
 
 Findings become knowledge, not an immediate re-tune. Correcting a parameter
 mid-sample would fragment the data; corrections belong at the V4 boundary with

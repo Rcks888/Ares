@@ -103,15 +103,23 @@ times. Adding a third scan would not obviously produce more trades.
 - 📊 Max 5 open positions, 25% cash reserve
 - 📋 Signal queue: blocked signals wait 5 days for a slot
 
-### V3 Parameters (Athena-Optimized)
-| Parameter | Value | Backtested |
+### V3 Parameters
+
+> ⚠️ **The "Backtested" column below is not evidence.** A 2026-09-22 audit found
+> look-ahead bias in Athena's divergence detector that produced ~96% of its
+> reported dollar profit. These parameters were selected against a contaminated
+> backtest with no holdout. They are a **fixed, defined starting configuration**,
+> not a validated one. The `clean_v3` live sample is the first honest measurement.
+> See Athena's README and `ROADMAP.md`.
+
+| Parameter | Value | Backtest claim *(unsupported)* |
 |-----------|-------|-----------|
 | TP (momentum) | 18% — scale out 50% | +23% avg on scaled trades |
 | TP (reversal) | 10% — scale out 50% | |
 | Trailing stop | 10% from peak | +5.66% avg P&L |
 | Trend continuation | Disabled | Was 24% win rate |
 | Max positions | 5 | Best risk/reward ratio |
-| Profit factor | 2.41 (realistic) | Backtested on 1060 trades |
+| Profit factor | ~~2.41 (realistic)~~ | **Retracted.** 2.41 was Athena V5's figure over 209 trades, not 1060; 1060 was V1's trade count. Both rest on the look-ahead defect. No profit-factor expectation is currently justified. |
 
 ### Realistic Execution Tracking
 | Item | Setting |
@@ -353,7 +361,11 @@ evidence behind each.
 - PSI memory-stall detection replacing swap occupancy as the pressure signal
 
 ### V3.0 — Athena-Optimized (Sep 6, 2026)
-- Parameters optimized via 1060+ backtested trades (Athena engine)
+> **Retracted 2026-09-22.** The optimisation described here was driven by
+> `missed_upside_pct`, computed from `df.iloc[i:i+30]['Close'].max()` — an
+> explicitly forward-looking metric. The parameter changes below were fitted to
+> recover hindsight profit on a single bull-market window with no holdout.
+- ~~Parameters optimized via 1060+ backtested trades (Athena engine)~~
 - Scale-out: sell 50% at TP, ride 50% with trailing stop
 - Trailing stop: 8% → 10% (now profitable at +5.66% avg)
 - TP: 12% → 18% (was leaving 12.54% on the table)
