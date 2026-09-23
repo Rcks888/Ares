@@ -19,6 +19,7 @@ their own row.
 | [Sep 18](#d-sep18) | 🔴 **Critical** | **Eight bugs behind one dashboard symptom** — see bug index below |
 | [Sep 19](#d-sep21) | 📊 Collection | DYN closed on trailing stop. SDGR opened. PSI reported its first real deltas |
 | [Sep 21](#d-sep21) | 🔴 **Critical** | **Scale-out gain never booked** — a winning trade made realised P&L worse. Silent bias in the ML training data |
+| [Sep 22](#d-sep22) | 🧭 **Findings** | **The backtest stopped being evidence.** Athena V1–V5 retracted for look-ahead; ~30 parity mismatches; Run A′ measures −5.58% against SPY +85.66%; momentum substitution rejected; **Run B fails and the defect proves load-bearing**. Strategy question closed. Ares untouched, `clean_v3` demoted |
 
 ### Major bug index
 
@@ -27,6 +28,9 @@ Direct links to the significant defects, newest first.
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
 | [Sep 21](#tmo-nearmiss) | 🟠 | Missing `stdev_20` silently replaced by 0.05 | TMO would have opened trade #1 of `clean_v3` at **3.2x intended risk** under a clean label. Caught before the fill |
+| [Sep 22](#live-defects) | 🔴 | Queue gates read `RSI` and `EMA_20`; indicators emit lowercase `rsi` and no `EMA_20` | Both promotion gates **inert**. Live promotion is drift-only. Third inert-gate defect in the project |
+| [Sep 22](#live-defects) | 🔴 | Swing loop stops at `len − window − 1`, live reads `len − 1` | All four divergence columns permanently **`False`** in production. Run B showed this was **load-bearing in the strategy's favour** |
+| [Sep 22](#live-defects) | 🔴 | Position size from `starting_capital` as a constant, no balance check | Unfundable orders as equity declines — 5 × $149 = $745 at $427 equity. **Only defect with a hard deadline** |
 | [Sep 21](#sample-split) | 📐 | Dataset split into pre_clean and clean_v3 | Official edge metrics now filter on `sample_phase`. Clean count is **0**, not 2 — both candidates failed the rules |
 | [Sep 21](#entry-audit) | 🔴 | Stale entry reached into `stop_loss`, not just records | **ABM carried 2.7x intended risk** while shown as +8.5% when actually -1.7%. 4 of 6 entries stale, dispersion ±9.5% |
 | [Sep 21](#b-scaleout) | 🔴 | Scale-out gain computed, printed, then discarded | **$8.06 error on DYN.** Understated every scaled-out winner — would have taught the ML that scaling out destroys returns |
@@ -1277,6 +1281,174 @@ TMO is Thermo Fisher at $658 - a low-volatility large cap. The 5% default was no
 - **First bug this project caught before the damage, not after.** Every earlier one - stale fills, lost signals, scale-out underbooking - was archaeology. This was prevention, and the difference came entirely from having queue events logged.
 - **A silent default is a third instance of the same pattern.** The discarded scale-out value, `risk_rules.json` wired to nothing, and now `or 0.05` fabricating volatility. All three produced plausible output and raised no error. Worth treating any `or <constant>` on missing input as suspect by default.
 - **Labels applied at one layer do not protect a different layer.** `sample_phase` was stamped correctly from fill context and was still wrong, because the contamination entered through the payload. A gate is only as good as the inputs it actually reads.
+
+---
+
+### Sep 22, 2026 (Tuesday)
+
+<a id="d-sep22"></a>
+#### The day the backtest stopped being evidence
+
+One audit triggered four more. By the end of it the strategy question was **closed**,
+two generations of backtest were retracted, and Ares itself was left running untouched.
+Full analysis lives in `ROADMAP.md`; this is the sequence and the numbers.
+
+##### 1. Athena's profit factor was look-ahead bias
+
+The swing detector confirmed a pivot using bars `i+1 … i+5`, then stamped the result
+back onto bar `i`:
+
+```python
+for i in range(window, len(series) - window):
+    # compares series.iloc[i] against i-j AND i+j for j = 1..5
+    result.iloc[p_curr] = True          # back-dated onto the pivot
+```
+
+So `bearish_div` was readable on a bar whose confirmation had not happened yet — and
+it was consumed as an **exit** on that same bar. Those exits were **~96% of reported
+dollar profit**. PF 2.42 was not an optimistic estimate; it was profit taken on
+information the system could not have had.
+
+**After Review: V1 through V5 are retracted.** No profit-factor expectation is
+currently justified in either direction.
+
+##### 2. Worse — the backtest had never run live's rules at all
+
+A second, independent parity audit found **~30 mismatches**, the largest being that
+the simulators **reimplemented** the entry logic rather than importing it. Every
+Athena run ever produced had measured a different system from the one on the VPS.
+
+##### 3. Run A′ — the first like-for-like measurement in this project
+
+V6 rebuilt to import live `signals.py` through an adapter, with an md5 assertion that
+**fails the run** if the two ever diverge. Live's static $149 stake, no compounding,
+live's drift-only queue promotion, and the broker's cash constraint modelled.
+
+| | Universe A (130) | Universe B (98) |
+|---|---|---|
+| Net return | **−5.58%** | **−57.32%** |
+| Max drawdown | −34.65% | −67.55% |
+| Profit factor | 0.941 | 0.537 |
+| Gross before commission | **+$273.21** | **−$269.85** |
+| Commission | −$331.00 | — |
+
+Benchmarks over the same window: **SPY +85.66%, QQQ +97.72%.**
+
+Commission consumed **121.2% of gross profit** — at $149 a position, $1 each way is
+**1.34% round-trip against a 1.26% gross edge.** But the deeper number is that
+Universe A's gross is only **~+5.5%/yr before any cost**, against the index at
+~13.4%. A **commission-free** version, on the universe most flattering to it, would
+still have lost badly to buying SPY.
+
+**2024 carried both universes (+23.70%, +37.66%) and every other year lost** — the
+signature of a momentum strategy fitted to a trend that has since stopped.
+
+##### 4. Momentum substitution test — and a gate I specified wrong
+
+Pre-registered before the result was known: *is this an expensive way to buy momentum
+exposure MTUM sells for 0.15%?*
+
+**Answer: no.** Bootstrap `P(R² > 0.5) = 0.02`, so the replica branch is rejected at
+~98%. What emerged instead was **partial momentum beta minus a cost** — β ≈0.61 on
+deployed capital, with the residual negative everywhere measurable (−7.3%/yr on A,
+−20.9% on B).
+
+> Not a momentum ETF substitute; a partial-momentum process with a negative residual
+> — **dominated by a cheaper passive blend with the same factor loading.**
+
+**The registered decision rule was mine, and it was wrong.** It gated on *"is alpha
+significantly negative?"* — and A's −7.27%/yr came in at p=0.197, so it **passed**,
+on a margin of 0.0054 from the threshold with `P(R² > 0.3) = 0.50`. A coin flip.
+
+−7.27%/yr is economically decisive and statistically invisible at n=60 with ~2.5
+trades a month. **Testing significance under low power, then reading
+failure-to-reject as "not harmful," converts noise into permission.** Three of the
+four cells passed purely because a wide CI crossed zero — and the width was the
+reason for caution, not grounds for a pass.
+
+Re-scored under an economic threshold (α ≤ −3%/yr → adverse, regardless of p):
+**all four cells ADVERSE.** Both verdicts are retained side by side in the results,
+because the record needs to show the same data reversing under a corrected rule.
+
+**Standing principle, now binding on all future pre-registration:** economic
+magnitude first, significance second, and **low power never reads as absolution.**
+
+##### 5. Run B — and the finding I would not have predicted
+
+All four divergence columns are permanently `False` in production, so live *and* every
+backtest had measured a **crippled** version of the design. Pre-registered question:
+does repairing causal divergence move the residual to non-negative?
+
+| Primary metric, Universe A | Run B | Threshold | |
+|---|---|---|---|
+| Annualised α vs MTUM | **−16.06%** | ≥ −2% | **FAIL** |
+| Net excess vs SPY, deployed | **−146.17%** | ≥ 0% | **FAIL** |
+
+α CI **[−25.43%, −5.61%]**, p=**0.0040**. Not the awkward drift to −3% that was
+flagged as the temptation case — **twice as far negative, and significant.** Gross
+P&L collapsed from **+$273.21 to +$8.27**, and Universe B moved the same way.
+
+> **The defect was load-bearing.** Divergence being permanently broken was the only
+> thing keeping Universe A near flat. The strategy *as designed* is worse than the
+> strategy *as accidentally built*. The residual belongs to the **concept**.
+
+Three properties make that a finding rather than an artifact: the changed variable
+genuinely **fired** (28 divergence entries on A, 27 on B — a null from a change that
+did nothing would be uninformative); **both universes moved the same direction**; and
+the $250.63 of `bearish_divergence` exits was **not** claimed as the mechanism, since
+counterfactual exits are unmeasured and the totals do not decompose additively.
+
+**Consequence — this changes the V4 plan.** Repair is not the same as improvement in
+a system understood only empirically. If the inert queue gates started working,
+promotion would tighten from drift-only, and there is now direct evidence that
+tightening this strategy's entry conditions destroys what little it has. **A V4 that
+fixes all three defects could perform worse than V3.1.**
+
+<a id="live-defects"></a>
+##### Three live Ares defects found along the way
+
+| # | Defect | Live consequence |
+|---|--------|------------------|
+| 1 | `tracker.py:400,403` read `latest.get('RSI', 50)` and `EMA_20` — but `add_indicators` emits lowercase `rsi` and **never emits `EMA_20` at all** | Both queue gates are **inert**. Promotion is `\|drift\| ≤ 5%` and nothing else |
+| 2 | Swing loop stops at `len − window − 1` while live reads `len − 1` | All four divergence columns permanently **`False`** in production |
+| 3 | `tracker.py:119-123` sizes from `starting_capital` as a **constant**, with **no balance check anywhere** | At $427 equity, 5 × $149 = $745 is unfundable. IBKR will reject orders Ares does not know it cannot pay for |
+
+Defects 1 and 2 stay **dead and documented** — after Run B, repairing them is not
+obviously an improvement. **Defect 3 is the exception**: a correctness bug with a real
+deadline before live capital, fixed on its own merits.
+
+This is the third instance of the **inert-gate** class in this project, after the six
+dead config keys and the `hidden_*_div` key mismatch.
+
+##### What changed in Ares: nothing
+
+| | |
+|---|---|
+| Parameters | **unchanged.** Re-tuning against these numbers is how the original figure was manufactured |
+| `clean_v3` | **not restarted.** A disappointing backtest is explicitly not grounds |
+| `clean_v3`'s role | **demoted** to *process and integrity observation* — 40–60 trades was never powered to separate +5%/yr from +15%/yr |
+| June 2027 | **review gate, not a deploy trigger.** Replaced by a written four-condition live-capital bar |
+| Strategy family | still **not** recorded as dead. B is gross-negative and A is survivorship-flattered, so *no edge established* ≠ *absence proven* |
+
+##### Closing position
+
+> **Momentum as a factor works. This active implementation subtracts from it.**
+
+A complete answer, obtained for **$0 of real capital**, roughly two years before the
+plan would have committed $1,000 to it. Also recorded: four separate overstatements I
+made during this analysis, every one leaning toward the cleaner narrative — so
+structural claims from it should be discounted until they appear in a run.
+
+##### Collection record — pending
+
+ECO closed on a **trailing stop with negative P&L**. Not a label bug: `trailing_stop =
+peak × 0.90`, and `peak` seeds at entry, so with `trailing_stop_pct` at 0.10 a trailing
+exit **cannot** clear breakeven until the trade has gained **> 11.1%**. Between roughly
+**+6.7% and +11.1%** peak, the ratchet exceeds `stop_loss` — earning the `trailing_stop`
+label — while still sitting **below entry**. Correct code, wide parameter.
+
+*Awaiting the Sep 22 evening figures and the Sep 23 scan; trade table and the
+`trailing_above_entry` labelling fix to be completed then.*
 
 ---
 
