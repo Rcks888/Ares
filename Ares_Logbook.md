@@ -20,6 +20,8 @@ their own row.
 | [Sep 19](#d-sep21) | 📊 Collection | DYN closed on trailing stop. SDGR opened. PSI reported its first real deltas |
 | [Sep 21](#d-sep21) | 🔴 **Critical** | **Scale-out gain never booked** — a winning trade made realised P&L worse. Silent bias in the ML training data |
 | [Sep 22](#d-sep22) | 🧭 **Findings** | **The backtest stopped being evidence.** Athena V1–V5 retracted for look-ahead; ~30 parity mismatches; Run A′ measures −5.58% against SPY +85.66%; momentum substitution rejected; **Run B fails and the defect proves load-bearing**. Strategy question closed. Ares untouched, `clean_v3` demoted |
+| [Sep 23](#d-sep23) | 📐 Analysis | **The 10% trail cannot protect profit below +11.1%.** ECO's `trailing_stop` loss proved to be arithmetic, not a bug. HAFN closed +3.9% from a +15.53% peak. TP has never once been reached |
+| [Sep 24](#d-sep24) | 🐛 Fixes | **Two unreachable post-mortem branches** — 4th string-mismatch defect. Giveback promoted from prose to fields and guarded. Clean-sample progress showed 0 while **4 of 5 slots** carried clean trades |
 
 ### Major bug index
 
@@ -28,6 +30,8 @@ Direct links to the significant defects, newest first.
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
 | [Sep 21](#tmo-nearmiss) | 🟠 | Missing `stdev_20` silently replaced by 0.05 | TMO would have opened trade #1 of `clean_v3` at **3.2x intended risk** under a clean label. Caught before the fill |
+| [Sep 24](#b-postmortem) | 🟠 | `_build_post_mortem` reads `rsi_extreme`; producer emits `emotional_extreme` | 2 of 5 branches unreachable; `emotional_extreme` and `mean_reversion_complete` recorded as `other` with no diagnostics. **4th string-mismatch defect** |
+| [Sep 24](#b-postmortem) | 📐 | `gave_back_pct` unguarded for trades that never rose | PINS reported +5.90% "giveback" equal to its loss. Would have inflated any average — same shape as the Sep 21 scale-out bias |
 | [Sep 22](#live-defects) | 🔴 | Queue gates read `RSI` and `EMA_20`; indicators emit lowercase `rsi` and no `EMA_20` | Both promotion gates **inert**. Live promotion is drift-only. Third inert-gate defect in the project |
 | [Sep 22](#live-defects) | 🔴 | Swing loop stops at `len − window − 1`, live reads `len − 1` | All four divergence columns permanently **`False`** in production. Run B showed this was **load-bearing in the strategy's favour** |
 | [Sep 22](#live-defects) | 🔴 | Position size from `starting_capital` as a constant, no balance check | Unfundable orders as equity declines — 5 × $149 = $745 at $427 equity. **Only defect with a hard deadline** |
@@ -1439,16 +1443,230 @@ plan would have committed $1,000 to it. Also recorded: four separate overstateme
 made during this analysis, every one leaning toward the cleaner narrative — so
 structural claims from it should be discounted until they appear in a run.
 
-##### Collection record — pending
+##### Collection record
 
-ECO closed on a **trailing stop with negative P&L**. Not a label bug: `trailing_stop =
-peak × 0.90`, and `peak` seeds at entry, so with `trailing_stop_pct` at 0.10 a trailing
-exit **cannot** clear breakeven until the trade has gained **> 11.1%**. Between roughly
-**+6.7% and +11.1%** peak, the ratchet exceeds `stop_loss` — earning the `trailing_stop`
-label — while still sitting **below entry**. Correct code, wide parameter.
+The audit dominated the day; two things moved in the portfolio.
 
-*Awaiting the Sep 22 evening figures and the Sep 23 scan; trade table and the
-`trailing_above_entry` labelling fix to be completed then.*
+| Event | Detail |
+|-------|--------|
+| **ECO closed** | −2.0%, `trailing_stop`, verdict `reversal`, peak **+8.97%** |
+| **TMO opened** | Entry $654.54, SL $634.25 — **stop distance 3.10%** |
+
+**TMO is the trade that exposed the `stdev_20` fallback on Sep 21**, and its fill
+verifies the fix. A 3.10% stop implies `stdev_20` = 1.55%. Had the `0.05` fallback
+fired, the stop would have sat at **$589.09** — a 10% stop:
+
+```
+10.00% / 3.10% = 3.2x
+```
+
+Exactly the "**3.2x intended risk**" figure from the near-miss. The near-miss trade
+opened at correct risk on a real stdev.
+
+ECO's label is examined in the Sep 23 entry.
+
+---
+
+### Sep 23, 2026 (Wednesday)
+
+<a id="d-sep23"></a>
+#### The trailing stop cannot protect profit below +11.1%
+
+**Symptom from the Sep 22 data:** ECO closed as `trailing_stop` with a **negative**
+P&L. A trailing stop that fires at a loss reads like a contradiction, so it was worth
+proving one way or the other before touching anything.
+
+**It is not a bug. It is arithmetic.**
+
+```python
+peak_price    = trade.get('peak_price', trade['entry_price'])   # seeds AT entry
+trailing_stop = peak_price * (1 - 0.10)
+effective_stop = max(trade['stop_loss'], trailing_stop)
+reason = 'trailing_stop' if trailing_stop > trade['stop_loss'] else 'stop_loss'
+```
+
+Because `peak` seeds at the entry price and the trail is **10% below peak**, the
+ratchet only clears breakeven once the trade has gained more than `1/0.90 − 1` =
+**11.1%**. That produces a dead band:
+
+| Peak vs entry | Label | Outcome |
+|---|---|---|
+| < ~+6.7% | `stop_loss` | loss — trail still below the initial stop |
+| **~+6.7% → +11.1%** | **`trailing_stop`** | **still a loss** — ratchet cleared the stop, not entry |
+| > +11.1% | `trailing_stop` | first point profit can actually be locked |
+
+ECO peaked at **+8.97%** — squarely in the dead band. The exit price confirms it to
+the cent:
+
+```
+giveback = (1 + peak) × trail_pct = 1.0897 × 0.10 = 10.90%
+exit      = +8.97% − 10.90%       = −1.93%   ≈  −2.0% reported
+```
+
+**After Review: correct code, wide parameter.** `trailing_stop_pct` at 0.10 changes
+exit prices, so it is **defer-to-V4** under the change policy. Recorded, not touched.
+
+##### The label was already right — a proposed fix withdrawn
+
+First instinct was that `trailing_stop` needed splitting so a human could tell
+profit-protection from a loss. **Wrong — the code already does this.**
+`_build_post_mortem` sets `verdict` to `partial_win` when the exit is above entry and
+`reversal` when it is not, and the dashboard prints both. ECO reads
+`(trailing_stop) reversal`; HAFN reads `(trailing_stop) partial_win`.
+
+Worth recording that the proposed fix was unnecessary and the existing code was better
+than assumed.
+
+##### HAFN closed — the same mechanism, above the band
+
+| | Peak | Exit | Giveback | Predicted |
+|---|---|---|---|---|
+| ECO | +8.97% | **−2.0%** | 10.97% | 1.0897 × 0.10 = **10.90%** |
+| HAFN | +15.53% | **+3.97%** | 11.56% | 1.1553 × 0.10 = **11.55%** |
+
+HAFN exited at `$10.19 × 0.90 = $9.17`, exactly the trail. It peaked **+15.53%**
+against a TP of **+18.03%** ($10.41) and never reached it.
+
+**Structural note, for the record only.** Three of the four closes to date are
+trailing exits and **none has ever hit TP.** `tp_momentum: 0.18` is effectively inert
+in practice; the 10% trail is the real exit mechanism, and it surrenders ~11 points
+from peak every time. Live is independently reproducing the exit-structure weakness
+Run A′ found in simulation. Changing either value alters exit prices — **V4**.
+
+##### Collection record
+
+| Event | Detail |
+|-------|--------|
+| **HAFN closed** | +3.9%, `trailing_stop`, verdict `partial_win`, peak **+15.53%** |
+| **WBD opened** | Entry $30.87, SL $29.31 — stop distance 5.05% |
+| Scan | 103 screened, **0 signals** |
+| Queue | NEOG held at `conf3`, drift 1.4% |
+| Clean sample | still **0 closed** — ECO and HAFN both *entered* before Sep 19 |
+
+Both closes are `pre_clean` because the phase is assigned on **entry** date, not exit.
+A trade must have been opened after the fixes to count, which is working as designed.
+
+---
+
+### Sep 24, 2026 (Thursday)
+
+<a id="d-sep24"></a>
+#### Two unreachable post-mortem branches, and a progress metric reading zero
+
+<a id="b-postmortem"></a>
+##### The fourth string-mismatch defect
+
+Reviewing exit handling after the ECO work, the producer and consumer disagree on a
+reason string:
+
+```python
+_close_trade(trade, today, current_price, 'emotional_extreme')   # producer
+...
+elif reason == 'rsi_extreme':                                    # consumer — never matches
+```
+
+An RSI-extreme exit therefore fell through to `verdict: 'other'` with no analysis.
+Auditing the whole function:
+
+| Branch | Status |
+|--------|--------|
+| `take_profit` | **unreachable** — no full-TP exit exists. Scale-out sells 50% then `continue`s, and the remainder only ever leaves via a stop |
+| `trailing_stop` | live |
+| `stop_loss` | live |
+| `rsi_extreme` | **unreachable** — the producer emits `emotional_extreme` |
+| `else → 'other'` | silently absorbed `emotional_extreme` **and** `mean_reversion_complete` |
+
+**Two of five branches could never fire, and two reachable exit reasons produced no
+diagnostics at all.** `mean_reversion_complete` genuinely fires when a range trade's
+RSI recovers above 70, and would have been recorded as `other`.
+
+This is the **fourth** instance of this class in the project, after the six dead config
+keys, the `hidden_*_div` key mismatch, and the inert queue gates reading `RSI`/`EMA_20`.
+The pattern is always the same: **a string written in one place and read in another,
+with no assertion tying them together.**
+
+##### Measurement buried in prose
+
+`locked` and `gave_back` were computed correctly — then interpolated into the
+`analysis` **string** and never stored as fields. The two most informative numbers
+about the exit mechanism existed only inside human-readable text.
+
+##### Clean-sample progress showed zero while four slots carried clean trades
+
+The dashboard reported *"No clean closed trades yet"* — true, but it only ever counted
+**closed** trades. By entry date against `CLEAN_FROM = Sep 19`:
+
+| Position | Entered | Phase |
+|----------|---------|-------|
+| ABM | ~Sep 10 | `pre_clean` |
+| SDGR | Sep 19 | **`clean_v3`** |
+| TMO | Sep 22 | **`clean_v3`** |
+| WBD | Sep 23 | **`clean_v3`** |
+| NEOG | Sep 24 | **`clean_v3`** |
+
+**Four of five open positions are clean sample, and nothing said so.** The sample was
+filling up while its own progress indicator read zero.
+
+##### Fixes
+
+| # | Area | Change |
+|---|------|--------|
+| 1 | `_build_post_mortem` | `rsi_extreme` → `emotional_extreme`, matching the producer |
+| 2 | `_build_post_mortem` | Added `mean_reversion_complete` and `bearish_divergence` branches. The divergence branch carries a note that it **should not fire** in production — if it ever does, the indicator layer changed |
+| 3 | `_build_post_mortem` | `locked_pct` and `gave_back_pct` promoted to top-level fields, computed once for **every** exit reason |
+| 4 | `_build_post_mortem` | `gave_back_pct` **guarded to 0.0 when `mfe_pct <= 0`** — see below |
+| 5 | `build_dashboard.py` | Clean sample now reports open positions in flight, with symbols |
+
+`take_profit` is left in place. Unlike `rsi_extreme` it is not a mismatch — it is a
+correctly-named consumer for an exit that does not currently exist, and would become
+live if a full-TP exit were ever added.
+
+##### Why the guard on fix 4 matters more than it looks
+
+Unguarded, `gave_back_pct = mfe_pct − locked_pct` gives PINS — which **never traded
+above entry** — a giveback of **+5.90%**, equal to its loss. It surrendered nothing;
+it simply lost. Any future average over that field would have been inflated by every
+no-peak loser in the sample.
+
+That is the **same shape as the Sep 21 scale-out bug**: not a crash, not a lost
+signal, but a field that reads one way and means another, quietly biasing whatever
+consumes it later. Guarded to `0.0`, which loses nothing — `mfe_pct` and `locked_pct`
+are both stored, so the raw distance is always recoverable.
+
+##### Verification
+
+Post-mortem exercised against the four real closes and three synthetic reasons:
+
+```
+ECO   trailing_stop            verdict=reversal              locked= -2.00  gave_back= +10.97
+HAFN  trailing_stop            verdict=partial_win           locked= +3.97  gave_back= +11.56
+PINS  stop_loss                verdict=signal_failed         locked= -5.90  gave_back=  +0.00
+RSIx  emotional_extreme        verdict=emotional_exit        locked=+15.00  gave_back=  +1.00
+MRc   mean_reversion_complete  verdict=target_reached        locked= +7.00  gave_back=  +2.00
+bdiv  bearish_divergence       verdict=divergence_exit_loss  locked= -2.00  gave_back=  +7.00
+junk  something_new            verdict=other                 locked= +0.00  gave_back=  +0.00
+```
+
+ECO and HAFN reproduce the hand arithmetic to two decimals. `emotional_extreme` now
+resolves instead of falling through. PINS shows the guard working. An unrecognised
+reason still degrades safely to `other`.
+
+##### Collection record
+
+| Event | Detail |
+|-------|--------|
+| **NEOG promoted** | From queue at $14.22, SL $13.75 — filled HAFN's vacated slot |
+| Scan | 103 screened, **2 signals** |
+| **SECZ** | `momentum_breakout`, `conf3`, uptrend → queued, portfolio full at 5/5 |
+| Pre-clean | 4 closed, realised **−$5.34**, W/L 2/2 |
+| Clean sample | **0 closed, 4 in flight** (SDGR, TMO, WBD, NEOG) |
+
+Queue promotion worked end to end: NEOG was held overnight at `conf3`/1.4% drift and
+promoted when a slot opened. Of the 2 signals, one was SECZ; the other was a repeat on
+a symbol already queued, which `queue_signal` discards in favour of the first entry.
+
+**System:** RAM 1006/1967 MB, swap inert (0 MB paged in 7.5h), stall 84 ms, disk 27%,
+cache 379 symbols. All green.
 
 ---
 

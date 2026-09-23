@@ -659,10 +659,20 @@ def _build_post_mortem(trade, reason):
 
     mfe_pct = round((peak - entry) / entry * 100, 2)
     entry_quality = round((signal_price - entry) / signal_price * 100, 2)
+    # Realised move at exit, and how much of the peak was surrendered. Both were
+    # previously computed inside the trailing_stop branch only and survived just
+    # as prose inside 'analysis' — present but unqueryable.
+    locked_pct = round((exit_price - entry) / entry * 100, 2)
+    # Only meaningful when the trade actually rose. Unguarded, a loser that never
+    # traded above entry reports a "giveback" equal to its loss, which would
+    # inflate any average over this field.
+    gave_back_pct = round(mfe_pct - locked_pct, 2) if mfe_pct > 0 else 0.0
 
     pm = {
         'exit_reason': reason,
         'max_favorable_excursion_pct': mfe_pct,
+        'locked_pct': locked_pct,
+        'gave_back_pct': gave_back_pct,
         'entry_quality_pct': entry_quality,
         'scaled_out_before_exit': scaled,
         'holding_days': trade.get('holding_days', 0),
@@ -679,8 +689,8 @@ def _build_post_mortem(trade, reason):
         pm['analysis'] = f"TP hit at ${tp}. Peak reached +{mfe_pct}%. Strategy worked as designed."
     elif reason == 'trailing_stop':
         if mfe_pct > 0:
-            locked = round((exit_price - entry) / entry * 100, 2)
-            gave_back = round(mfe_pct - locked, 2)
+            locked = locked_pct
+            gave_back = gave_back_pct
             pm['verdict'] = 'partial_win' if locked > 0 else 'reversal'
             pm['analysis'] = (f"Peaked +{mfe_pct}%, exited at {locked:+.2f}%. "
                               f"Gave back {gave_back}% from peak. "
@@ -703,9 +713,19 @@ def _build_post_mortem(trade, reason):
             pm['verdict'] = 'reversal_after_gain'
             pm['analysis'] = (f"Peaked +{mfe_pct}% ({distance_to_tp}% short of TP) "
                               f"then reversed to SL. Consider tighter trailing stop or partial exit earlier.")
-    elif reason == 'rsi_extreme':
+    elif reason == 'emotional_extreme':
         pm['verdict'] = 'emotional_exit'
         pm['analysis'] = f"RSI hit extreme (>90). Exited to avoid blow-off top. Peak +{mfe_pct}%."
+    elif reason == 'mean_reversion_complete':
+        pm['verdict'] = 'target_reached' if locked_pct > 0 else 'reverted_flat'
+        pm['analysis'] = (f"Mean reversion complete — RSI recovered above 70. "
+                          f"Peaked +{mfe_pct}%, exited at {locked_pct:+.2f}%.")
+    elif reason == 'bearish_divergence':
+        pm['verdict'] = 'divergence_exit' if locked_pct > 0 else 'divergence_exit_loss'
+        pm['analysis'] = (f"Bearish divergence exit at {locked_pct:+.2f}% "
+                          f"(peak +{mfe_pct}%). NOTE: divergence columns are "
+                          f"permanently False in production, so this branch should "
+                          f"not fire. If it has, the indicator layer changed.")
     else:
         pm['verdict'] = 'other'
         pm['analysis'] = f"Closed via {reason}. Peak +{mfe_pct}%."

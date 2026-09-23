@@ -251,6 +251,10 @@ def build_dashboard():
     excl_closed = sample.excluded(closed_trades)
     cm = sample.metrics(clean_closed)
 
+    # Open clean positions are the sample still in flight. Reporting only the
+    # closed count made progress look like zero while four of five slots were
+    # already carrying clean trades.
+    clean_open = sample.clean(open_trades)
     lines.append(f"\n🏛️ OFFICIAL — CLEAN SAMPLE")
     if cm is None:
         lines.append(f"  No clean closed trades yet")
@@ -263,6 +267,11 @@ def build_dashboard():
         if cm['profit_factor'] is not None:
             lines.append(f"  Profit factor: {cm['profit_factor']:.2f}")
         lines.append(f"  Progress: {cm['n']}/40 trades")
+    if clean_open:
+        syms = ", ".join(t['symbol'] for t in clean_open)
+        lines.append(f"  In flight: {len(clean_open)} open ({syms})")
+    if open_trades and not clean_open:
+        lines.append(f"  In flight: 0 of {len(open_trades)} open are clean")
     if excl_closed:
         em = sample.metrics(excl_closed)
         lines.append(f"\n📦 Pre-clean history (excluded from above)")
