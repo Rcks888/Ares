@@ -1445,16 +1445,19 @@ structural claims from it should be discounted until they appear in a run.
 
 ##### Collection record
 
-The audit dominated the day; two things moved in the portfolio.
+The audit dominated the day; one position closed.
 
 | Event | Detail |
 |-------|--------|
-| **ECO closed** | −2.0%, `trailing_stop`, verdict `reversal`, peak **+8.97%** |
-| **TMO opened** | Entry $654.54, SL $634.25 — **stop distance 3.10%** |
+| **ECO closed** | Entered Sep 15, exited Sep 22. −2.0%, `trailing_stop`, verdict `reversal`, peak **+8.97%** |
 
-**TMO is the trade that exposed the `stdev_20` fallback on Sep 21**, and its fill
-verifies the fix. A 3.10% stop implies `stdev_20` = 1.55%. Had the `0.05` fallback
-fired, the stop would have sat at **$589.09** — a 10% stop:
+##### TMO's Sep 21 fill verified in passing
+
+Not a Sep 22 event — **TMO filled on Sep 21** — but confirmed while reviewing this
+data, so recorded here. TMO is the trade that exposed the `stdev_20` fallback, and its
+fill verifies the fix: entry $654.54, SL $634.25, a **3.10% stop**, implying
+`stdev_20` = 1.55%. Had the `0.05` fallback fired, the stop would have sat at
+**$589.09** — a 10% stop:
 
 ```
 10.00% / 3.10% = 3.2x
@@ -1598,14 +1601,31 @@ The dashboard reported *"No clean closed trades yet"* — true, but it only ever
 
 | Position | Entered | Phase |
 |----------|---------|-------|
-| ABM | ~Sep 10 | `pre_clean` |
-| SDGR | Sep 19 | **`clean_v3`** |
-| TMO | Sep 22 | **`clean_v3`** |
-| WBD | Sep 23 | **`clean_v3`** |
-| NEOG | Sep 24 | **`clean_v3`** |
+| ABM | Sep 09 | `pre_clean` |
+| SDGR | **Sep 18** | `pre_clean` — **one day inside the boundary** |
+| TMO | Sep 21 | **`clean_v3`** |
+| WBD | Sep 22 | **`clean_v3`** |
+| NEOG | Sep 23 | **`clean_v3`** |
 
-**Four of five open positions are clean sample, and nothing said so.** The sample was
+**Three of five open positions are clean sample, and nothing said so.** The sample was
 filling up while its own progress indicator read zero.
+
+SDGR is the instructive one: it entered **Sep 18**, one day before
+`CLEAN_FROM = Sep 19`, so it is excluded. That is the boundary working exactly as
+intended — a fix-day fill cannot be proven post-deployment, so **unprovable is treated
+as contaminated.**
+
+<a id="correction-dates"></a>
+###### Correction — these dates were initially wrong
+
+First written by back-calculating from the dashboard's `Nd` field, assuming calendar
+days. **It is holding days — trading days only.** That put every entry one to two days
+late and wrongly promoted SDGR into the clean sample. Corrected against
+`logs/virtual_trades.json`, which is tracked in git and was already current.
+
+**The data was readable the whole time.** Inferring from a rendered dashboard when the
+underlying record was one command away is the same mistake in miniature as
+reimplementing live's rules in the backtest instead of importing them.
 
 ##### Fixes
 
@@ -1659,7 +1679,7 @@ reason still degrades safely to `other`.
 | Scan | 103 screened, **2 signals** |
 | **SECZ** | `momentum_breakout`, `conf3`, uptrend → queued, portfolio full at 5/5 |
 | Pre-clean | 4 closed, realised **−$5.34**, W/L 2/2 |
-| Clean sample | **0 closed, 4 in flight** (SDGR, TMO, WBD, NEOG) |
+| Clean sample | **0 closed, 3 in flight** (TMO, WBD, NEOG) |
 
 Queue promotion worked end to end: NEOG was held overnight at `conf3`/1.4% drift and
 promoted when a slot opened. Of the 2 signals, one was SECZ; the other was a repeat on
