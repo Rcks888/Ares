@@ -1,9 +1,3 @@
 candidates_screened:103
-signals_found:2
-signal_details:SECZ | momentum_breakout | conf3 | uptrend
-  Price: $13.00 | RSI: 70.0 | Vol: 1.92x
-  Buy: $150 (11.5 shares)
-  SL: $10.80 | TP: $15.34 (+18%) | TS: 10%|||WBD | momentum_breakout | conf3 | uptrend
-  Price: $30.83 | RSI: 74.3 | Vol: 3.22x
-  Buy: $150 (4.9 shares)
-  SL: $29.27 | TP: $36.38 (+18%) | TS: 10%
+signals_found:0
+signal_details:

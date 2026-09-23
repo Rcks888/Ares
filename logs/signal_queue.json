@@ -15,22 +15,5 @@
       "unusual_volume",
       "big_movers_up"
     ]
-  },
-  {
-    "symbol": "SECZ",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 13.5,
-    "rsi_at_signal": 68.9,
-    "stdev_20": 0.0829,
-    "vol_ratio": 2.22,
-    "date_added": "2026-09-21",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
   }
 ]
