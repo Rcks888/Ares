@@ -66,15 +66,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 0,
+      "days_tracked": 1,
       "max_days": 30,
       "peak_after_exit": 9.27,
-      "trough_after_exit": 9.17,
+      "trough_after_exit": 8.43,
       "peak_date": "2026-09-23",
-      "trough_date": "2026-09-23",
+      "trough_date": "2026-09-24",
       "missed_upside_pct": 1.2,
-      "avoided_downside_pct": -0.11,
-      "latest_price": 9.27
+      "avoided_downside_pct": 7.97,
+      "latest_price": 8.43
     }
   },
   {
@@ -132,15 +132,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 5,
+      "days_tracked": 6,
       "max_days": 30,
       "peak_after_exit": 18.09,
-      "trough_after_exit": 16.23,
+      "trough_after_exit": 15.89,
       "peak_date": "2026-09-18",
-      "trough_date": "2026-09-23",
+      "trough_date": "2026-09-24",
       "missed_upside_pct": 4.87,
-      "avoided_downside_pct": 5.91,
-      "latest_price": 16.23
+      "avoided_downside_pct": 7.88,
+      "latest_price": 15.89
     },
     "scale_out_shares": 4.36,
     "scale_out_pnl": 9.07,
@@ -193,7 +193,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 14,
+    "holding_days": 15,
     "entry_price_original": 45.86,
     "entry_true_open": 50.6,
     "entry_error_pct": -9.46,
@@ -248,7 +248,7 @@
     "holding_days": 7,
     "shadow": {
       "active": true,
-      "days_tracked": 7,
+      "days_tracked": 8,
       "max_days": 30,
       "peak_after_exit": 19.33,
       "trough_after_exit": 18.24,
@@ -256,7 +256,7 @@
       "trough_date": "2026-09-23",
       "missed_upside_pct": 2.76,
       "avoided_downside_pct": 3.03,
-      "latest_price": 18.24
+      "latest_price": 18.64
     },
     "post_mortem": {
       "exit_reason": "stop_loss",
@@ -347,7 +347,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 1,
+      "days_tracked": 2,
       "max_days": 30,
       "peak_after_exit": 78.25,
       "trough_after_exit": 77.54,
@@ -396,7 +396,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 5,
+    "holding_days": 6,
     "entry_error_pct": 0.0,
     "sample_phase": "pre_clean",
     "contaminated": true,
@@ -449,7 +449,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 2
+    "holding_days": 3
   },
   {
     "symbol": "WBD",
@@ -497,7 +497,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 1
+    "holding_days": 2
   },
   {
     "symbol": "NEOG",
@@ -545,6 +545,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 0
+    "holding_days": 1
   }
 ]
