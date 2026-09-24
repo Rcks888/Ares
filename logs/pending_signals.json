@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "symbol": "SECZ",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-09-24",
+    "price": 16.53,
+    "rsi": 76.7,
+    "vol_ratio": 2.52,
+    "stdev_20": 0.089,
+    "strength": "medium",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "from_queue": false
+  }
+]
