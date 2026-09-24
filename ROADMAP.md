@@ -1534,11 +1534,102 @@ is deployed in June 2027.**
 
 ## Notes
 - Paper trade minimum 3 months before going live
-- Need 50+ closed trades for statistically meaningful data
+- ~~Need 50+ closed trades for statistically meaningful data~~ — **false, and
+  quantified on 2026-09-24.** At n=45 the 95% CI half-width on mean per-trade is
+  ±3.16%, wider than the +3.0% needed to match SPY. 50 trades cannot distinguish an
+  edge from a loss. See "how the `clean_v3` live sample may be read" below; a validity
+  claim needs n ≥ 100
 - Shadow tracking data is critical for TP optimization
 - Start real money only when profit factor > 1.3 consistently
 - ML model only useful with sufficient data — never trust models trained on <50 trades
 - Backtest results ≠ live results (slippage, timing, emotions) — use as guidance only
+
+## PRE-REGISTERED — how the `clean_v3` live sample may be read
+
+**Written 2026-09-24, before the first `clean_v3` trade closed.** Registered in
+advance for the same reason the alpha gate was: the reading rule must exist before the
+number, or a lucky mean gets read as vindication.
+
+### The arithmetic, from Run A′'s 145 trades
+
+```
+mean per-trade  −0.27%      SD per-trade  10.82%
+```
+
+| Closed trades | 95% CI half-width on mean per-trade |
+|---|---|
+| **45** | **±3.16%** |
+| 60 | ±2.74% |
+| 100 | ±2.12% |
+| 449 | ±1.00% |
+
+Each trade deploys $149 of $1,000 = 14.9% of capital, at ~29.5 trades/yr. To match
+SPY at ~13.4%/yr:
+
+```
+29.5 × 0.149 × x = 13.4    ->    x ≈ +3.0% per trade
+```
+
+### The consequence, stated plainly
+
+**At 45 trades the confidence interval (±3.16%) is wider than the entire effect being
+tested (+3.0%).** A observed mean of +1% yields roughly [−2.2%, +4.2%], an interval
+containing both "loses money steadily" and "beats SPY."
+
+The sample is inconclusive **by construction**, and this was knowable before any trade
+closed. The 40-60 target was never a statistical threshold; it was a round number.
+
+### What may and may not be concluded
+
+| At n ≈ 45-60 | Available? |
+|---|---|
+| Implementation sound, or implementation broken | **YES.** A live mean of −8% against a sim mean of −0.3% is a bug and will show |
+| Exit-reason mix matches the sim | **YES.** Categorical splits converge far faster than means |
+| Operational failure — fills, sizing, crashes | **YES** |
+| **Strategy has an edge** | **NO** |
+| **Strategy beats SPY** | **NO** |
+
+**Binding rule:** a positive mean whose CI includes zero is **not** evidence of edge
+and must not be recorded as one. Any claim about strategy validity requires
+**n ≥ 100** (≈3.5 years at the current rate). Report the CI every time the mean is
+reported; a mean without its interval is not a result.
+
+### The one genuinely unmeasured difference
+
+Live screens Finviz dynamically; every backtest used a fixed list. That screen has
+never been measured and cannot be with free data — there is no point-in-time Finviz
+history. Live is the only place it is observable.
+
+But n=45 cannot see it either, and the prior is not neutral: Universe A contained
+hindsight winners (NVDA, PLTR, SMCI), so a blind live screen more plausibly does
+**worse**. This is a reason to keep collecting, not a reason to expect good news.
+
+## V4 candidates from the FriesTrader ablation
+
+The ablation (Athena `3b6469b`, ADVERSE on both arms) found that system's rules have
+no edge, but two of them are better-designed than Ares' and are worth **measuring** as
+V4 candidates — against the bar Run B failed, not assumed beneficial:
+
+1. **Trail engages only after the first take-profit tier.** FriesTrader references the
+   stop to `average_cost` until +15% is reached, then switches to a trailing high. It
+   is therefore structurally incapable of trailing a position into a loss. Ares seeds
+   `peak_price` at `entry_price` on day one, which is the direct cause of the
+   +6.7% → +11.1% dead band where `trailing_stop` books a loss.
+2. **Tiered partial take-profit** at +15/+30/+50%, 25% each, versus Ares' single 50%
+   scale at +18% that has never once fired in live.
+
+Both change the trade population, so both are **V4 boundary** work and neither may be
+applied mid-`clean_v3`.
+
+## Athena's remaining parity gap — highest-value audit available
+
+Entry predicates are imported from live `signals.py` under an md5 assertion. **Exit
+logic is not**: `portfolio_sim_v6.py:187 _decide_exit()` is a reimplementation of
+`tracker.py`. Every Ares exit that has ever fired is a stop or a trail, so the one
+part of the sim not under parity is the part deciding every outcome — the same shape
+as the Run A → Run A′ failure, still open in the codebase.
+
+Closing it costs **zero** live sample and should precede any V4 measurement.
 
 ## De-duplicate the launcher scripts
 
