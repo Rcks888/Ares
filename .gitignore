@@ -11,6 +11,12 @@ config.ini
 # Local-only docs and notes
 docs/
 notes/
+
+# Rendered diagram output — regenerate from the .md source with md-to-doc.
+# The source is tracked; these are build artifacts.
+diagrams/*.html
+diagrams/*.pdf
+diagrams/*.svg
 *.local.md
 PROPOSAL_*.md
 
