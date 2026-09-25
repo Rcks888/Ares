@@ -1917,10 +1917,65 @@ trades gave back everything they gained" but: **22.1% of Universe A trades achie
 a favourable excursion of at least 5% and still closed at a net loss, surrendering
 a mean 13.24pp from peak at a mean −5.78%.**
 
-**Finding in Policy A's favour, which the aggregate hid:** no trade reaching the
-+18% tier closed at a net loss, in either universe. The 50% scale-out is protective
-and the entire giveback problem lives in the sub-tier population. Any replacement
-policy must preserve that property.
+**Finding in Policy A's favour, which the aggregate hid — stated on the correct
+basis.** The scale-out threshold is **not** uniform: `take_profit` is
+`tp_momentum` +18% for momentum but `tp_reversal` **+10%** for mean-reversion. So
+"reached the tier" and "MFE >= 18%" are different populations and must be reported
+separately.
+
+| Basis | Universe A | Universe B |
+|---|---|---|
+| MFE >= 18% and net loss | 0 | 0 |
+| **Tier executed** and net loss | **0** | **2** |
+
+The two Universe B violations are `TOST` (−0.94%) and `CLF` (−0.05%), both
+mean-reversion trades that scaled out at +10%. Scaling 50% out at +10% locks only
+about +5% on half the position; a third commission plus the remainder falling to
+the stop can erase it.
+
+Corrected conclusion: **the +18% momentum tier is protective — 0 violations in 54
+tier executions across both universes. The +10% mean-reversion tier is not — 2
+violations in 17.** The giveback problem is concentrated below the momentum tier,
+and the mean-reversion tier is itself marginal. Any replacement policy must
+preserve the momentum-tier property; it has less to preserve at +10%.
+
+#### Trigger-count reconciliation
+
+Registered `tier_exec` counts (41 A / 30 B) and measured `mfe_pct >= 18%` counts
+(37 A / 27 B) differ by 4 and 3. Fully reconciled — every mismatch is a
+mean-reversion trade that executed its own +10% tier without ever reaching +18%:
+
+- Universe A: `GILD` (MFE 12.58%), `AMT` (12.03%), `ABBV` (12.58%), `LIN` (17.39%)
+- Universe B: `FVRR` (17.80%), `TOST` (11.47%), `CLF` (13.11%)
+
+Canonical definition going forward: **a tier hit is an executed scale-out event
+recorded by the exit module**, not an inference from rounded MFE. Both counts are
+reported. Two invariants tested rather than assumed, and both PASS in both
+universes:
+
+```
+tier_executed  =>  mfe_pct >= that trade's own TP threshold
+mfe_pct >= TP  =>  tier_executed          (holds bidirectionally, because
+                                           scale-out is evaluated first and
+                                           short-circuits the exit chain)
+```
+
+#### Where B and D actually intervene
+
+| Peak region | Policy A | Policy B | Policy D |
+|---|---|---|---|
+| below +11.2% | trail active | **trail inactive** | **trail inactive** |
+| +11.2% to below +18% | trail active | **trail inactive** | trail active |
+| +18% and above | scale-out + trail | scale-out + trail | scale-out + trail |
+
+**B is the broader intervention**, suppressing the trail across the entire
+sub-tier population; **D suppresses it only below gross breakeven**, where the
+trail cannot lock a profit anyway. B therefore carries more exposure to giving up
+Policy A's higher protective exit, which the affected counts confirm: B touches
+34 (A) and 44 (B) trades against D's 24 and 29.
+
+D tests the narrow question — does suppressing a structurally loss-making trail
+help? B tests the broad one.
 
 **Stage 1 - isolated paired replay** on the original 145 (A) and 148 (B)
 entries. Primary statistic `delta_i = return_candidate_i - return_A_i`.
