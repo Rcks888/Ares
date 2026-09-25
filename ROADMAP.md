@@ -1672,8 +1672,15 @@ This constraint is derived from data, before results:
 
 | | dev n (<2024-09) | val n | +18% triggers in val | Support band |
 |---|---|---|---|---|
-| Universe A | 85 | 60 | 16 | 10-19 = exploratory only |
+| Universe A | 85 | 60 | **14** | 10-19 = exploratory only |
 | Universe B | 107 | 41 | 10 | 10-19 = exploratory only |
+
+**Corrected 2026-09-25**, once instrumentation emitted real `mfe_pct`. Universe A
+was first recorded as 16 using `scaled_out` as a "+18% reached" proxy. That proxy
+is wrong: `take_profit` is `tp_momentum` 0.18 for momentum strategies but
+`tp_reversal` **0.10** for mean-reversion, so the 41 Universe A tier hits mix two
+thresholds. The registered conclusion strengthens — fewer qualifying triggers, not
+more. Universe B's 10 was correct.
 
 Neither universe confirms even the *existing* +18% mechanism in the untouched
 period. The +30% and +50% mechanisms necessarily have equal or lower support.
@@ -1732,8 +1739,13 @@ That was true of the five-trade live history available at review, where maximum
 observed MFE was +15.53% (HAFN). **It does not generalize to the audited
 backtest populations.** In Run A' the +18% level was reached by:
 
-- **41 of 145** Universe A trades (28.3%)
-- **30 of 148** Universe B trades (20.3%)
+- **37 of 145** Universe A trades (25.5%)
+- **27 of 148** Universe B trades (18.2%)
+
+(First recorded as 41 and 30. Those were *tier hits*, which include mean-reversion
+positions scaling out at `tp_reversal` +10%. Measured `mfe_pct >= 18%` gives 37
+and 27. The retraction's substance is unaffected — the +18% level is reached
+routinely — but the figures were conflated.)
 
 Consequences:
 1. Policy A's +18% tier is **not** structurally inert in historical replay.
@@ -1812,13 +1824,26 @@ Four frozen policies, no grid search:
 
 - **A (control)** 50% scale-out at +18%, 10% trail from entry onward
 - **B** trail activates only after first take-profit tier
-- **C** tiers 25% at +15%, +30%, +50%; remainder on activated trail
+- **C** tiers 25% at +15%, +30%, +50%; remainder on activated trail.
+  **Registered as having an unsupported top tier.** Measured on the full five-year
+  sample, +30% is reached by 15 (A) and 11 (B) trades and +50% by **4 and 4** —
+  below the 10-trigger "unsupported mechanism" floor in every period, including
+  development. A three-tier policy whose top tier fires four times in five years
+  cannot be evaluated; it will be replayed for completeness but no result from its
+  +30% or +50% tiers may be reported as evidence, and it is not eligible for
+  candidate status on the strength of those tiers.
 - **D** current 50% scale-out at +18%; the 10% trail activates only once peak
   reaches **+11.2%**, with the initial stop controlling before activation.
   The threshold is derived, not chosen: `trail = peak x 0.90 >= entry` requires
   `peak >= +11.11%`, the minimum peak at which the trail can lock any gross
   profit. Activating there eliminates the documented dead band exactly. The
   value will not be adjusted from replay results.
+
+**Substantive comparisons are B and D only.** A is the control and C's
+distinguishing tiers have no support, so the replay's real question is narrow:
+does delaying trail activation — either until the first tier (B) or until the
+trail can lock a gross profit at +11.2% (D) — improve on a trail that is live from
+entry (A)?
 
 **Stage 1 - isolated paired replay** on the original 145 (A) and 148 (B)
 entries. Primary statistic `delta_i = return_candidate_i - return_A_i`.
