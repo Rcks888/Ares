@@ -95,6 +95,11 @@ def update_peak(pos, price, params):
     seeds at entry_price so the trail is live from entry under Policy A.
     """
     changed = False
+    if pos.get("tiers_hit", 0) > 0:
+        prev = pos.get("peak_after_first_tier")
+        if prev is None or price > prev:
+            pos["peak_after_first_tier"] = price
+            changed = True
     if price > pos["peak_price"]:
         pos["peak_price"] = price
         pos["peak_date"] = pos.get("_bar_date")
@@ -113,6 +118,26 @@ def update_peak(pos, price, params):
         pos["trough_date"] = pos.get("_bar_date")
         changed = True
     return changed
+
+
+def record_tier_fill(pos, fill_price, fill_date=None):
+    """Book a take-profit tier fill. Mutates pos.
+
+    Freezes peak_before_first_tier at the first tier so a tiered policy's exit
+    quality can be measured against the peak it actually had while fully sized.
+    Without this, comparing the surviving remainder against the full-position peak
+    would misstate giveback for Policy C.
+
+    Callers own proceeds, shares and commissions; this only tracks tier state.
+    """
+    first = pos.get("tiers_hit", 0) == 0
+    pos["tiers_hit"] = pos.get("tiers_hit", 0) + 1
+    pos["scaled_out"] = True
+    if first:
+        pos["peak_before_first_tier"] = pos.get("peak_price", pos["entry_price"])
+        pos["peak_after_first_tier"] = fill_price
+        pos["first_tier_date"] = fill_date
+    return pos
 
 
 def effective_stop(pos, params):
@@ -217,19 +242,28 @@ def instrument_close(pos, exit_price, gross_price_return_pct, net_return_pct):
     includes commissions. A single metric would make a policy with identical exit
     prices but more partial-exit commissions look like it had worse trailing
     behaviour.
+
+    Denominator note, deliberate and not an oversight: callers pass
+    gross_price_return_pct on the price basis (original_shares * entry_price) and
+    net_return_pct on capital actually committed (which includes the entry
+    commission). The two givebacks therefore differ by slightly more than pure
+    friction. That is intended - "what the account retained" is measured against
+    what the account put in.
     """
     entry = pos["entry_price"]
-    mfe_pct = (pos["peak_price"] - entry) / entry * 100
-    mae_pct = (pos["trough_price"] - entry) / entry * 100
+    peak = pos.get("peak_price", entry)
+    trough = pos.get("trough_price", entry)
+    mfe_pct = (peak - entry) / entry * 100
+    mae_pct = (trough - entry) / entry * 100
     return {
         "mfe_pct": round(mfe_pct, 4),
         "mae_pct": round(mae_pct, 4),
-        "peak_price": round(pos["peak_price"], 6),
+        "peak_price": round(peak, 6),
         "peak_date": pos.get("peak_date"),
-        "trough_price": round(pos["trough_price"], 6),
+        "trough_price": round(trough, 6),
         "trough_date": pos.get("trough_date"),
         "mfe_before_first_tier_pct": round(
-            (pos["peak_before_first_tier"] - entry) / entry * 100, 4
+            (pos.get("peak_before_first_tier", peak) - entry) / entry * 100, 4
         ),
         "mfe_after_first_tier_pct": (
             None if pos.get("peak_after_first_tier") is None
@@ -239,7 +273,9 @@ def instrument_close(pos, exit_price, gross_price_return_pct, net_return_pct):
         "economic_giveback_pct": round(max(0.0, mfe_pct - net_return_pct), 4),
         "trail_activated": pos.get("trail_activated", False),
         "trail_activation_date": pos.get("trail_activation_date"),
-        "highest_trailing_stop": round(pos.get("highest_trailing_stop", 0.0), 6),
+        "highest_trailing_stop": round(
+            pos.get("highest_trailing_stop", pos.get("trailing_stop", 0.0)), 6
+        ),
         "tiers_hit": pos.get("tiers_hit", 0),
         "time_stop_bound": pos.get("time_stop_bound", False),
         "exit_policy_version": EXIT_POLICY_MODULE_VERSION,
