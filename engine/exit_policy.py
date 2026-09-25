@@ -160,9 +160,17 @@ def decide_scale_out(pos, price, params):
     if hit >= len(tiers):
         return None
     gain_pct, fraction = tiers[hit]
-    # Policy A preserves tracker.py's absolute take_profit field when present, so
-    # the module reproduces stored values rather than recomputing from entry.
-    if pos.get("take_profit") and hit == 0 and params.get("exit_policy", "A") == "A":
+    # Preserve tracker.py's absolute take_profit field when present, so the module
+    # reproduces stored values rather than recomputing from entry.
+    #
+    # This MUST NOT be gated on exit_policy. A/B/D share an identical tiers list and
+    # differ ONLY in trail_activation; gating it on == "A" made B and D recompute
+    # from tiers[0] = 0.18, which silently moved the mean_reversion take-profit from
+    # +10% (tp_reversal) to +18% and confounded the trail experiment with an
+    # unregistered second intervention. Found by trace_mismatch.py on GILD
+    # 2021-11-01 (threshold 59.73 -> 64.10, scale-out lost) and AMT 2021-11-16
+    # (248.02 -> 266.07). Policy A's branch is unchanged, so its parity holds.
+    if pos.get("take_profit") and hit == 0:
         threshold = pos["take_profit"]
     else:
         threshold = pos["entry_price"] * (1 + gain_pct)
