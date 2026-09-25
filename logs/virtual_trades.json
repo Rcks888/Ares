@@ -140,7 +140,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 4.87,
       "avoided_downside_pct": 7.88,
-      "latest_price": 16.74
+      "latest_price": 16.03
     },
     "scale_out_shares": 4.36,
     "scale_out_pnl": 9.07,
@@ -355,7 +355,7 @@
       "trough_date": "2026-09-22",
       "missed_upside_pct": 0.1,
       "avoided_downside_pct": 0.81,
-      "latest_price": 78.22
+      "latest_price": 77.9
     }
   },
   {
@@ -566,13 +566,13 @@
       "active": true,
       "days_tracked": 1,
       "max_days": 30,
-      "peak_after_exit": 13.75,
+      "peak_after_exit": 13.76,
       "trough_after_exit": 13.66,
-      "peak_date": "2026-09-24",
+      "peak_date": "2026-09-25",
       "trough_date": "2026-09-24",
-      "missed_upside_pct": 0.07,
+      "missed_upside_pct": 0.15,
       "avoided_downside_pct": 0.58,
-      "latest_price": 13.66
+      "latest_price": 13.76
     }
   },
   {
