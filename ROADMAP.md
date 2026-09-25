@@ -1839,11 +1839,88 @@ Four frozen policies, no grid search:
   profit. Activating there eliminates the documented dead band exactly. The
   value will not be adjusted from replay results.
 
-**Substantive comparisons are B and D only.** A is the control and C's
-distinguishing tiers have no support, so the replay's real question is narrow:
-does delaying trail activation — either until the first tier (B) or until the
-trail can lock a gross profit at +11.2% (D) — improve on a trail that is live from
-entry (A)?
+#### AMENDMENT 2026-09-25 — Policy C removed from the replay
+
+Recorded **before any B, C or D replay code or result exists.** Policy A
+instrumentation was complete; no alternative-policy outcome was known.
+
+Policy C is **removed from implementation**, not disproven. Grounds:
+
+1. Its distinguishing +30% and +50% tiers structurally fail the already-registered
+   20-trigger support threshold in every period and both universes. Full five-year
+   sample: +30% reached by 15 (A) and 11 (B), +50% by **4 and 4**. Development
+   period alone: +30% by 7 and 8, +50% by 2 and 3. No future confirmation period
+   drawn from this universe can reach 20.
+2. Implementing C requires generalising Athena's scale-out accounting from one
+   tranche to N. `scale_out_price`, `scale_out_shares` and `scale_out_proceeds`
+   are single-valued, the fill guard is `not pos['scaled_out']`, and six of the 33
+   validation checks cover exactly that path — scale-out proceeds net of
+   commission, audit-field persistence, per-trade pnl reconciliation, and the
+   realised-plus-unrealised identity. Rewriting the accounting core to replay a
+   policy that cannot reach candidate status would also put Policy A's
+   byte-identity guarantee at risk, and that guarantee is what makes Block A valid.
+
+C is **not reclassified as disproven or unpromising.** Its tier structure remains
+untested. Should a materially larger sample ever exist, C returns as a registered
+candidate with no prejudice from this amendment.
+
+**Retained: A (control), B, D.** The replay question is therefore narrow: does
+delaying trail activation — until the first tier (B), or until the trail can lock
+a gross profit at +11.2% (D) — improve on a trail live from entry (A)?
+
+#### Affected-subset recovery hurdle
+
+Not a feasibility bound, and explicitly not an upper limit on what B or D can
+achieve. Policy A's recorded peaks are **truncated at A's exit**, so under B or D
+the same trades run longer and may exceed the old peak, reach the +18% tier, fall
+to the initial stop, or bind the 170-day limit. This states only what B and D
+**must** deliver on the trades they can alter to clear the +0.50pp isolated bar.
+
+| Policy | Trades alterable (A) | Their mean P&L | Losses | Mean peak at A's exit | Required per affected trade |
+|---|---|---|---|---|---|
+| B — activate at first tier | 34 / 145 | −6.06% | 31/34 | +8.98% | **+2.13pp** |
+| D — activate at peak +11.2% | 24 / 145 | −7.67% | **24/24** | +7.00% | **+3.02pp** |
+
+Universe B: 44 and 29 trades, requiring +1.68pp and +2.55pp.
+
+Arithmetic: `0.50pp x 145 / 24 = 3.02pp`.
+
+**Registered prior, before replay.** Because `effective_stop = max(initial_stop,
+trailing_stop)`, a trade labelled `trailing_stop` exited *above* its initial stop.
+Suppressing the trail therefore removes a higher protective exit and exposes the
+trade to the lower one. B and D exchange a known better exit now for a possible
+recovery later, on subsets that had already stopped running at +7–9% peaks. B and
+D are therefore **expected** to fail the bar. This is a prior, not a result: a
+small number of these trades could recover sharply after crossing the old trail
+level, and only the replay distinguishes a plausible structural argument from an
+observed counterfactual. The prior will not be revised after seeing which trades
+recovered.
+
+#### Policy A giveback, stratified
+
+"Profitable at peak" counts every favourable tick, including excursions that never
+cleared friction — live NEOG peaked at +0.03%. Stratified by economic
+significance (round-trip cost 1.34% at $149):
+
+| Stratum | Universe A | Universe B |
+|---|---|---|
+| MFE > 0 and net loss | 72 (49.7%) | 66 (44.6%) |
+| MFE ≥ 1.34% (cost) and net loss | 57 (39.3%) | 61 (41.2%) |
+| MFE ≥ 3% and net loss | 49 (33.8%) | 47 (31.8%) |
+| **MFE ≥ 5% and net loss** | **32 (22.1%)** | **36 (24.3%)** |
+| MFE ≥ 10% and net loss | 9 (6.2%) | 13 (8.8%) |
+| **MFE ≥ 18% (tier) and net loss** | **0 (0.0%)** | **0 (0.0%)** |
+
+Of Universe A's 72 MFE>0 losses, **15 never cleared round-trip cost** and are noise
+rather than surrendered profit. The defensible statement is therefore not "half the
+trades gave back everything they gained" but: **22.1% of Universe A trades achieved
+a favourable excursion of at least 5% and still closed at a net loss, surrendering
+a mean 13.24pp from peak at a mean −5.78%.**
+
+**Finding in Policy A's favour, which the aggregate hid:** no trade reaching the
++18% tier closed at a net loss, in either universe. The 50% scale-out is protective
+and the entire giveback problem lives in the sub-tier population. Any replacement
+policy must preserve that property.
 
 **Stage 1 - isolated paired replay** on the original 145 (A) and 148 (B)
 entries. Primary statistic `delta_i = return_candidate_i - return_A_i`.
