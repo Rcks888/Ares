@@ -551,7 +551,7 @@
       "exit_reason": "stop_loss",
       "max_favorable_excursion_pct": 0.03,
       "locked_pct": -3.38,
-      "gave_back_pct": 3.41,
+      "gave_back_pct": 0.0,
       "entry_quality_pct": -3.49,
       "scaled_out_before_exit": false,
       "holding_days": 1,

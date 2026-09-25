@@ -1,4 +1,6 @@
 import json
+import math
+import statistics
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -263,10 +265,30 @@ def build_dashboard():
         lines.append(f"  Closed: {cm['n']} (W: {cm['wins']}/{cm['n']}, "
                      f"{cm['win_rate']:.0f}%)")
         lines.append(f"  Realized: ${cm['realized']:+.2f}")
-        lines.append(f"  Expectancy: ${cm['expectancy']:+.2f}/trade")
-        if cm['profit_factor'] is not None:
-            lines.append(f"  Profit factor: {cm['profit_factor']:.2f}")
-        lines.append(f"  Progress: {cm['n']}/40 trades")
+        # ROADMAP 3bffc4d: a mean without its interval is not a result. At n=1 the
+        # point estimates are not information -- profit factor 0.00 reads as
+        # catastrophic and means nothing. Withhold rather than mislead, and never
+        # print a mean without the interval beside it.
+        if cm['n'] < 2:
+            lines.append(f"  Expectancy / profit factor withheld — n={cm['n']}, "
+                         f"no interval computable")
+        else:
+            lines.append(f"  Expectancy: ${cm['expectancy']:+.2f}/trade")
+            if cm['profit_factor'] is not None:
+                lines.append(f"  Profit factor: {cm['profit_factor']:.2f}")
+            nets = [t['pnl_after_costs'] / t['position_size'] * 100
+                    for t in clean_closed
+                    if t.get('pnl_after_costs') is not None and t.get('position_size')]
+            if len(nets) >= 2:
+                mean = sum(nets) / len(nets)
+                half = 1.96 * statistics.stdev(nets) / math.sqrt(len(nets))
+                lines.append(f"  Net/trade: {mean:+.2f}% ± {half:.2f}% (95% CI)")
+                if mean - half <= 0 <= mean + half:
+                    lines.append(f"  CI includes zero — not evidence of edge")
+        # 40 was never a statistical threshold; at n=45 the CI half-width is
+        # ±3.16% against the +3.0% needed to match SPY. See ROADMAP.
+        lines.append(f"  Logged: {cm['n']}/40 — a log target, not a validity "
+                     f"threshold (needs n≥100)")
     if clean_open:
         syms = ", ".join(t['symbol'] for t in clean_open)
         lines.append(f"  In flight: {len(clean_open)} open ({syms})")

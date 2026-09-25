@@ -647,6 +647,12 @@ def open_trade(signal, from_queue=False):
     save_pending(pending)
     return 'pending'
 
+# Minimum favourable excursion before "gave back" describes anything real. Below
+# this a trade never established a profit to surrender, so giveback is 0.0 rather
+# than the trade's loss. 1.0% is above round-trip friction (~1.34% commission on a
+# $149 stake is itself larger), so anything under it was never a live gain.
+GIVEBACK_MIN_MFE_PCT = 1.0
+
 def _build_post_mortem(trade, reason):
     """Analyze why a trade ended the way it did. Auto-generated diagnostics."""
     entry = trade['entry_price']
@@ -666,7 +672,15 @@ def _build_post_mortem(trade, reason):
     # Only meaningful when the trade actually rose. Unguarded, a loser that never
     # traded above entry reports a "giveback" equal to its loss, which would
     # inflate any average over this field.
-    gave_back_pct = round(mfe_pct - locked_pct, 2) if mfe_pct > 0 else 0.0
+    #
+    # The first guard tested mfe_pct > 0, which was a SIGN test where an economic
+    # one was needed. NEOG (2026-09-23 -> 09-24) peaked at +0.03% -- 0.4 cents on a
+    # $14.22 stock, never meaningfully in profit -- passed that guard and reported
+    # gave_back_pct 3.41, relabelling its entire loss as surrendered gains. Same
+    # error class as the original alpha gate: a boundary tested where a magnitude
+    # was meant. A peak below GIVEBACK_MIN_MFE_PCT is treated as no peak at all.
+    gave_back_pct = (round(mfe_pct - locked_pct, 2)
+                     if mfe_pct >= GIVEBACK_MIN_MFE_PCT else 0.0)
 
     pm = {
         'exit_reason': reason,
