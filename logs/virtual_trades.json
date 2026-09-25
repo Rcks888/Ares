@@ -66,7 +66,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 1,
+      "days_tracked": 2,
       "max_days": 30,
       "peak_after_exit": 9.27,
       "trough_after_exit": 8.43,
@@ -132,7 +132,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 6,
+      "days_tracked": 7,
       "max_days": 30,
       "peak_after_exit": 18.09,
       "trough_after_exit": 15.89,
@@ -140,7 +140,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 4.87,
       "avoided_downside_pct": 7.88,
-      "latest_price": 15.89
+      "latest_price": 16.74
     },
     "scale_out_shares": 4.36,
     "scale_out_pnl": 9.07,
@@ -193,7 +193,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 15,
+    "holding_days": 16,
     "entry_price_original": 45.86,
     "entry_true_open": 50.6,
     "entry_error_pct": -9.46,
@@ -248,7 +248,7 @@
     "holding_days": 7,
     "shadow": {
       "active": true,
-      "days_tracked": 8,
+      "days_tracked": 9,
       "max_days": 30,
       "peak_after_exit": 19.33,
       "trough_after_exit": 18.24,
@@ -256,7 +256,7 @@
       "trough_date": "2026-09-23",
       "missed_upside_pct": 2.76,
       "avoided_downside_pct": 3.03,
-      "latest_price": 18.64
+      "latest_price": 18.82
     },
     "post_mortem": {
       "exit_reason": "stop_loss",
@@ -347,7 +347,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 2,
+      "days_tracked": 3,
       "max_days": 30,
       "peak_after_exit": 78.25,
       "trough_after_exit": 77.54,
@@ -396,7 +396,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 6,
+    "holding_days": 7,
     "entry_error_pct": 0.0,
     "sample_phase": "pre_clean",
     "contaminated": true,
@@ -449,7 +449,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 3
+    "holding_days": 4
   },
   {
     "symbol": "WBD",
@@ -497,7 +497,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 2
+    "holding_days": 3
   },
   {
     "symbol": "NEOG",
@@ -564,7 +564,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 0,
+      "days_tracked": 1,
       "max_days": 30,
       "peak_after_exit": 13.75,
       "trough_after_exit": 13.66,
@@ -574,5 +574,53 @@
       "avoided_downside_pct": 0.58,
       "latest_price": 13.66
     }
+  },
+  {
+    "symbol": "SECZ",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "signal_date": "2026-09-24",
+    "signal_price": 16.53,
+    "entry_date": "2026-09-25",
+    "entry_price": 14.68,
+    "entry_slippage": 0.0147,
+    "entry_commission": 1.0,
+    "shares": 10.15,
+    "original_shares": 10.15,
+    "position_size": 149.0,
+    "stop_loss": 12.07,
+    "take_profit": 17.33,
+    "trailing_stop": 12.07,
+    "peak_price": 14.684670076370235,
+    "rsi_at_entry": 76.7,
+    "vol_at_entry": 2.52,
+    "stdev_20": 0.089,
+    "stdev_fallback": false,
+    "strength": "medium",
+    "scaled_out": false,
+    "scale_out_price": null,
+    "scale_out_date": null,
+    "from_queue": false,
+    "sample_phase": "clean_v3",
+    "contaminated": false,
+    "contamination_reasons": [],
+    "fill_source": "scheduled",
+    "fill_detect": "env",
+    "fill_run_ts": "2026-09-25T13:30:48",
+    "status": "open",
+    "exit_date": null,
+    "exit_price": null,
+    "exit_reason": null,
+    "exit_slippage": null,
+    "exit_commission": null,
+    "total_commission": 1.0,
+    "pnl": null,
+    "pnl_pct": null,
+    "pnl_after_costs": null,
+    "version": "3.0",
+    "holding_days": 0
   }
 ]

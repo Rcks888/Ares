@@ -1,1 +1,67 @@
-[]
+[
+  {
+    "symbol": "TWST",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 184.03,
+    "rsi_at_signal": 73.9,
+    "stdev_20": 0.0541,
+    "vol_ratio": 1.92,
+    "date_added": "2026-09-24",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-09-25T13:31:54",
+    "drift_pct": -0.45,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 183.2
+  },
+  {
+    "symbol": "AMP",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 485.15,
+    "rsi_at_signal": 28.1,
+    "stdev_20": 0.0194,
+    "vol_ratio": 1.76,
+    "date_added": "2026-09-24",
+    "screens": [
+      "oversold_bounce",
+      "big_movers_down"
+    ],
+    "checked_at": "2026-09-25T13:31:55",
+    "drift_pct": 0.89,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 489.48
+  },
+  {
+    "symbol": "ADT",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 2,
+    "price_at_signal": 6.36,
+    "rsi_at_signal": 29.6,
+    "stdev_20": 0.0165,
+    "vol_ratio": 1.08,
+    "date_added": "2026-09-24",
+    "screens": [
+      "oversold_bounce"
+    ],
+    "checked_at": "2026-09-25T13:31:56",
+    "drift_pct": 0.0,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 6.36
+  }
+]
