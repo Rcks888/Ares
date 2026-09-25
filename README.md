@@ -17,6 +17,54 @@ The `sample_phase` label stays `clean_v3` for the same reason: it tracks the
 V3.0 or V3.1. A `clean_v4` phase is earned only when parameters actually change.
 If the two moved together, the sample would fragment every time a bug was fixed.
 
+## Evidence status (2026-09-25)
+
+**Ares runs on paper only. No live capital is scheduled.**
+
+| Test | Result |
+|------|--------|
+| Run A′ — like-for-like, funded, live code imported | Universe A **−5.58%**, B **−57.32%**, vs SPY **+85.66%** |
+| Momentum substitution | Not a replica of MTUM: **P(R² > 0.5) = 0.02** |
+| Corrected alpha gate (α ≤ −3%/yr is adverse regardless of p-value) | **All four cells ADVERSE** |
+| Run B — causal divergence repair | α **−16.06%/yr**; gross collapsed **+$273.21 → +$8.27** |
+
+Commission at $149 positions is **1.34% round trip**, and consumed **121% of
+gross profit** in Run A′. Run B additionally showed that a known defect was
+*load-bearing*: repairing it made results worse, so no future repair is assumed
+beneficial without measurement.
+
+**Closing position:** momentum as a factor works; this active implementation
+subtracts from it. Run A′'s result is dominated by roughly 39% MTUM plus 61%
+T-bills.
+
+### Three defects, documented and deliberately unfixed
+
+Left in place so the observation sample is not split mid-collection:
+
+1. **Queue promotion gates are inert** — `RSI` is read against a lowercase
+   `rsi` column and `EMA_20` is never produced, so promotion is
+   `|drift| ≤ 5%` alone
+2. **Divergence is structurally blind** — all four divergence columns are
+   permanently `False` in production
+3. **Position sizing is unfunded** — 5 × $149 derived from a constant
+   `starting_capital` with no balance check. The only defect with a real
+   deadline, since live orders would be rejected
+
+### What live capital would require
+
+All four, simultaneously:
+
+- Honest V6-class simulation (live code imported): net excess vs SPY **≥ 0** over
+  a pre-specified window, after costs, cash-interest policy stated up front
+- Residual vs an MTUM blend: annualised α **≥ −2%/yr** — an economic rule, not a
+  p-value
+- At intended size and frequency, cost drag leaves room for the above
+- `clean_v3` shows no operational contradiction (a process gate, not proof of edge)
+
+If the bar is never cleared, indefinite paper trading plus an index core is the
+rational shape. See `ROADMAP.md` for the full evidence trail and the
+pre-registered V4 Block A design.
+
 ## How It Works
 
 ```
@@ -372,7 +420,11 @@ evidence behind each.
 - Disabled trend_continuation strategy (24% win rate, losing money)
 - Signal queue: blocked signals wait 5 days for open slot
 - Max 5 positions with 25% cash reserve
-- Backtested portfolio: $1,000 → $4,046 in 5 years (+32.5%/yr)
+- ~~Backtested portfolio: $1,000 → $4,046 in 5 years (+32.5%/yr)~~
+  **Withdrawn 2026-09-22.** Re-measured under Run A′ — funded, live `signals.py`
+  imported with an md5 parity assertion, commissions and idle-cash interest
+  included: Universe A **−5.58%**, Universe B **−57.32%**, against SPY
+  **+85.66%** over the same window.
 
 ### V2.1 — Dynamic Screener (Sep 3, 2026)
 - Replaced fixed watchlist with Finviz dynamic market screener
@@ -402,7 +454,7 @@ evidence behind each.
 | 2 | Virtual paper trading + performance tracking | ✅ Complete |
 | 3 | Observation phase — collect 40-60 **clean** trades with realistic friction | 🔄 In Progress |
 | 4 | AI/ML signal validation (Athena ML pipeline) | 🔜 Next |
-| 5 | Live execution with real capital ($1K ESPP, June 2027) | ⏳ Planned |
+| 5 | Live execution with real capital — **gated on evidence, not scheduled** | ⏸️ Blocked |
 
 ## Timeline
 
@@ -411,8 +463,8 @@ evidence behind each.
 | Sep 2026 | Weeks 1-3: process validation. 11 defects found; data retained as `pre_clean` |
 | Sep 19, 2026 | `clean_v3` sample opens — trade counting starts here, not from the first trade ever |
 | Sep 2026 - May 2027 | Paper trading observation (~9 months, 40-60 clean trades) |
-| June 2027 | Go live with $1,000 (ESPP bonus) |
-| Dec 2027+ | +$500 capital injection every 6 months via ESPP |
+| June 2027 | **Review gate** — the evidence bar above is assessed, not assumed cleared. Not a deploy trigger. |
+| Indefinite | Paper trading continues for as long as the bar is unmet. ESPP funds an index core instead. |
 
 ## Author
 
