@@ -1652,3 +1652,353 @@ accounting that evening, and changing how the launcher resolves paths hours
 beforehand risks a silent failure at the worst moment. Low urgency now that the
 two are in sync, but it will drift again.
 
+
+## PRE-REGISTERED — Ares V4 Block A: exit-policy replay (exploratory)
+
+Written 2026-09-25, before any replay code or replay result exists.
+
+### Status of this experiment
+
+The exit-policy replay is **exploratory and cannot authorize replacement of the
+production exit policy**. Policy A remains the control regardless of
+development-period performance. An alternative may be recorded as a candidate
+for future confirmation only.
+
+Production selection requires an untouched confirmation period containing **at
+least 20 relevant mechanism triggers in each universe separately**, together
+with all other pre-registered economic and consistency requirements.
+
+This constraint is derived from data, before results:
+
+| | dev n (<2024-09) | val n | +18% triggers in val | Support band |
+|---|---|---|---|---|
+| Universe A | 85 | 60 | 16 | 10-19 = exploratory only |
+| Universe B | 107 | 41 | 10 | 10-19 = exploratory only |
+
+Neither universe confirms even the *existing* +18% mechanism in the untouched
+period. The +30% and +50% mechanisms necessarily have equal or lower support.
+
+**The trigger threshold will not be reduced, pooled across universes, or
+replaced with an aggregate count after results are observed.**
+
+No production change to Ares V3.1. `clean_v3` continues untouched.
+
+#### Downstream gate
+
+Blocks B-D are specified for continuity but are **not authorized to begin** by
+this pre-registration.
+
+Because the untouched validation period contains fewer than 20 relevant
+mechanism triggers in each universe, Block A cannot confirm a replacement exit
+policy. Policy A therefore remains the production control, but **retention as
+control is not evidence that it is an economically worthwhile modelling
+target**.
+
+After Block A:
+
+- If no alternative clears the development-period economic and consistency bars,
+  Blocks B-D remain deferred and the exit-policy family may be rejected.
+- If an alternative clears the development bars but lacks confirmation support,
+  it is recorded as a future confirmation candidate. Blocks B-D remain deferred.
+- If a future untouched confirmation period supplies at least 20 relevant
+  triggers per universe and the candidate clears every registered bar, the
+  policy may be frozen for label generation and Blocks B-D may open.
+- Policy A may open Block B only under a separate, explicit decision that
+  modelling the current control has standalone research value despite its
+  documented exit weaknesses. Such work cannot be presented as development of
+  the intended successor policy.
+
+**Default outcome: complete Block A and stop.**
+
+#### Work order and authorization
+
+- **Block A** - canonical exit implementation and exploratory exit-policy
+  replay. **Authorized now.**
+- **Block B** - reconstructable-universe dataset and frozen-policy label
+  generation. Deferred pending the downstream gate.
+- **Block C** - linear ranking test and one-time tree challenger. Deferred
+  pending successful completion of Block B.
+- **Block D** - entry-only chronological portfolio simulation and final
+  benchmark gate. Deferred pending successful completion of Block C.
+
+Completion of one block does not automatically authorize the next. Each block
+opens only when its stated evidence gate is cleared. Prior investment in design
+is not an argument for continuation.
+
+### Retraction: the +18% take-profit is not inert
+
+Previously recorded as "the +18% momentum take-profit has never been reached."
+That was true of the five-trade live history available at review, where maximum
+observed MFE was +15.53% (HAFN). **It does not generalize to the audited
+backtest populations.** In Run A' the +18% level was reached by:
+
+- **41 of 145** Universe A trades (28.3%)
+- **30 of 148** Universe B trades (20.3%)
+
+Consequences:
+1. Policy A's +18% tier is **not** structurally inert in historical replay.
+2. Policy C may not be justified as a correction to an allegedly dead mechanism.
+   It is replayed as a pre-specified design alternative only.
+
+This is the **fifth** logged instance of a structural claim stated more broadly
+than its evidence supported, and it leaned the same direction as the previous
+four. Future structural claims discount accordingly.
+
+### Block A prerequisites (all must pass before replay)
+
+1. **Canonical exit module.** One implementation called by Ares paper
+   operation, Athena exit replay, candidate-label generation, and final
+   portfolio simulation.
+2. **Exit-reason reconciliation.** `sum(exit_reason_counts) == total_trades`.
+   Verified clean at draft time: A = 70+70+4+1 = 145; B = 73+73+1+1 = 148.
+3. **Structural invariant test.** `scaled_out=True => exit_reason != stop_loss`.
+   Impossible by construction: peak >= 1.18x entry implies
+   `trail = peak*0.90 >= 1.062x entry`, always above a sub-entry stop. The
+   observed 70/70 and 73/73 symmetry is coincidence on a sound mechanism, not a
+   labelling defect. Resolved 2026-09-25; retained as a regression test.
+4. **Instrumentation.** Emit peak_price, peak_date, mfe_pct, trough_price,
+   mae_pct, initial_stop, trail_activated, trail_activation_date,
+   highest_trailing_stop, scale_out fields, locked_pct, gave_back_pct,
+   commissions, slippage, holding_days, time_stop_bound, exit_policy_version.
+   Currently `mfe_pct` and `peak_price` are absent from saved output, so the
+   proposed exit-quality metrics are uncomputable.
+5. **MFE disambiguation.** Report separately: MFE before any partial exit, MFE
+   over the whole trade, MFE after the first tier, return retained at final
+   close, total return including partial exits. A tiered policy's exit quality
+   is misstated if the final remainder is compared against the full-position
+   peak.
+6. **Giveback, split two ways.** `mfe_pct` is price-path based while
+   `net_return_pct` includes commissions, so a single metric conflates market
+   movement with friction - a policy with identical exit prices but more
+   partial-exit commissions would appear to have worse trailing behaviour.
+   Store both:
+
+   ```
+   price_giveback_pct    = max(0, mfe_pct - gross_price_return_pct)
+   economic_giveback_pct = max(0, mfe_pct - net_return_pct)
+   ```
+
+   The first evaluates exit mechanics; the second evaluates what the account
+   retained after costs. Underlying price and return fields are retained so
+   both can be independently recomputed rather than trusted.
+7. **Path-level confusion report.** Stored exit reason versus canonical replay
+   exit reason, every mismatch explained.
+
+### Maximum holding period
+
+60 days is **rejected** as an administrative censor: it binds on 26.2% of
+Universe A and 14.2% of Universe B.
+
+Registered value: **H = 170 trading days, `holding_days >= H` convention.**
+
+| H | A `>=H` | B `>=H` |
+|---|---|---|
+| 60 | 26.2% | 14.2% |
+| 165 | 5.5% (fails) | 2.0% |
+| 166 | 4.83% | 2.03% |
+| **170** | **4.1%** | **2.0%** |
+
+166 is the smallest value clearing 5% in both universes, but sits 0.17pp from
+the threshold. 170 is registered for margin, on the precedent of the momentum
+test landing 0.0054 from its own cutoff.
+
+The convention must match the canonical module's event ordering. **The horizon
+will not be increased after replay results appear.** Bind rate is reported per
+universe with the P&L, MFE, MAE, strategy family, and regime of bound trades.
+
+### Replay design
+
+Four frozen policies, no grid search:
+
+- **A (control)** 50% scale-out at +18%, 10% trail from entry onward
+- **B** trail activates only after first take-profit tier
+- **C** tiers 25% at +15%, +30%, +50%; remainder on activated trail
+- **D** current 50% scale-out at +18%; the 10% trail activates only once peak
+  reaches **+11.2%**, with the initial stop controlling before activation.
+  The threshold is derived, not chosen: `trail = peak x 0.90 >= entry` requires
+  `peak >= +11.11%`, the minimum peak at which the trail can lock any gross
+  profit. Activating there eliminates the documented dead band exactly. The
+  value will not be adjusted from replay results.
+
+**Stage 1 - isolated paired replay** on the original 145 (A) and 148 (B)
+entries. Primary statistic `delta_i = return_candidate_i - return_A_i`.
+Report mean, median, **date-block bootstrap** interval (not trade-level:
+overlapping trades understate uncertainty), % positive deltas, count of zero
+deltas, count of trades where policies differ, and contribution of the largest
+1/3/5/10 deltas.
+
+**Stage 2 - chronological portfolio replay** on the **complete timestamped
+signal stream**, including signals originally rejected for occupied slots,
+unavailable cash, queue expiry, or losing to a higher-ranked candidate.
+Different exits change slot occupancy and funding, which changes which later
+signals enter at all. If the full stream cannot be reconstructed, state:
+*the portfolio replay changes exit timing on the original trade population but
+cannot reconstruct counterfactual admissions; it is not a complete portfolio
+counterfactual.* Missing entries are not inferred.
+
+#### Absolute economic bar
+
+Registered before code exists. Anchored to Run A' measurements: Universe A net
+was -$57.79 over 145 trades = $0.399/trade = **0.268% of a $149 position**, so
++0.27pp/trade is exact breakeven.
+
+**Isolated replay bar** - all four required, per universe separately:
+
+1. Mean paired delta versus Policy A **>= +0.50pp per trade** (breakeven plus
+   margin; ~1/20th of the 10.8% per-trade SD, so not noise-chasing)
+2. Date-block bootstrap 90% interval **lower bound > 0**
+3. **>= 50%** of non-zero paired deltas positive
+4. Support and concentration gates both passed
+
+**Portfolio replay bar** - all four required, per universe separately:
+
+1. Net return after friction **not lower** than Policy A
+2. Maximum drawdown **not worse by more than 5pp** than Policy A
+3. Risk-free-relative result **not below** Policy A's
+4. Trade count and commission total reported; no improvement accepted whose
+   source is reduced turnover alone unless that is stated as the mechanism
+
+**Portfolio-level absolute floor.** No policy may be **recorded as a future
+confirmation candidate** unless at least one achieves **net funded return >= 0%**
+in Universe A. Run A' measured -5.58%; a policy that merely narrows the loss has
+not cleared the bar. If every policy including A remains below this floor, the
+registered result is *no policy cleared the economic bar*.
+
+The nonnegative funded-return floor applies to **Universe A only**. Universe B is
+the adverse consistency test: it must show positive paired improvement and clear
+every registered portfolio-relative bar, but it is **not** required to recover
+from Run A' -57.32% baseline to nonnegative funded return in this exploratory
+replay.
+
+**The two bars measure different things and neither implies deployability.**
++0.50pp per trade is the isolated paired-replay bar, asking whether an
+alternative materially improves exit capture on the same entry paths. Net funded
+return >= 0% is the portfolio-level floor, asking whether that improvement
+survives changed holding periods, slot occupancy, funding, commissions, and
+counterfactual admissions. The per-trade breakeven arithmetic above motivates
+the first bar only; it is not a justification for the second.
+
+This is a **recording floor for identifying a future confirmation candidate, not
+a deployment threshold**. Clearing it would show that an exit policy merits
+further confirmation; it would not establish entry edge, competitive return, or
+superiority to SPY, MTUM, or any risk-matched passive alternative. Those
+comparisons remain reserved for the final Block D deployment gate.
+
+For scale: +0.50pp/trade across 145 trades at $149 is roughly **+$108**, taking
+Universe A trading net from -$57.79 to about +$50 - near **+2%/yr** over the
+window against **SPY +85.66%**. A policy passing every registered gate still
+loses heavily to passive.
+
+**Selection rule (conjunctive).** A policy is eligible only if:
+1. Paired improvement over A is economically positive in **both** universes
+2. Direction of improvement is consistent across both
+3. Universe A clears the portfolio-level absolute floor; **both** universes clear
+   their paired, support, concentration, and portfolio-relative bars
+4. Mechanism triggers >= 20 **per universe**, not pooled
+5. Chronological portfolio replay clears the bar in **both** universes
+
+A large Universe A gain may not cancel a Universe B loss. Trigger counts are
+reported per mechanism per universe, with per-tier P&L attribution and a
+concentration gate:
+
+```
+concentration_10 = sum(10 largest positive paired deltas)
+                   / sum(all positive paired deltas)
+```
+
+**A policy is unsupported if `concentration_10 > 50%`.** The denominator is
+gross positive improvement, not net: a near-zero net denominator makes
+concentration ratios unstable. Reported per universe.
+
+**Valid outcomes:** retain A; record a future confirmation candidate;
+inconclusive; reject the policy family. **"Least bad" is excluded** - the
+experiment is not required to produce a winner. If A-D all lose, the result is
+"no policy cleared the economic bar," not "B was best."
+
+### Label contract (Block B)
+
+```
+label = net realized return under frozen exit policy
+        - risk-free return over the identical holding interval
+```
+
+Net of all friction. Risk-free source, duration matching, and compounding
+convention frozen before labelling, consistent with Athena's cash-interest
+treatment. Per-trade counterfactual is **not investing**, because the floor is
+designed to return zero candidates in risk-off regimes.
+
+Diagnostics only, never the target: SPY-relative, MTUM-relative,
+forward_excess_5d / 10d / 20d. Every label stamped with `exit_policy_version`.
+
+Portfolio-level comparison against SPY, MTUM, a risk-matched passive blend, and
+cash remains the final deployment gate.
+
+### Inference
+
+Exit-replay primary HAC lag: **A = 29, B = 17** trading days, from
+current-policy median holds established before replay.
+
+Later ranker IC HAC lag equals the median holding period produced by the
+**frozen** policy on the **development** period, rounded up to the next whole
+trading day. That rule is fixed now; the value is determined later without
+reference to validation results.
+
+Non-overlapping sampling uses the same frozen-policy lag, with **every**
+deterministic offset reported as a distribution - never the best offset.
+
+**When full-frequency HAC and non-overlapping evidence conflict, the
+non-overlapping evidence governs.** Both positive and stable: supported. HAC
+positive, non-overlapping unstable: inconclusive. Concentrated in one offset or
+year: inconclusive. Both weak or negative: reject.
+
+### Model stage (Block C)
+
+Six-feature linear model is the default. Feature formulas frozen with the
+budget - windows, estimators, and sector mapping source all specified before
+results. Model order: deterministic baseline, single factor, six-feature
+linear (ridge), tree challenger on the same six features.
+
+The tree is promoted only if it clears **every** pre-registered condition on
+first evaluation. If it fails any, the linear model ships. Failed criteria will
+not be changed, removed, or reweighted, and the tree will not be rerun under
+revised acceptance rules on the same data. A revised hypothesis requires a new
+research version, a new untouched period, and a written justification unrelated
+to the failed result.
+
+Winner's-curse calibration uses **only out-of-sample observations that the full
+daily selection process would actually have selected**. Insufficient selected
+observations means the confidence gate is unavailable and must not be replaced
+by an arbitrary score threshold - the safe result is no deployment.
+
+### Research-leakage boundary
+
+Exit-policy development: universe start to 2024-08-31.
+Exit-policy validation: 2024-09-01 onward, opened once, no revision after.
+The ranker's final evaluation period must not have participated in exit-policy
+selection. Given the trigger counts above, this boundary is recorded but the
+validation period is **not** sufficient to confirm a replacement.
+
+### Finviz
+
+Removed entirely from the V4 entry path. Training and live use the identical
+reconstructable population, making universe parity testable by construction.
+Finviz continues as a **shadow research feed**: log symbols and screen
+categories, compute the same features, generate shadow scores, simulate frozen
+exit-policy outcomes, **no live or paper entry authority**. This accumulates the
+point-in-time Finviz evidence that does not currently exist.
+
+### Version lineage
+
+Every result identifies all six: `exit_policy_version`, `universe_version`,
+`label_version`, `feature_set_version`, `model_version`,
+`evaluation_contract_version`. This prevents a later policy, label, or universe
+change from being compared as though only the model changed.
+
+### What this project cannot claim
+
+- The replay cannot establish entry edge. It is conditional on the opportunities
+  Run A' generated.
+- The current validation sample cannot confirm a replacement exit policy.
+- Better exit capture does not demonstrate benchmark-beating portfolio results.
+- Attractive development-period results do not override insufficient trigger
+  support.
