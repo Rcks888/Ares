@@ -1614,9 +1614,22 @@ V4 candidates — against the bar Run B failed, not assumed beneficial:
    stop to `average_cost` until +15% is reached, then switches to a trailing high. It
    is therefore structurally incapable of trailing a position into a loss. Ares seeds
    `peak_price` at `entry_price` on day one, which is the direct cause of the
-   +6.7% → +11.1% dead band where `trailing_stop` books a loss.
+   dead band where `trailing_stop` books a loss. The **upper bound is exact at
+   +11.11%** (`peak × 0.90 ≥ entry ⟺ peak ≥ +11.11%`). The **lower bound is
+   per-trade, not the +6.7% figure previously stated here**: the trail only controls
+   the exit once `peak × 0.90` exceeds `stop_loss`, and stop distance is
+   `2 × stdev_20`, so it varies by trade. +6.7% was a universe average reported as
+   though it were a constant. Measured live Sep 25, 2026: SDGR's lower bound is
+   +5.1%, and SECZ's trail was already above its stop at entry, giving no lower
+   bound at all.
 2. **Tiered partial take-profit** at +15/+30/+50%, 25% each, versus Ares' single 50%
-   scale at +18% that has never once fired in live.
+   scale at the strategy's take-profit — **+18% for momentum, +10% for reversal**.
+   The +18% momentum tier has never fired in live. The +10% reversal tier has fired
+   once: DYN, pre-clean, scaled 2026-09-09 at $19.17 on a $17.09 entry, +12.17%
+   against its +10.01% threshold. Do not describe this as a single +18% mechanism;
+   that conflation is the same one retracted for the backtest tier counts, where 41
+   scale-out executions versus 37 trades at MFE ≥ 18% differed by exactly the four
+   reversal trades that scaled below +18%.
 
 Both change the trade population, so both are **V4 boundary** work and neither may be
 applied mid-`clean_v3`.

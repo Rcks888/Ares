@@ -1690,6 +1690,105 @@ cache 379 symbols. All green.
 
 ---
 
+### Sep 25, 2026 (Friday)
+
+First `clean_v3` close, and the portfolio returns to 5/5. Logged from the VPS cron
+commits `6adad6a`…`5063f48`, pulled Sep 28.
+
+##### Collection record
+
+| Event | Detail |
+|-------|--------|
+| **NEOG closed** | `stop_loss` −3.4%, verdict `weak_follow_through`, peak **0.03%** — **first clean_v3 close**, realised **−$7.07** |
+| **SECZ promoted** | From queue → filled at $14.68 (10.15 sh), SL $12.07, TP $17.33 — took NEOG's vacated slot |
+| Scan | 103 screened, 0 signals at 09:33 PM; **2 signals** by 05:01 AM (SECZ `momentum_breakout` `conf3` uptrend) |
+| Queue | TWST `conf3` −0.7%, AMP `conf3` +1.6%, ADT `conf2` +0.6% |
+| Clean sample | **1 closed, 3 in flight** (TMO, WBD, SECZ) |
+| Pre-clean | 4 closed, realised −$5.34, W/L 2/2 — ABM and SDGR still open |
+| All combined | 5 closed, realised **−$12.41**, W 2/5 |
+
+**Open positions at 05:01 AM MYT:**
+
+| Symbol | Phase | Day | Entry | Last | Peak | SL | TS | Trail state |
+|--------|-------|-----|-------|------|------|----|----|-------------|
+| ABM | pre-clean | 16 | $50.65 | $49.57 (−2.1%) | $50.91 (+0.5%) | $48.67 | $48.67 | **never ratcheted** |
+| SDGR | pre-clean | 7 | $29.35 | $29.10 (−0.9%) | $31.37 (+6.9%) | $25.06 | $28.23 | active, below entry |
+| TMO | clean_v3 | 4 | $654.54 | $671.03 (+2.5%) | $678.39 (+3.6%) | $634.25 | $634.25 | never ratcheted |
+| WBD | clean_v3 | 3 | $30.87 | $30.87 (0.0%) | $30.87 (0.0%) | $29.31 | $29.31 | never ratcheted |
+| SECZ | clean_v3 | 0 | $14.68 | $15.71 (+7.0%) | $15.71 (+7.0%) | $12.07 | $14.14 | active, below entry |
+
+##### Equity, reconciled against the trade log
+
+`pnl` in `virtual_trades.json` is **gross**; the dashboard reports `pnl_after_costs`.
+The two differ by $2 per trade except DYN, which has `scaled_out=True` and therefore
+a third commission. That single dollar was the whole discrepancy:
+
+| | gross `pnl` | commissions | net |
+|---|---|---|---|
+| HAFN | +5.76 | 2 | +3.76 |
+| DYN | +9.77 | **3** | +6.77 |
+| PINS | −8.86 | 2 | −10.86 |
+| ECO | −3.01 | 2 | −5.01 |
+| NEOG | −5.07 | 2 | −7.07 |
+| | | | **−12.41** ✓ |
+
+| Component | Value |
+|-----------|-------|
+| Starting capital | $1,000.00 |
+| Realised (net of commission) | −$12.41 |
+| Cash on hand | **$237.59** |
+| Stock at cost (5 × $149) | $745.00 |
+| Market value of open positions | $756.47 |
+| Unrealised, net of entry commissions | **+$6.47** |
+| **Equity** | **$994.06** |
+
+##### Defect 3 is now measurable, and directional
+
+Sizing reads a constant `starting_capital` of $1,000, not current equity, so the
+25% cash reserve is nominal. With five slots filled the reserve target is $250 but
+actual cash is **$237.59** — already $12.41 light, exactly the realised loss. The
+error is the realised P&L, by construction, and it grows with every losing close.
+
+Not yet a breach: a freed slot needs $150 and there is $237.59. It becomes one when
+cash falls below $150, i.e. after roughly **−$100 more** of realised losses. Worth
+watching, not yet acting on.
+
+##### Two positions are sitting in the giveback dead band
+
+SDGR and SECZ both satisfy the two conditions that produced Block A's worst
+sub-population: the trail is **active** (`peak × 0.90 > stop_loss`, so a trail exit
+is labelled `trailing_stop`), yet peak is **below +11.11%**, so `peak × 0.90` is
+still under the entry price and the trail locks a *loss*.
+
+- SDGR: trail $28.23 is **3.8% below** its $29.35 entry
+- SECZ: trail $14.14 is **3.7% below** its $14.68 entry
+
+Before the 1.34% round-trip cost. Athena Universe A found 14 such trades, 12 of
+which exited `trailing_stop`, and **12 of 12 lost money**. ECO is already a completed
+live instance: peak 8.97%, closed −2.00% `trailing_stop`, gave back 10.97pp.
+
+The band was registered as peak +6.7% to +11.1%, but the lower bound is
+stop-distance dependent, not universal — SDGR's trail overtakes its stop at peak
++5.1%, and SECZ's was already above its stop at entry. **The +11.11% upper bound is
+exact; the lower bound is per-trade.** Correct the ROADMAP wording when convenient.
+
+##### ABM, TMO and WBD will label `stop_loss`, not `trailing_stop`
+
+All three have `TS == SL`. The trail never ratcheted, so `trailing_stop > stop_loss`
+is false and the reason branch resolves to `stop_loss`. ABM is the live one to watch:
+day 16, peak +0.5%, last $49.57, ~1.8% above its stop.
+
+**System:** RAM 1017/1967 MB, swap inert (6 MB paged in 7.5h), stall 16 ms, disk 28%,
+cache 477 symbols. All green.
+
+**Notes:**
+- Portfolio full at 5/5 with 3 queued, so the next signal is queued, not entered.
+- **AMP is genuine, not a truncation** — `mean_reversion`, `price_at_signal` $485.15,
+  RSI 28.1, screens `oversold_bounce` + `big_movers_down`. That is Ameriprise. My
+  earlier note recording it as "AMPD" was wrong.
+
+---
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
