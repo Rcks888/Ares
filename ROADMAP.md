@@ -2153,6 +2153,27 @@ challengers and nothing more.
 still does not import the canonical module. The swap proceeds only under its own
 controlled plan, after ABM and SDGR clear.
 
+#### Post-Block-A: tracker canonicalization
+
+Tracked separately in **`TRACKER_MIGRATION_PLAN.md`** — a code-parity and
+deployment-readiness question, not an exit-policy research question. Phase 0
+differential equivalence is **complete**: zero decision-changing mismatches between
+`tracker.py`'s inline chain and the canonical module across 20 boundary fixtures and
+250 historical paths, 4,730 bars. Stated precisely: *no decision-changing differences
+were detected within the tested population; full-precision and tracker-rounded state
+are not universally equivalent by construction.* 43 paths are classified
+`UNTESTED_INSUFFICIENT_WARMUP`. The first migration preserves tracker's 2dp rounding
+under contract `tracker_v3_2dp`; full precision is a separate later change.
+
+**Deferred engineering — tracker exception observability.** `check_open_trades` wraps
+each trade in `except Exception` and only prints, so a data or indicator fault is
+observationally identical to "evaluated correctly, no exit required." Measured
+trigger: `add_indicators` raises on any frame under 34 bars because `ta.macd` returns
+`None`. Not reachable at entry, since `signals.py` fails identically and so gates it,
+but **reachable for an already-open position if its cached history is ever truncated**
+by a cache rebuild, partial write or eviction — that position then receives no exit
+evaluation, silently. Must not be changed inside the migration commit.
+
 ### Label contract (Block B)
 
 ```
