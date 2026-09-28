@@ -13,7 +13,8 @@ that result or reopens it.
 | Item | State |
 |---|---|
 | Phase 0 — differential equivalence | **COMPLETE** over tested coverage |
-| Phase 1 — precision contract | **DECIDED below, not implemented** |
+| Phase 1 — precision contract | **DECIDED below, adapter placement approved, not implemented** |
+| Phase 0.5 — indicator/exception hardening | **REGISTERED, separate change** |
 | Phase 2 — position clearance | Pending: ABM and SDGR still open |
 | Phase 3 — rollback point | Pending |
 | Phase 4 — shadow comparison | Pending |
@@ -76,13 +77,35 @@ calls:
 
 Event ordering, inputs, commissions and outputs are preserved unchanged.
 
-**Placement recommendation.** The rounding belongs in the **call-site adapter inside
-`tracker.py`**, not inside `exit_policy.py`. The canonical module should stay
-precision-neutral so Athena is unaffected and the legacy contract does not leak into
-shared code. Tradeoff, stated rather than hidden: the adapter then carries behaviour
-that must itself be reviewed, and the module alone will not fully specify live
-behaviour. Accepted, because the alternative embeds a deprecated contract in the
-module both consumers share.
+**Placement: APPROVED at the adapter.** The rounding lives in the call-site adapter,
+not inside `exit_policy.py`. The canonical module stays precision-neutral.
+
+Layering:
+
+    position state + market bar + policy
+        -> canonical decision            (exit_policy.py, full precision)
+        -> tracker_v3_2dp adapter        (compatibility)
+        -> legacy live state representation
+
+Putting the rounding in the module would make **every** consumer inherit live storage
+convention, including Athena: it would couple research calculation to a storage
+choice, make full-precision analysis harder, blur strategy logic against runtime
+compatibility, and invite a future reader to assume 2dp is financially necessary.
+
+The acknowledged cost is that the module alone no longer specifies live behaviour.
+The live contract is `exit_policy.py` + `tracker_v3_2dp` adapter + fill and
+commission handling. Acceptable **only** while the adapter is explicitly versioned,
+small, deterministic, independently tested, included in the shadow comparison,
+included in this document, and not silently bypassed by another call site. **Treat it
+as part of the production contract, not as glue.**
+
+Required header, so nobody later "cleans up" the rounding and moves live behaviour:
+
+    Compatibility contract: tracker_v3_2dp
+    Preserves the state precision and round-fill-round behaviour of the
+    current inline tracker during canonical module migration.
+    This adapter is a production-parity requirement, not a strategy rule.
+    Full-precision state is deferred to a separate controlled change.
 
 ## The 43 excluded historical paths
 
@@ -151,18 +174,84 @@ before the tracker itself is changed:
 **No decision** (evaluation succeeded, no exit condition met) and **evaluation
 failure** (no decision could be produced) must never share the same silent output.
 
+## Phase 0.5 — indicator and exception hardening: REGISTERED
+
+A **separate** production change, reviewed on its own, because it alters failure
+handling. **Not in the migration commit.**
+
+Scope: add an explicit minimum-history check; distinguish evaluation failure from
+valid no-action; log symbol, row count and exception class; alert when an open
+position receives no exit evaluation; track consecutive failed cycles per position;
+preserve the current exit decision whenever data is sufficient; change no signal or
+indicator formula.
+
+Operational record format:
+
+    {
+      "symbol": "XYZ",
+      "exit_evaluation_attempted": true,
+      "exit_evaluation_succeeded": false,
+      "decision": null,
+      "failure_type": "insufficient_history",
+      "available_bars": 29,
+      "required_bars": 34,
+      "position_left_unchanged": true
+    }
+
+Escalation, to be finalised later and **not** inserted into the migration: first
+failure logs a data-quality warning; second consecutive failure escalates to Telegram;
+further consecutive failures raise a high-priority unmanaged-position alert.
+
 ## Phase 2 — position clearance
 
 Wait for **ABM** and **SDGR** to close. Both are pre-clean and their lifecycles began
 under inline tracker behaviour; they must not end under the canonical module.
 
+**Tracking caveat, measured:** `phase` is `None` on all five open records — it is
+stamped at close, not at entry. Phase 2 clearance therefore cannot key off a phase
+field. Use `entry_date` against the boundary: ABM 2026-09-09 and SDGR 2026-09-18 are
+pre-clean; TMO 2026-09-21, WBD 2026-09-22 and SECZ 2026-09-25 are `clean_v3`.
+
 ## Phase 3 — rollback point
 
-Before any shadow run or deployment: tag the last inline-tracker commit, preserve the
-existing `tracker.py`, define a one-command rollback, record the expected operational
-state, and confirm rollback does not alter open-position records.
+**Tag:** `pre-tracker-swap` on the last inline-tracker commit.
+
+**One-command rollback**, restoring only the exit implementation:
+
+    git checkout pre-tracker-swap -- engine/tracker.py
+
+This touches **no file under `logs/`**, so open-position records, `psi_state.json`
+and trade history are unaffected by a rollback. Confirmed by construction: the swap
+commit is limited to `engine/` and the rollback path names a single file.
+
+### Expected operational state at the rollback point
+
+Source `logs/virtual_trades.json` at Ares `5063f48` (2026-09-25). 5 open, 5 closed,
+realised net **−$12.41**.
+
+| Symbol | Entry date | Entry | Shares | Stop | Trail | Peak | Scaled |
+|---|---|---|---|---|---|---|---|
+| ABM | 2026-09-09 | 50.65 | 2.94 | 48.67 | 48.67 | 50.91 | No |
+| SDGR | 2026-09-18 | 29.35 | 5.08 | 25.06 | 28.23 | 31.37 | No |
+| TMO | 2026-09-21 | 654.54 | 0.23 | 634.25 | 634.25 | 678.39 | No |
+| WBD | 2026-09-22 | 30.87 | 4.83 | 29.31 | 29.31 | 30.87 | No |
+| SECZ | 2026-09-25 | 14.68 | 10.15 | 12.07 | 14.14 | 15.71 | No |
+
+ABM, TMO and WBD have `trailing_stop == stop_loss` — the trail never ratcheted, so
+they will label `stop_loss` rather than `trailing_stop` if stopped. SDGR and SECZ
+have an active trail sitting **below** entry (the giveback dead band). All five are
+unscaled, so the scale-out branch is live for each.
+
+This table is the post-rollback expectation. Any divergence after a rollback is a
+defect, not drift. **Re-snapshot immediately before the swap** — these values move
+daily.
 
 ## Phase 4 — shadow comparison
+
+**Sequencing dependency:** Phase 4 requires the `tracker_v3_2dp` adapter to already
+exist and be unit-tested, because the shadow run compares the adapter's output, not
+the bare module's. The adapter can be written as a new unreferenced module with zero
+live effect, which also reduces the Phase 5 commit to wiring only.
 
 Both implementations run from cloned state; **only the current tracker controls paper
 actions.** The shadow module runs under `tracker_v3_2dp`, since full-precision state
