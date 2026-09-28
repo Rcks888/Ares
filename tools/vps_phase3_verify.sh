@@ -79,7 +79,7 @@ RC=$?
 echo "snapshot exit=$RC  (0 = all Phase 3 checks pass)"
 [ -s "$OUT_A.err" ] && { echo "--- stderr ---"; head -20 "$OUT_A.err"; }
 
-python3 - "$OUT_A" <<'PY'
+python3 - "$OUT_A" "$PWD/tools/pre_parity_snapshot.py" <<'PY'
 import json, sys
 try:
     s = json.load(open(sys.argv[1]))
@@ -107,14 +107,27 @@ print(f"  pandas={r.get('pandas')} numpy={r.get('numpy')} "
 print(f"  fingerprint {r.get('rounding_fingerprint')}")
 print(f"  exit_policy_md5 {s.get('lineage', {}).get('exit_policy_md5')}")
 
+# Read the committed baseline rather than embedding literals. The first version
+# hardcoded suite counts here and went stale in the same commit that added two
+# assertions, reporting a DIFF that was purely my own bookkeeping. One source of
+# truth, regenerated deliberately and reviewed as a diff.
+import pathlib
+bpath = pathlib.Path(sys.argv[2]).resolve().parent / "parity_baseline.json"
+try:
+    B = json.loads(bpath.read_text())
+except Exception as exc:
+    print(f"\nBASELINE MISSING OR UNREADABLE: {bpath} ({exc})")
+    print("Cannot compare against the laptop. Stopping.")
+    sys.exit(1)
 EXPECT = {
-    "tracker_source_hash": "be7b60383dba5d718821e8ef52209953",
-    "exit_policy_md5": "d00e621da121dc19320c739bc6b81f84",
-    "fingerprint": {"2.675": 2.67, "0.125": 0.12, "100.015": 100.02,
-                    "109.985": 109.98, "0.135": 0.14},
-    "suites": {"adapter": 65, "classifier": 98, "wiring": 93},
+    "tracker_source_hash": B["tracker_source_hash"],
+    "exit_policy_md5": B["exit_policy_md5"],
+    "fingerprint": B["rounding_fingerprint"],
+    "suites": B["suite_assertions"],
 }
-print("\n--- COMPARISON WITH LAPTOP ---")
+print(f"\n--- COMPARISON WITH BASELINE ({bpath.name}, "
+      f"generated {B.get('generated_utc','?')} on "
+      f"{B.get('generated_on_commit','?')}) ---")
 bad = []
 def cmp(label, got, want, fatal=True):
     ok = got == want

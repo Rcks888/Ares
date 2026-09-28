@@ -281,6 +281,30 @@ def main():
         if isinstance(v, bool) and k != "all_local_checks_pass")
 
     print(json.dumps(snap, indent=2))
+
+    if "--update-baseline" in sys.argv:
+        # Deliberate, reviewable regeneration. The baseline is the ONE source of
+        # truth for cross-host comparison; vps_phase3_verify.sh reads it instead
+        # of embedding literals, which is what went stale before.
+        base = {
+            "generated_utc": snap["snapshot_utc"],
+            "generated_on_commit": lin["ares_commit"],
+            "tracker_source_hash": snap["marker_contract"].get(
+                "tracker_source_hash"),
+            "exit_policy_md5": lin["exit_policy_md5"],
+            "compatibility_contract": lin["compatibility_contract"],
+            "record_schema_version": lin["record_schema_version"],
+            "rounding_fingerprint": snap["runtime"]["rounding_fingerprint"],
+            "suite_assertions": {n: t["assertions"] for n, t in tests.items()},
+            "note": ("Regenerate deliberately with "
+                     "'python3 tools/pre_parity_snapshot.py --update-baseline' "
+                     "when assertions are added or tracker.py legitimately "
+                     "changes. A diff here must be reviewed, never auto-synced."),
+        }
+        dest = ROOT / "tools" / "parity_baseline.json"
+        dest.write_text(json.dumps(base, indent=2) + "\n")
+        print(f"\nbaseline written: {dest}", file=sys.stderr)
+
     if "--write" in sys.argv:
         out = ROOT / "logs" / "snapshots"
         out.mkdir(parents=True, exist_ok=True)

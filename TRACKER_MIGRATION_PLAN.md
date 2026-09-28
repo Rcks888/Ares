@@ -16,7 +16,7 @@ that result or reopens it.
 | Phase 1 — precision contract | **COMPLETE offline** — `engine/tracker_compat.py`, dormant, 65 tests passing |
 | Phase 0.5 — indicator/exception hardening | **REGISTERED, separate change** |
 | Phase 2 — legacy-position clearance | Pending: ABM and SDGR open. **Gates Phase 5 only** |
-| Phase 3 — rollback and state isolation | **ESTABLISHED** |
+| Phase 3 — rollback and state isolation | **COMPLETE — verified on the VPS 2026-09-28** |
 | Phase 4 — shadow comparison | **READY TO AUTHORIZE.** ABM and SDGR are required coverage |
 | Phase 5 — controlled wiring | Pending, unauthorized |
 
@@ -422,7 +422,15 @@ daily.
 
 ### Phase 3 gate — conditions for starting Phase 4
 
-All must hold. Per current status these appear ready except the VPS-runtime test run.
+**ALL MET. Verified on the VPS 2026-09-28** by `tools/vps_phase3_verify.sh`,
+snapshot exit 0, all eight checks true, 258 assertions passing (65 adapter,
+98 classifier, 95 wiring), marker contract valid against the loaded
+`/root/ares/Ares/engine/tracker.py`, and every contract-critical field matching
+the committed baseline. Artifacts on the VPS: `~/snapshot_A_pre.txt`,
+`~/snapshot_A_vps.json`.
+
+Phase 4 is therefore unblocked on the environment side. It still requires the real
+`module_eval` and the single additive call site, neither of which exists.
 
 1. Rollback tag resolves correctly (`pre-tracker-swap` → `d6cbd55`)
 2. Rollback command tested
