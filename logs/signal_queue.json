@@ -1,22 +1,5 @@
 [
   {
-    "symbol": "TWST",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 184.03,
-    "rsi_at_signal": 73.9,
-    "stdev_20": 0.0541,
-    "vol_ratio": 1.92,
-    "date_added": "2026-09-24",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
     "symbol": "AMP",
     "strategy": "mean_reversion",
     "trigger": "oversold+volume+sma_support",
@@ -34,19 +17,20 @@
     ]
   },
   {
-    "symbol": "ADT",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 2,
-    "price_at_signal": 6.36,
-    "rsi_at_signal": 29.6,
-    "stdev_20": 0.0165,
-    "vol_ratio": 1.08,
+    "symbol": "TWST",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 184.03,
+    "rsi_at_signal": 73.9,
+    "stdev_20": 0.0541,
+    "vol_ratio": 1.92,
     "date_added": "2026-09-24",
     "screens": [
-      "oversold_bounce"
+      "unusual_volume",
+      "big_movers_up"
     ]
   },
   {
@@ -61,6 +45,22 @@
     "stdev_20": 0.0089,
     "vol_ratio": 0.87,
     "date_added": "2026-09-25",
+    "screens": [
+      "oversold_bounce"
+    ]
+  },
+  {
+    "symbol": "ADT",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 2,
+    "price_at_signal": 6.36,
+    "rsi_at_signal": 29.6,
+    "stdev_20": 0.0165,
+    "vol_ratio": 1.08,
+    "date_added": "2026-09-24",
     "screens": [
       "oversold_bounce"
     ]

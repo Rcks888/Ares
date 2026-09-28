@@ -1,27 +1,5 @@
 [
   {
-    "symbol": "TWST",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 184.03,
-    "rsi_at_signal": 73.9,
-    "stdev_20": 0.0541,
-    "vol_ratio": 1.92,
-    "date_added": "2026-09-24",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-09-28T13:31:28",
-    "drift_pct": -0.54,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 183.03
-  },
-  {
     "symbol": "AMP",
     "strategy": "mean_reversion",
     "trigger": "oversold+volume+sma_support",
@@ -37,32 +15,33 @@
       "oversold_bounce",
       "big_movers_down"
     ],
-    "checked_at": "2026-09-28T13:31:29",
-    "drift_pct": 1.0,
+    "checked_at": "2026-09-28T21:01:09",
+    "drift_pct": 2.27,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 490.0
+    "live_price": 496.16
   },
   {
-    "symbol": "ADT",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 2,
-    "price_at_signal": 6.36,
-    "rsi_at_signal": 29.6,
-    "stdev_20": 0.0165,
-    "vol_ratio": 1.08,
+    "symbol": "TWST",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 184.03,
+    "rsi_at_signal": 73.9,
+    "stdev_20": 0.0541,
+    "vol_ratio": 1.92,
     "date_added": "2026-09-24",
     "screens": [
-      "oversold_bounce"
+      "unusual_volume",
+      "big_movers_up"
     ],
-    "checked_at": "2026-09-28T13:31:29",
-    "drift_pct": -0.31,
+    "checked_at": "2026-09-28T21:01:09",
+    "drift_pct": -2.41,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 6.34
+    "live_price": 179.6
   },
   {
     "symbol": "BCE",
@@ -79,10 +58,31 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-09-28T13:31:30",
-    "drift_pct": -0.57,
+    "checked_at": "2026-09-28T21:01:09",
+    "drift_pct": -1.96,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 20.85
+    "live_price": 20.56
+  },
+  {
+    "symbol": "ADT",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 2,
+    "price_at_signal": 6.36,
+    "rsi_at_signal": 29.6,
+    "stdev_20": 0.0165,
+    "vol_ratio": 1.08,
+    "date_added": "2026-09-24",
+    "screens": [
+      "oversold_bounce"
+    ],
+    "checked_at": "2026-09-28T21:01:09",
+    "drift_pct": -2.67,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 6.19
   }
 ]
