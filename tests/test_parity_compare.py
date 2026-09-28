@@ -1,6 +1,6 @@
 """Unit tests for the Phase 4 shadow comparison classifier.
 
-    python3 tests/test_shadow_compare.py
+    python3 tests/test_parity_compare.py
 
 The central property under test: a missing or failed evaluation must NEVER be
 classified as agreement. Everything else is secondary.
@@ -13,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from engine import shadow_compare as sc  # noqa: E402
+from engine import parity_compare as sc  # noqa: E402
 
 FAILURES = []
 
@@ -290,26 +290,26 @@ def test_summary():
 # --- dormancy, now an allowed-import boundary -------------------------------
 def test_dormancy_boundary():
     hits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", "-e", "shadow_compare",
+        ["grep", "-rn", "--include=*.py", "-e", "parity_compare",
          "-e", "tracker_compat", str(ROOT)],
         capture_output=True, text=True).stdout.strip().splitlines()
-    allowed = ("engine/tracker_compat.py", "engine/shadow_compare.py",
-               "engine/shadow_runner.py", "tests/test_tracker_compat.py",
-               "tests/test_shadow_compare.py", "tests/test_shadow_runner.py",
-               "tools/pre_shadow_snapshot.py")
+    allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
+               "engine/parity_runner.py", "tests/test_tracker_compat.py",
+               "tests/test_parity_compare.py", "tests/test_parity_runner.py",
+               "tools/pre_parity_snapshot.py")
     offenders = [h for h in hits if not any(a in h for a in allowed)]
     check("only the adapter, shadow module and their tests reference them",
           not offenders, "\n        " + "\n        ".join(offenders))
     tracker = (ROOT / "engine" / "tracker.py").read_text(errors="replace")
-    for name in ("shadow_compare", "tracker_compat", "exit_policy"):
+    for name in ("parity_compare", "tracker_compat", "exit_policy"):
         check(f"tracker.py does not import {name}", name not in tracker)
     check("engine/__init__.py auto-imports neither",
-          "shadow_compare" not in (ROOT / "engine" / "__init__.py").read_text()
+          "parity_compare" not in (ROOT / "engine" / "__init__.py").read_text()
           and "tracker_compat" not in (ROOT / "engine" / "__init__.py").read_text())
     # json.dumps() is serialisation; json.dump() writes to a stream. Only the
     # latter is I/O, and the earlier predicate matched both.
-    csrc = (ROOT / "engine" / "shadow_compare.py").read_text()
-    check("shadow_compare performs no I/O",
+    csrc = (ROOT / "engine" / "parity_compare.py").read_text()
+    check("parity_compare performs no I/O",
           not any(t in csrc for t in ("open(", "save_trades", "requests.",
                                       "send_telegram", "json.dump(")),
           [t for t in ("open(", "save_trades", "requests.", "send_telegram",

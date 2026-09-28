@@ -1,6 +1,6 @@
 """Unit tests for the Phase 4 shadow wiring layer.
 
-    python3 tests/test_shadow_runner.py
+    python3 tests/test_parity_runner.py
 
 Central properties: the inline result is returned unchanged no matter what the
 shadow path does, and no shadow failure mode can raise into the live cycle.
@@ -15,8 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from engine import shadow_compare as sc          # noqa: E402
-from engine import shadow_runner as sr           # noqa: E402
+from engine import parity_compare as sc          # noqa: E402
+from engine import parity_runner as sr           # noqa: E402
 
 FAILURES = []
 
@@ -322,37 +322,159 @@ def test_jsonl_is_append_only():
     check("distinct cycle ids", len(ids) == 2, ids)
 
 
+# --- INSISTED CHECK 1: module_eval receives PRE-inline state ----------------
+def deep(d):
+    import copy as _c
+    return _c.deepcopy(d)
+
+
+def test_module_eval_receives_pre_inline_state():
+    """The clone must be taken BEFORE the inline call mutates the position.
+
+    Starting from post-inline state would make this a second evaluation of an
+    already-mutated position rather than differential equivalence.
+    """
+    seen = []
+    pre = st(peak_price=50.91, trailing_stop=48.67, scaled_out=False,
+             shares=2.94)
+    post = st(peak_price=52.40, trailing_stop=47.16, scaled_out=True,
+              shares=1.47)
+
+    def spy(trade, params):
+        seen.append(deep(trade))
+        return dict(trade)
+
+    harness([pre], [post], module_eval=spy)
+    check("module_eval called once", len(seen) == 1, len(seen))
+    got = seen[0]
+    check("PRE-inline peak_price", got["peak_price"] == 50.91, got["peak_price"])
+    check("PRE-inline trailing_stop", got["trailing_stop"] == 48.67,
+          got["trailing_stop"])
+    check("PRE-inline scaled_out", got["scaled_out"] is False, got["scaled_out"])
+    check("PRE-inline shares", got["shares"] == 2.94, got["shares"])
+    check("did NOT receive the post-inline mutation",
+          got["peak_price"] != 52.40 and got["shares"] != 1.47)
+
+
+def test_module_eval_gets_an_isolated_clone():
+    """Mutating the handed-in trade must not reach production state."""
+    live = {"cur": [st()]}
+
+    def vandal(trade, params):
+        trade["peak_price"] = 1234.56
+        trade["stop_loss"] = 0.01
+        return dict(trade)
+
+    mod, _ = fake_tracker()
+    out = str(Path(tempfile.mkdtemp()) / "p.jsonl")
+    sr.observe_cycle(mod, lambda: "OK", lambda: live["cur"], vandal,
+                     output_path=out)
+    check("production peak_price untouched", live["cur"][0]["peak_price"] == 50.91,
+          live["cur"][0]["peak_price"])
+    check("production stop_loss untouched", live["cur"][0]["stop_loss"] == 48.67)
+    rec = json.loads(Path(out).read_text().strip())
+    check("state hashes equal", rec["production_state_hash_before"]
+          == rec["production_state_hash_after"])
+
+
+# --- INSISTED CHECK 2: stdout preserved, not swallowed ----------------------
+def test_stdout_is_preserved_for_operators():
+    """Capture must tee, not intercept. VPS log output must be unchanged."""
+    import io as _io
+    from contextlib import redirect_stdout as _rs
+    outer = _io.StringIO()
+    mod, _ = fake_tracker()
+
+    def inline_call():
+        print("  ABM: holding, trail 48.67")
+        return "OK"
+
+    with _rs(outer):
+        sr.observe_cycle(mod, inline_call, lambda: [st()],
+                         lambda t, p: dict(t),
+                         output_path=str(Path(tempfile.mkdtemp()) / "p.jsonl"))
+    check("operator output still reaches the real stream",
+          "ABM: holding, trail 48.67" in outer.getvalue(),
+          repr(outer.getvalue()[:120]))
+
+
+def test_stdout_preserved_even_when_marker_present():
+    import io as _io
+    from contextlib import redirect_stdout as _rs
+    outer = _io.StringIO()
+    mod, _ = fake_tracker()
+
+    def inline_call():
+        print("  Error checking ABM: boom")
+        print("  SDGR: holding")
+        return "OK"
+
+    with _rs(outer):
+        sr.observe_cycle(mod, inline_call, lambda: [st()],
+                         lambda t, p: dict(t),
+                         output_path=str(Path(tempfile.mkdtemp()) / "p.jsonl"))
+    txt = outer.getvalue()
+    check("error line preserved for operators", "Error checking ABM" in txt)
+    check("normal line preserved", "SDGR: holding" in txt)
+
+
+def test_tee_survives_a_broken_downstream_stream():
+    import io as _io
+
+    class Broken:
+        def write(self, d):
+            raise IOError("pipe closed")
+
+        def flush(self):
+            raise IOError("pipe closed")
+
+    t = sr._Tee(_io.StringIO(), Broken())
+    try:
+        t.write("x")
+        t.flush()
+        check("tee tolerates a broken downstream stream", True)
+    except Exception as exc:                        # noqa: BLE001
+        check("tee tolerates a broken downstream stream", False, repr(exc))
+
+
+def test_concurrency_assumption_recorded():
+    """stdout redirection is process-global, so this must stay sequential."""
+    src = (ROOT / "engine" / "parity_runner.py").read_text().lower()
+    check("concurrency assumption recorded in the module",
+          "sequential" in src and "process-global" in src)
+
+
 # --- dormancy and isolation -------------------------------------------------
 def test_dormancy_and_isolation():
     hits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", "-e", "shadow_runner",
-         "-e", "shadow_compare", "-e", "tracker_compat", str(ROOT)],
+        ["grep", "-rn", "--include=*.py", "-e", "parity_runner",
+         "-e", "parity_compare", "-e", "tracker_compat", str(ROOT)],
         capture_output=True, text=True).stdout.strip().splitlines()
-    allowed = ("engine/tracker_compat.py", "engine/shadow_compare.py",
-               "engine/shadow_runner.py", "tests/test_tracker_compat.py",
-               "tests/test_shadow_compare.py", "tests/test_shadow_runner.py",
-               "tools/pre_shadow_snapshot.py")
+    allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
+               "engine/parity_runner.py", "tests/test_tracker_compat.py",
+               "tests/test_parity_compare.py", "tests/test_parity_runner.py",
+               "tools/pre_parity_snapshot.py")
     offenders = [h for h in hits if not any(a in h for a in allowed)]
     check("no production module references the shadow stack", not offenders,
           "\n        " + "\n        ".join(offenders))
     tracker = (ROOT / "engine" / "tracker.py").read_text(errors="replace")
-    for n in ("shadow_runner", "shadow_compare", "tracker_compat",
+    for n in ("parity_runner", "parity_compare", "tracker_compat",
               "exit_policy"):
         check(f"tracker.py does not import {n}", n not in tracker)
     # Scan CODE, not prose. The module docstring legitimately names psi_state
     # while promising not to touch it; grepping raw text flagged that as a
     # violation. Strip the docstring before scanning.
     import ast
-    raw = (ROOT / "engine" / "shadow_runner.py").read_text()
+    raw = (ROOT / "engine" / "parity_runner.py").read_text()
     tree = ast.parse(raw)
     doc = ast.get_docstring(tree) or ""
     code = raw.replace(doc, "", 1)
     for forbidden in ("save_trades", "send_telegram", "psi_state",
                       "place_order", "requests.", "virtual_trades"):
-        check(f"shadow_runner code does not touch {forbidden}",
+        check(f"parity_runner code does not touch {forbidden}",
               forbidden not in code)
     check("writes only to its dedicated output",
-          "tracker_shadow_v1.jsonl" in code)
+          "tracker_parity_v1.jsonl" in code)
 
 
 def main():
@@ -370,6 +492,12 @@ def main():
                test_clean_run_reports_state_unchanged,
                test_schema_and_boundaries, test_closed_and_scaled_positions,
                test_non_open_positions_skipped, test_jsonl_is_append_only,
+               test_module_eval_receives_pre_inline_state,
+               test_module_eval_gets_an_isolated_clone,
+               test_stdout_is_preserved_for_operators,
+               test_stdout_preserved_even_when_marker_present,
+               test_tee_survives_a_broken_downstream_stream,
+               test_concurrency_assumption_recorded,
                test_dormancy_and_isolation):
         print(f"\n{fn.__name__}")
         fn()

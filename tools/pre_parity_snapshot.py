@@ -1,7 +1,7 @@
 """Pre-shadow state snapshot — Phase 4 gate artifact.
 
-    python3 tools/pre_shadow_snapshot.py            # print
-    python3 tools/pre_shadow_snapshot.py --write     # also save timestamped JSON
+    python3 tools/pre_parity_snapshot.py            # print
+    python3 tools/pre_parity_snapshot.py --write     # also save timestamped JSON
 
 Read-only. Touches no production state, sends nothing, and is not referenced by
 any scheduled entry point. Re-run immediately before Phase 4 starts and again
@@ -22,13 +22,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from engine import shadow_compare as sc  # noqa: E402
+from engine import parity_compare as sc  # noqa: E402
 from engine.tracker_compat import CONTRACT_VERSION  # noqa: E402
 
 SUITES = {
     "adapter": "tests/test_tracker_compat.py",
-    "classifier": "tests/test_shadow_compare.py",
-    "wiring": "tests/test_shadow_runner.py",
+    "classifier": "tests/test_parity_compare.py",
+    "wiring": "tests/test_parity_runner.py",
 }
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
@@ -64,6 +64,23 @@ def pkg_version(name):
         return "UNKNOWN"
 
 
+def _has_concurrency():
+    """True if Ares code introduces concurrency, which would void stdout capture.
+
+    Scans first-party code only; venv dependencies legitimately use threads.
+    """
+    pats = ("import threading", "Thread(", "multiprocessing",
+            "concurrent.futures", "import asyncio", "ThreadPool")
+    for p in list((ROOT / "engine").glob("*.py")) + list(ROOT.glob("*.py")):
+        try:
+            txt = p.read_text(errors="replace")
+        except Exception:                           # noqa: BLE001
+            continue
+        if any(pat in txt for pat in pats):
+            return True
+    return False
+
+
 def main():
     trades_path = ROOT / "logs" / "virtual_trades.json"
     trades = json.loads(trades_path.read_text()) if trades_path.exists() else []
@@ -90,7 +107,7 @@ def main():
             "compatibility_contract": CONTRACT_VERSION,
             "record_schema_version": sc.RECORD_SCHEMA_VERSION,
             "tracker_compat_md5": md5(ROOT / "engine" / "tracker_compat.py"),
-            "shadow_compare_md5": md5(ROOT / "engine" / "shadow_compare.py"),
+            "parity_compare_md5": md5(ROOT / "engine" / "parity_compare.py"),
         },
         "checksums": {
             "virtual_trades.json": md5(trades_path),
@@ -206,8 +223,10 @@ def main():
         "all_suites_pass": all(t["passed"] for t in tests.values()),
         "marker_contract_valid": bool(snap["marker_contract"].get("valid")),
         "working_tree_clean": lin["working_tree_clean"],
-        "shadow_output_absent": not (ROOT / "logs"
-                                     / "tracker_shadow_v1.jsonl").exists(),
+        "parity_output_absent": not (ROOT / "logs"
+                                     / "tracker_parity_v1.jsonl").exists(),
+        # stdout capture is only safe while evaluation is sequential.
+        "single_threaded_verified": not _has_concurrency(),
         "NOTE": ("Tests here ran in THIS runtime. The gate requires them to "
                  "pass in the VPS-equivalent runtime; run this same script on "
                  "the VPS and diff the 'runtime' and 'marker_contract' blocks "
@@ -221,7 +240,7 @@ def main():
         out = ROOT / "logs" / "snapshots"
         out.mkdir(parents=True, exist_ok=True)
         stamp = snap["snapshot_utc"].replace(":", "").replace("-", "")[:15]
-        dest = out / f"pre_shadow_{stamp}.json"
+        dest = out / f"pre_parity_{stamp}.json"
         dest.write_text(json.dumps(snap, indent=2))
         print(f"\nwritten: {dest}", file=sys.stderr)
     return 0 if snap["phase3_gate"]["all_local_checks_pass"] else 1

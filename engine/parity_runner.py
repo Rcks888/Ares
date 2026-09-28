@@ -55,12 +55,28 @@ from contextlib import redirect_stdout
 from datetime import datetime, timezone
 from pathlib import Path
 
-from engine import shadow_compare as sc
+from engine import parity_compare as sc
 
 # Dedicated append-only output. NOT to be consumed by dashboards, exporters,
 # training datasets, clean_v3 statistics, position restoration or Telegram
-# summaries. Shadow data is migration evidence, not strategy evidence.
-DEFAULT_OUTPUT = "logs/tracker_shadow_v1.jsonl"
+# summaries. This is migration evidence, not strategy evidence.
+#
+# NAMING. Called "parity", not "shadow", deliberately. tracker.py already owns a
+# live and unrelated shadow concept: trade['shadow'] and check_shadow_trades()
+# track price for 30 days AFTER a position closes, which IS strategy evidence.
+# Reusing the word for migration evidence would make the
+# migration-evidence-vs-strategy-evidence rule unenforceable and would invite a
+# future reader or analytics job to conflate the two. The inline_*/shadow_* FIELD
+# names are kept inside records, where the two roles are unambiguous and the
+# terminology is standard for differential testing.
+#
+# CONCURRENCY. stdout redirection is process-global, so per-symbol marker
+# attribution is only safe while position evaluation is sequential in a single
+# process. Verified: no threading, multiprocessing or asyncio anywhere in Ares
+# code, no background jobs in run_ares.sh, and one call site at
+# daily_report.py check_open_trades(). If that ever changes, stdout capture is
+# no longer safe for parity observation.
+DEFAULT_OUTPUT = "logs/tracker_parity_v1.jsonl"
 
 
 def _now():

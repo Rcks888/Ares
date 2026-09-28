@@ -213,14 +213,14 @@ def test_dormant_in_production():
         ["grep", "-rn", "--include=*.py", "-e", "tracker_compat",
          "-e", "apply_tracker_v3_2dp", str(ROOT)],
         capture_output=True, text=True).stdout.strip().splitlines()
-    # Allowed-import boundary, not a blanket ban. engine/shadow_compare.py is a
+    # Allowed-import boundary, not a blanket ban. engine/parity_compare.py is a
     # legitimate consumer as of Phase 4 and is itself dormant, asserted by
-    # tests/test_shadow_compare.py. Phase 5 adds engine/tracker.py here
+    # tests/test_parity_compare.py. Phase 5 adds engine/tracker.py here
     # deliberately; this list is the review checkpoint for activation.
-    allowed = ("engine/tracker_compat.py", "engine/shadow_compare.py",
-               "engine/shadow_runner.py", "tests/test_tracker_compat.py",
-               "tests/test_shadow_compare.py", "tests/test_shadow_runner.py",
-               "tools/pre_shadow_snapshot.py")
+    allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
+               "engine/parity_runner.py", "tests/test_tracker_compat.py",
+               "tests/test_parity_compare.py", "tests/test_parity_runner.py",
+               "tools/pre_parity_snapshot.py")
     offenders = [h for h in hits if not any(a in h for a in allowed)]
     check("only permitted modules reference the adapter", not offenders,
           "\n        " + "\n        ".join(offenders))

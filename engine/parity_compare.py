@@ -56,7 +56,7 @@ from engine.tracker_compat import CONTRACT_VERSION, STORED_2DP
 
 RECORD_SCHEMA_VERSION = 1
 
-# Asserted against engine/tracker.py by tests/test_shadow_compare.py.
+# Asserted against engine/tracker.py by tests/test_parity_compare.py.
 MARKER_CONTRACT = '  Error checking {trade[\'symbol\']}: {e}'
 MARKER_PREFIX = "Error checking "
 
@@ -309,16 +309,22 @@ def _abm_boundary(symbol, state):
             "labels_stop_loss_if_stopped": ts <= sl}
 
 
+# SDGR is registered REQUIRED coverage. SECZ is useful supplemental coverage --
+# it is also in the giveback dead band -- but must not substitute for SDGR.
+DEAD_BAND_WATCH = {"SDGR": "required", "SECZ": "supplemental"}
+
+
 def _sdgr_dead_band(symbol, state):
-    """Active trail below entry, SDGR's required-coverage condition."""
-    if symbol != "SDGR" or not state:
+    """Active trail below entry: the giveback dead-band condition."""
+    if symbol not in DEAD_BAND_WATCH or not state:
         return None
     ts = state.get("trailing_stop", state.get("stop_loss"))
     sl, entry = state.get("stop_loss"), state.get("entry_price")
     if None in (ts, sl, entry):
         return None
-    return {"trailing_stop": ts, "entry_price": entry, "peak_price":
-            state.get("peak_price"), "ratcheted": ts > sl,
+    return {"coverage_role": DEAD_BAND_WATCH[symbol],
+            "trailing_stop": ts, "entry_price": entry,
+            "peak_price": state.get("peak_price"), "ratcheted": ts > sl,
             "in_dead_band": ts > sl and ts < entry,
             "gap_below_entry_pct": round((ts / entry - 1) * 100, 4)}
 
