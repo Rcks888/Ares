@@ -12,18 +12,26 @@ that result or reopens it.
 
 | Item | State |
 |---|---|
-| Phase 0 — differential equivalence | **COMPLETE** over tested coverage |
+| Phase 0 — differential equivalence | **COMPLETE — daily-price path only** |
 | Phase 1 — precision contract | **COMPLETE offline** — `engine/tracker_compat.py`, dormant, 65 tests passing |
-| Phase 0.5 — indicator/exception hardening | **REGISTERED, separate change** |
+| Phase 0.5 — inline decision-input capture | **PROPOSED — gates Phase 4** |
+| Phase 0.5b — indicator/exception hardening | **REGISTERED, separate change** |
 | Phase 2 — legacy-position clearance | Pending: ABM and SDGR open. **Gates Phase 5 only** |
 | Phase 3 — rollback and state isolation | **COMPLETE — verified on the VPS 2026-09-28** |
-| Phase 4 — shadow comparison | **READY TO AUTHORIZE.** ABM and SDGR are required coverage |
+| Phase 4 — parity comparison | **PAUSED — deployed disabled at 3611afc, re-gated behind Phase 0.5.** ABM and SDGR are required coverage |
 | Phase 5 — controlled wiring | Pending, unauthorized |
 
 **The phases are control domains, not a numerical execution order.** Numbering is
-retained for document stability. Actual order: 0 → 1 → 3 → 4 → 2 → 5.
+retained for document stability. Actual order: **0 → 1 → 3 → 0.5 → 4 → 2 → 5**.
 
-    Phase 0  differential equivalence      COMPLETE
+> **AMENDED 2026-09-28.** Phase 4 is PAUSED and re-gated behind Phase 0.5. A
+> production-time measurement showed the gateway is up during scheduled cycles
+> (`restart_gateway.sh` at 13:00/16:00/17:25, `run_ares.sh` at 13:30/21:00) and
+> the last real cycle used `(live)` prices for all five positions, so the
+> daily-Close premise Phase 4 relied on does not hold when decisions are made.
+> See `TRACKER_MIGRATION_PLAN_PHASE_0_5.md`. `ARES_PARITY` remains unset.
+
+    Phase 0  differential equivalence      COMPLETE (daily path only)
     Phase 1  tracker_v3_2dp adapter        COMPLETE, dormant
     Phase 3  rollback + state isolation    ESTABLISHED
     Phase 4  live shadow comparison        AUTHORIZE NOW
@@ -95,7 +103,15 @@ the laptop" is not evidence about the VPS.
 Note `pandas_ta` exposes no `__version__` attribute; resolve it with
 `importlib.metadata.version("pandas_ta")`. A naive probe reports it as missing.
 
-## Phase 0 — differential equivalence: COMPLETE
+## Phase 0 — differential equivalence: COMPLETE (DAILY-PRICE PATH ONLY)
+
+> **SCOPE CORRECTION 2026-09-28.** Phase 0 demonstrated no decision-changing
+> differences on the **daily-price path** within the tested population. It did
+> **not** test the production IBKR live-price path: its harness forced
+> `get_live_price` to `None`, and production takes the live branch during
+> scheduled cycles. Earlier wording in this document implying general tracker
+> equivalence was too broad. Phase 0.5 adds exact inline decision-input capture
+> so Phase 4 can evaluate the live path without a second market observation.
 
 Harness `Athena/run_tracker_equivalence.py`. 20 boundary fixtures and 250 historical
 Run A′ paths, 4,730 bars, cloned state, per-transition comparison, `tracker.py`
