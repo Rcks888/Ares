@@ -98,13 +98,43 @@ _EVAL_CYCLE_SEQ = 0        # monotonic in-process counter; not persisted
 ```python
     global _EVAL_CYCLE_SEQ
     _EVAL_CYCLE_SEQ += 1
-    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ
     _LAST_EVAL["packets"].clear()
+    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ
 ```
 
-Order matters: increment, assign, then clear. Clearing last guarantees no window
-exists in which the new token is live alongside packets from the previous
-invocation.
+**Order matters, and an earlier draft of this amendment had it backwards.** That
+draft specified increment, assign token, then clear, and claimed the ordering
+prevented the new token from coexisting with prior packets. It produced exactly
+that state:
+
+```
+rejected order:  clear last   ->  intermediate state = NEW token + STALE packets
+                                  a reader checking only packet == store token
+                                  ACCEPTS prior-cycle evidence
+required order:  clear first  ->  intermediate state = OLD token + EMPTY packets
+                                  nothing exists to accept
+```
+
+At the beginning of each invocation, the tracker increments the cycle sequence,
+clears all packets from the prior invocation, and only then publishes the new
+cycle token. This ordering ensures that the new token is never visible alongside
+prior-cycle packets. The only possible intermediate state is an old token with an
+empty packet store, which cannot be accepted as current-cycle evidence.
+
+Sequential execution today means neither order is *reachable* by the bridge,
+which reads only after the inline call returns. The order is still specified this
+way because a contract must not assert an invariant its own implementation
+momentarily violates — that is how a safe-looking refactor or a future concurrent
+reader turns a documented guarantee into a silent one.
+
+**Alternative considered:** publishing a fresh object
+(`_LAST_EVAL = {"cycle_token": ..., "packets": {}}`) marks the cycle boundary
+most sharply, but requires a `global _LAST_EVAL` rebind, structural tests that
+permit an invocation-level replacement, and a guarantee that the bridge reads
+`tracker._LAST_EVAL` fresh rather than holding an earlier reference. Rejected in
+favour of clear-then-publish: same dictionary object, fewer structural changes,
+and the bridge cannot accidentally hold a stale reference because there is only
+ever one object.
 
 **Operation 2 — packet write**, at the capture point defined in 2.3:
 
@@ -451,15 +481,23 @@ prose:
    `_EVAL_CYCLE_SEQ` appear in `tracker.py` only as assignment targets,
    subscript stores, and `.clear()` — never as a value feeding a comparison,
    branch, return, or call argument in any decision path.
-6. **Disabled mode rotates and clears identically.** With `ARES_PARITY` unset,
+6. **No observable state contains a new token beside prior-cycle packets.**
+   Assert the initialization transition directly: after invocation 1 writes
+   packets, drive invocation 2's initialization and verify that at no observed
+   point does `cycle_token` hold the new value while `packets` still contains
+   invocation 1's entries. If the implementation exposes no seam, assert the
+   ordering structurally (the `.clear()` call precedes the `cycle_token`
+   assignment in the AST of the initialization block) **and** assert the
+   post-initialization state is `new token + empty packets`.
+7. **Disabled mode rotates and clears identically.** With `ARES_PARITY` unset,
    invoking `check_open_trades` still increments the token and still clears the
    store. The two modes must not diverge in telemetry behaviour, or the
    disabled-mode equivalence proven in Phase 4 no longer covers the real code
    path.
-7. **The store never reaches disk.** No `save_*`, `json.dump`, or file write
+8. **The store never reaches disk.** No `save_*`, `json.dump`, or file write
    receives `_LAST_EVAL` or any packet; `logs/virtual_trades.json` is
    byte-identical across an instrumented cycle that changes no position.
-8. **Only the bridge reads it.** `_LAST_EVAL` is read solely by
+9. **Only the bridge reads it.** `_LAST_EVAL` is read solely by
    `engine/parity_hook.py` and `engine/parity_eval.py`; no report, scorecard,
    dashboard, or analytics module references it.
 
@@ -496,9 +534,9 @@ final parity report template, and any executive summary.
 
 ```
 At the start of every check_open_trades invocation:
-  1. Generate a new non-persisted invocation token (monotonic counter).
-  2. Store it as the current invocation token.
-  3. Clear all prior decision-input packets.
+  1. Increment the non-persisted monotonic cycle sequence.
+  2. Clear all prior decision-input packets.
+  3. ONLY THEN publish the new value as the current invocation token.
 
 For each open trade:
   4. Resolve the exact inputs the inline decision will use.
@@ -517,6 +555,12 @@ One-line statement of the whole phase:
 > Capture the exact inputs used by the authoritative inline decision, identify
 > them by invocation, and expose them one-way to parity without changing
 > decisions, persistence, networking, or failure handling.
+
+Governing contract:
+
+> Each invocation clears prior packets **before** publishing its new cycle token.
+> The inline tracker writes exact decision inputs once, never reads them back,
+> and parity consumes only packets created by the completed current invocation.
 
 ---
 
