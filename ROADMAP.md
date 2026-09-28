@@ -2085,6 +2085,74 @@ inconclusive; reject the policy family. **"Least bad" is excluded** - the
 experiment is not required to produce a winner. If A-D all lose, the result is
 "no policy cleared the economic bar," not "B was best."
 
+#### CLOSURE 2026-09-28 — Block A stage 1 COMPLETE
+
+Runner `Athena/run_exit_replay.py`, Athena `1cb0091`, source fix Ares `61ecd22`.
+Full record in `Athena/BLOCK_A_STAGE1_STATUS.md`.
+
+**Gate 1 — Policy A parity: PASS, 293/293**, before and after the correction below.
+Exact on symbol, entry_date, exit_date, exit_reason, scaled_out, scale_out_date,
+holding_days; dollar fields within 1e-4. The isolated harness reproduces `run_sim`'s
+fill semantics including dropped orders on missing bars.
+
+**A confound was found and corrected mid-experiment.** `decide_scale_out` gated
+take-profit preservation on `exit_policy == "A"`, so B and D recomputed from
+`tiers[0] = 0.18` and **silently moved the mean-reversion scale-out from +10% to
++18%** — a second, unregistered intervention in a trail-activation-only study. This
+altered the treatment, not merely the reporting, so **all pre-fix B and D figures are
+invalidated and superseded.** Fixed at source; Policy A's branch unchanged;
+`assert_scale_out_policy_invariant` now guards every run.
+
+Evidence the correction restored the registered intervention: post-fix affected
+subsets reproduce the pre-registered counts and hurdles **exactly** — B/A 34 and
++2.13pp, D/A 24 and +3.02pp, B/B 44 and +1.68pp, D/B 29 and +2.55pp.
+
+**Gate 3 — all four cells fail:**
+
+| Policy | Universe | mean paired delta | CI90 (date-block) |
+|---|---|---|---|
+| B | A | +0.0734pp | [-0.4933, +0.6572] |
+| B | B | -0.0147pp | [-0.8530, +0.9479] |
+| D | A | +0.2113pp | [-0.0394, +0.4789] |
+| D | B | -0.0189pp | [-0.4813, +0.5483] |
+
+No point estimate reaches +0.50pp; both policies change sign across universes; every
+interval includes zero; median paired delta is exactly 0.0000pp in all four cells.
+
+**The correction removed the only interesting cell.** D / Universe A was pre-fix
+CI90 [+0.0640, +0.6436], excluding zero. Post-fix it includes zero. That apparent
+signal was the accidental +18% reversal threshold, not trail activation. Stopping
+before reconciliation would have recorded an artifact as a finding.
+
+**Concentration gate: formally evaluated, non-informative here.** It reads 100% in
+all four cells, but positive-delta populations are 8, 10, 8 and 6 — at or below the
+top-10 numerator, so 100% is mechanically forced and has no discriminating power.
+The registered 50% threshold is **not** revised retroactively; it simply does not
+bear on this result. The failure rests on the point estimates, the cross-universe
+sign reversal, the intervals including zero, and Gate 4's mechanism outcome.
+
+**Gate 4 — mechanism confirms the structural prior.** `hit_initial_stop` dominates
+every affected subset: B/A 14 of 34, D/A 12 of 24, B/B 21 of 44, D/B 18 of 29.
+Because `effective_stop = max(stop_loss, trailing_stop)`, suppressing the trail
+removes a known higher exit and exposes the trade to the lower initial stop. Some
+trades recover; more continue down. **A documented weakness can still be
+load-bearing relative to the available alternative.**
+
+**Registered verdict.** Policies B and D fail stage 1 in both universes. Policy A
+remains the **control** — not because it is optimal, but because neither registered
+alternative showed consistent incremental value. Stage 2 is **unauthorized**: no
+candidate passed stage 1, so a chronological portfolio replay has nothing to
+evaluate. Block A completes and stops. Blocks B-D remain closed.
+
+**Wording discipline.** "Policy A is retained" must never be shortened to "Policy A
+is validated." It is not validated as profitable, optimal, or deployable. Run A'
+remains -5.58% funded in Universe A. Policy A survives these two specific
+challengers and nothing more.
+
+**The live tracker swap is not accelerated by this result.** `engine/tracker.py`
+still does not import the canonical module. The swap proceeds only under its own
+controlled plan, after ABM and SDGR clear.
+
 ### Label contract (Block B)
 
 ```
