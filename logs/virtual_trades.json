@@ -66,7 +66,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 2,
+      "days_tracked": 5,
       "max_days": 30,
       "peak_after_exit": 9.27,
       "trough_after_exit": 8.43,
@@ -74,7 +74,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 1.2,
       "avoided_downside_pct": 7.97,
-      "latest_price": 8.92
+      "latest_price": 9.05
     }
   },
   {
@@ -132,7 +132,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 7,
+      "days_tracked": 10,
       "max_days": 30,
       "peak_after_exit": 18.09,
       "trough_after_exit": 15.89,
@@ -140,7 +140,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 4.87,
       "avoided_downside_pct": 7.88,
-      "latest_price": 16.03
+      "latest_price": 15.96
     },
     "scale_out_shares": 4.36,
     "scale_out_pnl": 9.07,
@@ -193,7 +193,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 16,
+    "holding_days": 19,
     "entry_price_original": 45.86,
     "entry_true_open": 50.6,
     "entry_error_pct": -9.46,
@@ -248,7 +248,7 @@
     "holding_days": 7,
     "shadow": {
       "active": true,
-      "days_tracked": 9,
+      "days_tracked": 12,
       "max_days": 30,
       "peak_after_exit": 19.33,
       "trough_after_exit": 18.24,
@@ -256,7 +256,7 @@
       "trough_date": "2026-09-23",
       "missed_upside_pct": 2.76,
       "avoided_downside_pct": 3.03,
-      "latest_price": 18.82
+      "latest_price": 18.53
     },
     "post_mortem": {
       "exit_reason": "stop_loss",
@@ -347,15 +347,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 3,
+      "days_tracked": 6,
       "max_days": 30,
-      "peak_after_exit": 78.25,
+      "peak_after_exit": 78.88,
       "trough_after_exit": 77.54,
-      "peak_date": "2026-09-22",
+      "peak_date": "2026-09-28",
       "trough_date": "2026-09-22",
-      "missed_upside_pct": 0.1,
+      "missed_upside_pct": 0.91,
       "avoided_downside_pct": 0.81,
-      "latest_price": 77.9
+      "latest_price": 78.88
     }
   },
   {
@@ -396,7 +396,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 7,
+    "holding_days": 10,
     "entry_error_pct": 0.0,
     "sample_phase": "pre_clean",
     "contaminated": true,
@@ -449,7 +449,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 4
+    "holding_days": 7
   },
   {
     "symbol": "WBD",
@@ -497,7 +497,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 3
+    "holding_days": 6
   },
   {
     "symbol": "NEOG",
@@ -564,7 +564,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 1,
+      "days_tracked": 4,
       "max_days": 30,
       "peak_after_exit": 13.76,
       "trough_after_exit": 13.66,
@@ -572,7 +572,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 0.15,
       "avoided_downside_pct": 0.58,
-      "latest_price": 13.76
+      "latest_price": 13.72
     }
   },
   {
@@ -593,8 +593,8 @@
     "position_size": 149.0,
     "stop_loss": 12.07,
     "take_profit": 17.33,
-    "trailing_stop": 14.14,
-    "peak_price": 15.71,
+    "trailing_stop": 14.63,
+    "peak_price": 16.26,
     "rsi_at_entry": 76.7,
     "vol_at_entry": 2.52,
     "stdev_20": 0.089,
@@ -621,6 +621,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 0
+    "holding_days": 3
   }
 ]
