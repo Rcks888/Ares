@@ -29,6 +29,8 @@ SUITES = {
     "adapter": "tests/test_tracker_compat.py",
     "classifier": "tests/test_parity_compare.py",
     "wiring": "tests/test_parity_runner.py",
+    "evaluator": "tests/test_parity_eval.py",
+    "bridge": "tests/test_parity_hook.py",
 }
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
@@ -252,7 +254,7 @@ def main():
     snap["test_suites"] = tests
     snap["assertion_total"] = sum(t["assertions"] for t in tests.values())
     snap["assertion_note"] = (
-        "The three suites are DISJOINT files; assertion_total is their sum, "
+        "The suites are DISJOINT files; assertion_total is their sum, "
         "not a superset relationship. Do not read it as requiring any other "
         "count to pass independently.")
     snap["phase3_gate"] = {

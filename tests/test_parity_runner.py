@@ -71,8 +71,12 @@ def fake_tracker(marker=True):
     return m, tmp
 
 
+DEFAULT_BAR = {"price": 49.57, "rsi": 55.0, "bearish_div": False,
+               "date": "2026-09-26", "price_source": "daily"}
+
+
 def harness(trades_before, trades_after, stdout="", module_eval=None,
-            marker=True, output=None, params=None):
+            marker=True, output=None, params=None, bar=None, bar_fn=None):
     """Build a one-shot observe_cycle invocation over in-memory state."""
     mod, _ = fake_tracker(marker)
     state = {"cur": [dict(t) for t in trades_before]}
@@ -85,9 +89,10 @@ def harness(trades_before, trades_after, stdout="", module_eval=None,
     def load_state():
         return [dict(t) for t in state["cur"]]
 
-    me = module_eval or (lambda t, p: dict(t))
+    me = module_eval or (lambda t, p, bb: dict(t))
+    bf = bar_fn or (lambda s: dict(bar or DEFAULT_BAR))
     out = output or str(Path(tempfile.mkdtemp()) / "shadow.jsonl")
-    res, summ = sr.observe_cycle(mod, inline_call, load_state, me,
+    res, summ = sr.observe_cycle(mod, inline_call, load_state, me, bar_fn=bf,
                                  params=params or {},
                                  lineage={"production_commit": "01617b7"},
                                  output_path=out)
@@ -103,7 +108,7 @@ def test_inline_result_returned_unchanged():
 
 
 def test_shadow_exception_cannot_break_cycle():
-    def boom(t, p):
+    def boom(t, p, bb):
         raise RuntimeError("shadow exploded")
     res, summ, out = harness([st()], [st()], module_eval=boom)
     check("inline result survives shadow exception", res == "INLINE_RESULT")
@@ -151,7 +156,7 @@ def test_load_state_failure_does_not_break_cycle():
     def bad_load():
         raise IOError("disk gone")
     res, summ = sr.observe_cycle(mod, inline_call, bad_load,
-                                 lambda t, p: dict(t))
+                                 lambda t, p, bb: dict(t))
     check("inline result survives load_state failure", res == "OK")
     check("shadow system error recorded",
           summ["shadow_system_error"] is not None, summ)
@@ -164,7 +169,7 @@ def test_inline_raise_propagates():
         raise KeyError("production fault")
     try:
         sr.observe_cycle(mod, inline_call, lambda: [st()],
-                         lambda t, p: dict(t))
+                         lambda t, p, bb: dict(t))
         check("inline raise propagates", False, "was swallowed")
     except KeyError:
         check("inline raise propagates, not masked by shadow layer", True)
@@ -174,7 +179,7 @@ def test_warn_called_on_degradation():
     seen = []
     mod, _ = fake_tracker()
     sr.observe_cycle(mod, lambda: "OK", lambda: [st()],
-                     lambda t, p: dict(t),
+                     lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
                      output_path=unwritable_output(),
                      warn=seen.append)
     check("warn invoked on write failure", len(seen) == 1, seen)
@@ -183,7 +188,7 @@ def test_warn_called_on_degradation():
     def bad_warn(msg):
         raise RuntimeError("telegram down")
     res, _ = sr.observe_cycle(mod, lambda: "OK", lambda: [st()],
-                              lambda t, p: dict(t),
+                              lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
                               output_path=unwritable_output(),
                               warn=bad_warn)
     check("a failing warn cannot break the cycle", res == "OK")
@@ -264,13 +269,14 @@ def test_shadow_mutation_is_caught():
     def load_state():
         return live["cur"]          # deliberately NOT a copy
 
-    def leaky_eval(t, p):
+    def leaky_eval(t, p, bb):
         live["cur"][0]["peak_price"] = 99.99    # mutate production state
         return dict(t)
 
     mod, _ = fake_tracker()
     out = str(Path(tempfile.mkdtemp()) / "s.jsonl")
     res, summ = sr.observe_cycle(mod, inline_call, load_state, leaky_eval,
+                                 bar_fn=lambda s: dict(DEFAULT_BAR),
                                  output_path=out)
     check("inline result still returned", res == "OK")
     rec = json.loads(Path(out).read_text().strip())
@@ -320,7 +326,7 @@ def test_closed_and_scaled_positions():
     before = st()
     after = st(status="closed", exit_reason="stop_loss", exit_price=48.62)
     res, summ, out = harness([before], [after],
-                             module_eval=lambda t, p: dict(after))
+                             module_eval=lambda t, p, bb: dict(after))
     rec = json.loads(Path(out).read_text().strip())
     check("closure -> SUCCEEDED_ACTION",
           rec["inline_evaluation_status"] == sc.SUCCEEDED_ACTION)
@@ -329,7 +335,7 @@ def test_closed_and_scaled_positions():
     check("decision labelled", rec["inline_decision"] == "close:stop_loss")
     # Disagreeing closure
     res2, _, out2 = harness([before], [after],
-                            module_eval=lambda t, p: dict(t))
+                            module_eval=lambda t, p, bb: dict(t))
     rec2 = json.loads(Path(out2).read_text().strip())
     check("inline closed, shadow held -> DECISION_CHANGING_MISMATCH",
           rec2["difference_class"] == sc.DECISION_CHANGING_MISMATCH)
@@ -371,7 +377,7 @@ def test_module_eval_receives_pre_inline_state():
     post = st(peak_price=52.40, trailing_stop=47.16, scaled_out=True,
               shares=1.47)
 
-    def spy(trade, params):
+    def spy(trade, params, bar):
         seen.append(deep(trade))
         return dict(trade)
 
@@ -391,7 +397,7 @@ def test_module_eval_gets_an_isolated_clone():
     """Mutating the handed-in trade must not reach production state."""
     live = {"cur": [st()]}
 
-    def vandal(trade, params):
+    def vandal(trade, params, bar):
         trade["peak_price"] = 1234.56
         trade["stop_loss"] = 0.01
         return dict(trade)
@@ -399,7 +405,7 @@ def test_module_eval_gets_an_isolated_clone():
     mod, _ = fake_tracker()
     out = str(Path(tempfile.mkdtemp()) / "p.jsonl")
     sr.observe_cycle(mod, lambda: "OK", lambda: live["cur"], vandal,
-                     output_path=out)
+                     bar_fn=lambda s: dict(DEFAULT_BAR), output_path=out)
     check("production peak_price untouched", live["cur"][0]["peak_price"] == 50.91,
           live["cur"][0]["peak_price"])
     check("production stop_loss untouched", live["cur"][0]["stop_loss"] == 48.67)
@@ -422,7 +428,7 @@ def test_stdout_is_preserved_for_operators():
 
     with _rs(outer):
         sr.observe_cycle(mod, inline_call, lambda: [st()],
-                         lambda t, p: dict(t),
+                         lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
                          output_path=str(Path(tempfile.mkdtemp()) / "p.jsonl"))
     check("operator output still reaches the real stream",
           "ABM: holding, trail 48.67" in outer.getvalue(),
@@ -442,7 +448,7 @@ def test_stdout_preserved_even_when_marker_present():
 
     with _rs(outer):
         sr.observe_cycle(mod, inline_call, lambda: [st()],
-                         lambda t, p: dict(t),
+                         lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
                          output_path=str(Path(tempfile.mkdtemp()) / "p.jsonl"))
     txt = outer.getvalue()
     check("error line preserved for operators", "Error checking ABM" in txt)
@@ -482,8 +488,10 @@ def test_dormancy_and_isolation():
          "-e", "parity_compare", "-e", "tracker_compat", str(ROOT)],
         capture_output=True, text=True).stdout.strip().splitlines()
     allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
-               "engine/parity_runner.py", "tests/test_tracker_compat.py",
-               "tests/test_parity_compare.py", "tests/test_parity_runner.py",
+               "engine/parity_runner.py", "engine/parity_eval.py",
+               "tests/test_tracker_compat.py", "tests/test_parity_eval.py",
+               "engine/parity_hook.py", "tests/test_parity_compare.py",
+               "tests/test_parity_hook.py", "tests/test_parity_runner.py",
                "tools/pre_parity_snapshot.py")
     offenders = [h for h in hits if not any(a in h for a in allowed)]
     check("no production module references the shadow stack", not offenders,

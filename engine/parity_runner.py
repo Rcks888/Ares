@@ -104,7 +104,8 @@ def append_record(record, output_path=DEFAULT_OUTPUT):
 
 
 def observe_cycle(tracker_module, inline_call, load_state, module_eval,
-                  params=None, lineage=None, cycle_id=None,
+                  bar_fn=None, bar_recheck=None, params=None, params_fn=None,
+                  premise_fn=None, lineage=None, cycle_id=None,
                   output_path=DEFAULT_OUTPUT, warn=None):
     """Run one shadow observation cycle around an inline tracker call.
 
@@ -112,8 +113,30 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     `inline_call()` returned, untouched.
 
     `load_state()` must return the list of trade dicts as persisted.
-    `module_eval(cloned_trade, params)` must return the post-evaluation state
-    dict for the canonical module plus adapter, or raise.
+    `module_eval(cloned_trade, params, bar)` must return the post-evaluation
+    state dict for the canonical module plus adapter, or raise.
+    `bar_fn(symbol)` must return the bar dict, and is called in the PRE-inline
+    phase so both paths are evaluated against the same market data. A bar_fn
+    failure is per-symbol and does not abort the cycle.
+
+    `bar_recheck(symbol, bar)` is called AFTER the inline call and returns a
+    reason string if the pre-captured bar turned out not to be the bar the inline
+    path evaluated -- e.g. the inline path refreshed the underlying cache
+    mid-cycle. Capturing bars pre-inline keeps parity from seeing a LATER bar,
+    but it cannot by itself prove the inline path did not move to a newer one, so
+    the staleness direction is checked here instead of assumed.
+
+    `params_fn()` is preferred over `params`. Passing an already-evaluated
+    `params` means the caller evaluated it BEFORE entering this function, so a
+    config-load failure would raise at the call site and prevent the inline
+    tracker from running at all -- the exact failure mode fail-open exists to
+    prevent. A callable is resolved inside the protected section instead.
+
+    `premise_fn()` is resolved AFTER the inline call, because it reports what the
+    inline path actually experienced (e.g. whether a live price source turned out
+    to be reachable). Returning anything other than a dict with
+    ok=True refuses the cycle rather than comparing against a premise that did
+    not hold.
     """
     params = params or {}
     cycle_id = cycle_id or str(uuid.uuid4())[:8]
@@ -127,6 +150,22 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
         before = copy.deepcopy(load_state())
     except Exception as exc:                        # noqa: BLE001
         summary["shadow_system_error"] = f"pre-state: {type(exc).__name__}: {exc}"
+
+    # Bars are captured BEFORE the inline call, alongside the pre-inline state,
+    # so the parity side cannot be handed a later bar than the inline path saw.
+    bars = {}
+    try:
+        if bar_fn:
+            for t in (before or []):
+                if t.get("status") != "open":
+                    continue
+                try:
+                    bars[t.get("symbol")] = bar_fn(t.get("symbol"))
+                except Exception as exc:            # noqa: BLE001
+                    bars[t.get("symbol")] = {"_error":
+                                             f"{type(exc).__name__}: {exc}"}
+    except Exception as exc:                        # noqa: BLE001
+        summary["shadow_system_error"] = f"bars: {type(exc).__name__}: {exc}"
 
     buf = io.StringIO()
     try:
@@ -143,7 +182,8 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     try:
         summary.update(_shadow_pass(tracker_module, load_state, module_eval,
                                     params, lineage or {}, cycle_id, before,
-                                    captured, output_path, summary))
+                                    captured, output_path, summary, bars,
+                                    params_fn, premise_fn, bar_recheck))
     except Exception as exc:                        # noqa: BLE001
         summary["shadow_system_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -157,11 +197,40 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     return inline_result, summary
 
 
+def _recheck_failed(bar_recheck, symbol, bar):
+    """Return a reason string if the pre-captured bar is no longer trustworthy."""
+    if not bar_recheck:
+        return None
+    try:
+        return bar_recheck(symbol, bar) or None
+    except Exception as exc:                        # noqa: BLE001
+        return f"recheck failed: {type(exc).__name__}: {exc}"
+
+
 def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
-                 cycle_id, before, captured, output_path, summary):
+                 cycle_id, before, captured, output_path, summary, bars=None,
+                 params_fn=None, premise_fn=None, bar_recheck=None):
     out = {}
     contract = sc.verify_marker_contract(tracker_module)
     out["contract_valid"] = contract.get("valid")
+
+    # Resolved here, not at the call site: a failure must degrade the parity
+    # record, never the inline cycle that has already completed above.
+    if params_fn is not None:
+        try:
+            params = dict(params_fn())
+        except Exception as exc:                    # noqa: BLE001
+            out["params_error"] = f"{type(exc).__name__}: {exc}"
+            params = None
+
+    premise = {"ok": True, "source": "not_checked"}
+    if premise_fn is not None:
+        try:
+            premise = dict(premise_fn())
+        except Exception as exc:                    # noqa: BLE001
+            premise = {"ok": False,
+                       "reason": f"{type(exc).__name__}: {exc}"}
+    out["premise"] = premise
 
     after_inline = copy.deepcopy(load_state())
     hash_before = sc.canonical_hash(after_inline)
@@ -178,21 +247,35 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
         inline_failed = sc.inline_failed_for(symbol, captured)
         inline_status = sc.classify_status(pre, post, inline_failed)
 
+        bar = (bars or {}).get(symbol)
         shadow_after, s_exc_t, s_exc_m = None, None, None
-        try:
-            shadow_after = module_eval(copy.deepcopy(pre), dict(params))
-        except Exception as exc:                    # noqa: BLE001
-            s_exc_t, s_exc_m = type(exc).__name__, str(exc)
+        if not premise.get("ok", True):
+            s_exc_t = "PremiseNotHeld"
+            s_exc_m = str(premise.get("reason", "premise refused"))
+        elif params is None:
+            s_exc_t = "ParamsUnavailable"
+            s_exc_m = out.get("params_error", "params unavailable")
+        elif bar is None or bar.get("_error"):
+            s_exc_t = "BarUnavailable"
+            s_exc_m = (bar or {}).get("_error", "no bar supplied")
+        elif _recheck_failed(bar_recheck, symbol, bar):
+            s_exc_t = "BarStale"
+            s_exc_m = _recheck_failed(bar_recheck, symbol, bar)
+        else:
+            try:
+                shadow_after = module_eval(copy.deepcopy(pre), dict(params), bar)
+            except Exception as exc:                # noqa: BLE001
+                s_exc_t, s_exc_m = type(exc).__name__, str(exc)
         shadow_status = sc.classify_status(pre, shadow_after,
                                            s_exc_t is not None)
 
         records.append((symbol, pre, post, inline_status, shadow_status,
-                        shadow_after, s_exc_t, s_exc_m, contract))
+                        shadow_after, s_exc_t, s_exc_m, contract, bar))
 
     hash_after = sc.canonical_hash(copy.deepcopy(load_state()))
 
     built = []
-    for (symbol, pre, post, i_st, s_st, s_after, s_t, s_m, ctr) in records:
+    for (symbol, pre, post, i_st, s_st, s_after, s_t, s_m, ctr, bar) in records:
         rec = sc.build_record(
             symbol=symbol, entry_date=pre.get("entry_date"),
             timestamp=_now(), lineage=lineage,
@@ -204,7 +287,7 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
             shadow_exception_type=s_t, shadow_exception_message=s_m,
             production_state_hash_before=hash_before,
             production_state_hash_after=hash_after,
-            contract=ctr)
+            contract=ctr, bar=bar)
         built.append(rec)
         if append_record(rec, output_path):
             summary["written"] += 1

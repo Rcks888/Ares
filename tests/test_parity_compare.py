@@ -294,8 +294,10 @@ def test_dormancy_boundary():
          "-e", "tracker_compat", str(ROOT)],
         capture_output=True, text=True).stdout.strip().splitlines()
     allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
-               "engine/parity_runner.py", "tests/test_tracker_compat.py",
+               "engine/parity_runner.py", "engine/parity_eval.py",
+               "engine/parity_hook.py", "tests/test_tracker_compat.py",
                "tests/test_parity_compare.py", "tests/test_parity_runner.py",
+               "tests/test_parity_eval.py", "tests/test_parity_hook.py",
                "tools/pre_parity_snapshot.py")
     offenders = [h for h in hits if not any(a in h for a in allowed)]
     check("only the adapter, shadow module and their tests reference them",

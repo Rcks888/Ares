@@ -1,6 +1,6 @@
 {
-  "generated_utc": "2026-09-28T05:58:47.492685+00:00",
-  "generated_on_commit": "24f4daf",
+  "generated_utc": "2026-09-28T07:09:38.689763+00:00",
+  "generated_on_commit": "b5129b4",
   "tracker_source_hash": "be7b60383dba5d718821e8ef52209953",
   "exit_policy_md5": "d00e621da121dc19320c739bc6b81f84",
   "compatibility_contract": "tracker_v3_2dp",
@@ -15,7 +15,9 @@
   "suite_assertions": {
     "adapter": 65,
     "classifier": 98,
-    "wiring": 95
+    "wiring": 95,
+    "evaluator": 61,
+    "bridge": 86
   },
   "note": "Regenerate deliberately with 'python3 tools/pre_parity_snapshot.py --update-baseline' when assertions are added or tracker.py legitimately changes. A diff here must be reviewed, never auto-synced."
 }

@@ -6,7 +6,8 @@ from pathlib import Path
 from engine.data_feed import refresh_watchlist, load_stock, disconnect_ib, prune_cache
 from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
-from engine.tracker import open_trade, check_open_trades, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals, maintain_queue, promote_queue, load_trades, load_queue
+from engine.tracker import open_trade, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals, maintain_queue, promote_queue, load_trades, load_queue
+from engine.parity_hook import observed_check_open_trades
 
 USE_SCREENER = True
 
@@ -53,7 +54,9 @@ def generate_report():
     execute_pending_signals()
 
     print("\n[2] Checking open positions...")
-    check_open_trades()
+    # Phase 4: identical to check_open_trades() unless ARES_PARITY=1. The inline
+    # tracker remains the sole decision authority either way.
+    observed_check_open_trades()
 
     print("\n[2b] SIGNAL QUEUE")
     print("-" * 40)
