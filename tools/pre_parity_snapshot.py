@@ -37,10 +37,22 @@ EXPECTED_TAG_COMMIT = "d6cbd55"
 
 
 def sh(*args):
+    """Run a command and ALWAYS return its output, pass or fail.
+
+    The first version returned only stderr on a non-zero exit. A failing test
+    suite exits 1, so its entire stdout -- including which assertion failed --
+    was discarded and reported as "0 assertions", indistinguishable from the
+    file never having run. The diagnosis was destroyed by the diagnostic tool.
+    stdout is now always preserved, with stderr appended.
+    """
     try:
         r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True,
-                           timeout=30)
-        return r.stdout.strip() if r.returncode == 0 else f"ERROR: {r.stderr.strip()}"
+                           timeout=300)
+        out = (r.stdout or "").strip()
+        if r.returncode != 0 and (r.stderr or "").strip():
+            out = (out + "\n" if out else "") + \
+                f"[exit {r.returncode}] {r.stderr.strip()}"
+        return out
     except Exception as exc:                        # noqa: BLE001
         return f"ERROR: {type(exc).__name__}: {exc}"
 
@@ -229,11 +241,13 @@ def main():
     tests = {}
     for name, path in SUITES.items():
         out = sh(sys.executable, path)
+        lines = out.splitlines()
         tests[name] = {
             "path": path,
             "passed": out.rstrip().endswith("ALL PASS"),
             "assertions": out.count("  pass  "),
-            "tail": out.strip().splitlines()[-1] if out.strip() else "NO OUTPUT",
+            "failures": [l.strip() for l in lines if l.lstrip().startswith("FAIL")],
+            "tail": lines[-1].strip() if lines else "NO OUTPUT",
         }
     snap["test_suites"] = tests
     snap["assertion_total"] = sum(t["assertions"] for t in tests.values())

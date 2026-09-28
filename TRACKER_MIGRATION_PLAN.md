@@ -42,8 +42,8 @@ retained for document stability. Actual order: 0 → 1 → 3 → 4 → 2 → 5.
 
 | Artifact | Value |
 |---|---|
-| Ares production commit | `777225c` |
-| Ares commit on VPS | `0396d10` — behind by four; see below |
+| Ares production commit | `3fde68d` (VPS synced 2026-09-28) |
+| Ares commit on VPS | `3fde68d` — **in sync** |
 | Athena research commit | `1cf6633` |
 | `engine/exit_policy.py` md5 | `d00e621da121dc19320c739bc6b81f84` |
 | `tracker.py` imports the module | **No** |
@@ -51,35 +51,46 @@ retained for document stability. Actual order: 0 → 1 → 3 → 4 → 2 → 5.
 Research outputs and live runtime lineage are tracked separately on purpose. Do not
 pull merely to align numbers; pull when there is an operational reason.
 
-**VPS divergence, stated precisely.** The VPS is four commits behind. The difference
-includes documentation **and the dormant, unreferenced `tracker_v3_2dp` adapter plus
-its tests** — that is source code, not documentation, so the earlier
-"documentation-only" wording no longer holds. No missing commit is imported or
-reachable by the current live runtime, so there is still no operational reason to
-pull.
+**VPS synchronised 2026-09-28** for the first justified reason: running the Phase 3
+verification. The pull was proven additive before being accepted — 10 commits,
+9 files, 2887 insertions, **0 deletions**, and no file in the live runtime path
+(`tracker.py`, `exit_policy.py`, `indicators.py`, `signals.py`,
+`daily_report.py`, `run_ares.sh`, `build_dashboard.py`), with those files'
+checksums confirmed byte-identical before and after. Every module it delivered
+remains dormant; the Phase 4 call site does not exist.
 
 ### Runtime the contract depends on
 
 `tracker_v3_2dp` reproduces observed **Python float** behaviour, so the runtime is
 part of the contract rather than incidental.
 
-| | Laptop (captured) | VPS |
+| | Laptop | VPS (captured 2026-09-28) |
 |---|---|---|
-| Python | 3.12.3 CPython | **to capture before Phase 5** |
-| OS / arch | Linux 6.18.33.2 WSL2 / x86_64 | to capture |
-| pandas | 3.0.3 | to capture |
-| numpy | 2.2.6 | to capture |
-| pandas_ta | 0.4.71b0 | to capture |
-| `float_info.mant_dig` | 53 | to capture |
+| Python | 3.12.3 CPython | 3.12.3 CPython |
+| arch / `mant_dig` | x86_64 / 53 | x86_64 / 53 |
+| pandas | 3.0.3 | **3.0.5** |
+| numpy | 2.2.6 | 2.2.6 |
+| pandas_ta | 0.4.71b0 | 0.4.71b0 |
+| `tracker.py` source hash | `be7b6038…` | `be7b6038…` |
+| `exit_policy.py` md5 | `d00e621d…` | `d00e621d…` |
 
-Rounding fingerprint, laptop:
-`[100.015, 100.005, 2.675, 0.125, 0.135, 109.985]` →
-`[100.02, 100.0, 2.67, 0.12, 0.14, 109.98]`
+Rounding fingerprint — **identical on both hosts**:
+`2.675→2.67, 0.125→0.12, 100.015→100.02, 109.985→109.98, 0.135→0.14`
 
-**Phase 5 pre-deployment check:** run all 65 adapter assertions in the
-VPS-equivalent environment and confirm the fingerprint matches. Not because a
-mismatch is expected, but because the contract intentionally depends on observed
-runtime float behaviour, so "it passed on the laptop" is not evidence about the VPS.
+**pandas differs: 3.0.3 laptop vs 3.0.5 VPS.** Not fatal, and not ignored. The
+contract depends on Python float behaviour, not on pandas, and every
+contract-critical field matches: fingerprint, `mant_dig`, tracker source hash and
+`exit_policy` md5. The contract holds identically. Recorded because a future pandas
+change could alter *indicator* values, which is a strategy / Phase 0.5 concern
+rather than a parity-contract one.
+
+**Marker contract verified on the VPS** against the loaded module at
+`/root/ares/Ares/engine/tracker.py`, hash `be7b6038…`, match true.
+
+**Phase 5 pre-deployment check:** re-run `tools/vps_phase3_verify.sh` and confirm
+the fingerprint still matches. Not because a mismatch is expected, but because the
+contract intentionally depends on observed runtime float behaviour, so "it passed on
+the laptop" is not evidence about the VPS.
 
 Note `pandas_ta` exposes no `__version__` attribute; resolve it with
 `importlib.metadata.version("pandas_ta")`. A naive probe reports it as missing.

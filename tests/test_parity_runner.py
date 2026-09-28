@@ -29,6 +29,22 @@ def check(name, cond, detail=""):
         FAILURES.append(name)
 
 
+def unwritable_output():
+    """A path that cannot be created by ANY user, including root.
+
+    An earlier version used "/nonexistent-root-xyz/...", assuming mkdir at / would
+    fail. That holds for an unprivileged user but NOT for root, so the test
+    passed on the laptop (uid 1000) and failed on the VPS (uid 0) -- and worse,
+    it CREATED a stray directory at the VPS filesystem root.
+
+    Making the parent a FILE instead yields NotADirectoryError regardless of
+    privilege, and writes only inside a temp dir.
+    """
+    blocker = Path(tempfile.mkdtemp()) / "blocker"
+    blocker.write_text("not a directory")
+    return str(blocker / "sub" / "out.jsonl")
+
+
 def st(**over):
     s = {"symbol": "ABM", "status": "open", "entry_date": "2026-09-09",
          "entry_price": 50.65, "stop_loss": 48.67, "shares": 2.94,
@@ -102,9 +118,24 @@ def test_shadow_exception_cannot_break_cycle():
     check("would_change_action is None", rec["would_change_action"] is None)
 
 
+def test_unwritable_path_premise_holds_for_any_user():
+    """The write-failure tests are vacuous if their path is actually writable."""
+    import os
+    target = unwritable_output()
+    ok = False
+    try:
+        Path(target).parent.mkdir(parents=True, exist_ok=True)
+    except (NotADirectoryError, FileExistsError, PermissionError):
+        ok = True
+    check(f"unwritable-path premise holds (euid={os.geteuid()})", ok,
+          f"{target} was creatable -- write-failure tests would be vacuous")
+    check("append_record reports failure for it",
+          sr.append_record({"x": 1}, target) is False)
+
+
 def test_write_failure_is_visible_not_silent():
     res, summ, _ = harness([st()], [st()],
-                           output="/nonexistent-root-xyz/shadow.jsonl")
+                           output=unwritable_output())
     check("inline result survives write failure", res == "INLINE_RESULT")
     check("write failure counted", summ["write_failures"] == 1, summ)
     check("attempted still counted", summ["attempted"] == 1)
@@ -144,7 +175,7 @@ def test_warn_called_on_degradation():
     mod, _ = fake_tracker()
     sr.observe_cycle(mod, lambda: "OK", lambda: [st()],
                      lambda t, p: dict(t),
-                     output_path="/nonexistent-root-xyz/s.jsonl",
+                     output_path=unwritable_output(),
                      warn=seen.append)
     check("warn invoked on write failure", len(seen) == 1, seen)
     check("warn message names the cycle", "shadow system degraded" in seen[0])
@@ -153,7 +184,7 @@ def test_warn_called_on_degradation():
         raise RuntimeError("telegram down")
     res, _ = sr.observe_cycle(mod, lambda: "OK", lambda: [st()],
                               lambda t, p: dict(t),
-                              output_path="/nonexistent-root-xyz/s.jsonl",
+                              output_path=unwritable_output(),
                               warn=bad_warn)
     check("a failing warn cannot break the cycle", res == "OK")
 
@@ -478,7 +509,8 @@ def test_dormancy_and_isolation():
 
 
 def main():
-    for fn in (test_inline_result_returned_unchanged,
+    for fn in (test_unwritable_path_premise_holds_for_any_user,
+               test_inline_result_returned_unchanged,
                test_shadow_exception_cannot_break_cycle,
                test_write_failure_is_visible_not_silent,
                test_load_state_failure_does_not_break_cycle,
