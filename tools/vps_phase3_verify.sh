@@ -9,8 +9,13 @@
 # Safe to re-run. Stops at the first problem instead of continuing.
 
 cd "$(dirname "$0")/.." || exit 1
-OUT_PRE="$HOME/snapshot_A_pre.txt"
-OUT_A="$HOME/snapshot_A_vps.json"
+# Snapshot label is DERIVED, not hardcoded. Snapshot A was taken before the
+# Phase 4 bridge existed; any run once engine/parity_hook.py is present is a
+# Snapshot B. A verifier must not assert a stage it cannot observe -- the same
+# defect as the stale suite count this script used to embed.
+if [ -f "$(dirname "$0")/../engine/parity_hook.py" ]; then SNAP="B"; else SNAP="A"; fi
+OUT_PRE="$HOME/snapshot_${SNAP}_pre.txt"
+OUT_A="$HOME/snapshot_${SNAP}_vps.json"
 
 # Files that must be byte-identical before and after the pull.
 RUNTIME_FILES="engine/tracker.py engine/exit_policy.py engine/indicators.py
@@ -69,7 +74,7 @@ else
 fi
 
 echo
-echo "=== 4. SNAPSHOT A ==="
+echo "=== 4. SNAPSHOT $SNAP ==="
 if [ ! -f tools/pre_parity_snapshot.py ]; then
   echo "STOP. tools/pre_parity_snapshot.py absent - pull did not land."
   exit 1
@@ -159,5 +164,13 @@ echo
 echo "artifacts: $OUT_PRE"
 echo "           $OUT_A"
 echo
-echo "This script enabled nothing. Phase 4 needs a call site that does not exist"
-echo "yet; Phase 5 remains prohibited."
+echo "This script enabled nothing."
+if [ "$SNAP" = "B" ]; then
+  echo "The Phase 4 bridge is present but OFF: parity runs only when"
+  echo "ARES_PARITY=1 is set on an invocation. This run did not set it, and"
+  echo "parity_output_absent above confirms no records exist yet."
+  echo "Phase 5 remains prohibited: observation only."
+else
+  echo "Phase 4 needs a call site that does not exist yet;"
+  echo "Phase 5 remains prohibited."
+fi
