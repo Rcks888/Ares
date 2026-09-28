@@ -71,20 +71,46 @@ behaviour, or production failure handling.
 
 ### 2.1 Tracker additions — the complete permitted diff
 
-Two additions only.
+**Corrected 2026-09-28.** An earlier draft of this amendment claimed "two
+additions only" while its own sample code referenced `_EVAL_CYCLE_TOKEN`, a
+variable the amendment never declared. The sample would not have run, and the
+undefined token is precisely the mechanism meant to prevent the stale-record
+failure described in section 2.4. The instrumentation is **three operations**,
+specified below in full.
+
+All telemetry lives in ONE bounded object rather than two loose module-level
+names, so there is a single thing to reason about, test, and prove non-
+authoritative:
 
 ```python
 # Module level. Migration telemetry only: written by check_open_trades, read by
 # the parity bridge, never read back by any decision path. Not persisted.
-_LAST_EVAL = {}
+_LAST_EVAL = {
+    "cycle_token": None,   # identity of the CURRENT invocation
+    "packets": {},         # symbol -> decision-input packet for that invocation
+}
+_EVAL_CYCLE_SEQ = 0        # monotonic in-process counter; not persisted
 ```
 
-and, inside `check_open_trades`, immediately after `today` is resolved at
-line 824 and **before** the entry-day check at line 825:
+**Operation 1 — invocation identity.** At the very start of every
+`check_open_trades()` invocation, before the trade loop, unconditionally:
 
 ```python
-            _LAST_EVAL[trade['symbol']] = {
-                "cycle_token": _EVAL_CYCLE_TOKEN,
+    global _EVAL_CYCLE_SEQ
+    _EVAL_CYCLE_SEQ += 1
+    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ
+    _LAST_EVAL["packets"].clear()
+```
+
+Order matters: increment, assign, then clear. Clearing last guarantees no window
+exists in which the new token is live alongside packets from the previous
+invocation.
+
+**Operation 2 — packet write**, at the capture point defined in 2.3:
+
+```python
+            _LAST_EVAL["packets"][trade['symbol']] = {
+                "cycle_token": _LAST_EVAL["cycle_token"],
                 "price": current_price,
                 "price_source": price_source,
                 "rsi": current_rsi,
@@ -92,6 +118,20 @@ line 824 and **before** the entry-day check at line 825:
                 "bar_date": today,
             }
 ```
+
+**Operation 3 — nothing.** There is no third tracker write. The parity-side read
+is not a tracker change.
+
+**Token generation.** A monotonic in-process counter, not a UUID: it is easier to
+assert on, and its only job is preventing a packet from one invocation being
+attributed to another **within the same process**. It is not persisted and need
+not survive restarts. A cross-process collision is not a hazard, because packets
+never outlive the process that wrote them.
+
+**Ownership.** The token is tracker-owned. A bridge-supplied token was
+considered and rejected: it would make tracker behaviour depend on parity
+orchestration and would break the disabled-mode equivalence established in
+Phase 4.
 
 ### 2.2 Why exactly these fields
 
@@ -112,7 +152,43 @@ Everything else the canonical module needs — `strategy`, `stop_loss`,
 clone. It must **not** be duplicated into the packet. This is a decision-input
 packet, not a tracker-state dump.
 
-### 2.3 Two placement details that matter
+### 2.3 Exact instrumentation order
+
+The packet needs all five inputs, so it cannot literally follow `today` unless
+the other four are already resolved. They are, but the order must be stated
+explicitly rather than inferred from line numbers, which move:
+
+```
+load cached data and add indicators
+        v
+resolve current_price   (live if live else daily_price)
+        v
+resolve price_source    ("IBKR" if live else "daily")
+        v
+resolve current_rsi
+        v
+resolve today
+        v
+read bearish_div for telemetry        <-- eager; see 2.4
+        v
+WRITE PACKET                          <-- the registered capture point
+        v
+entry-day skip  (if today == entry_date: continue)
+        v
+peak ratchet -> scale-out -> stop -> rsi -> divergence -> mean-reversion
+```
+
+**The capture point is defined semantically:** the packet is written after all
+five decision inputs are available and immediately before the entry-day skip and
+the first decision branch. Line numbers in this document are navigational aids,
+not the contract.
+
+A structural gate must assert the write remains:
+
+- after all five inputs are resolved,
+- before the entry-day `continue`,
+- before the peak ratchet, scale-out, stop, rsi, divergence and mean-reversion
+  branches.
 
 **Instrument before the entry-day skip, not after.** `tracker.py:825` does
 `if today == trade['entry_date']: continue`. Capturing after it would leave
@@ -127,6 +203,25 @@ unconditionally. This is a pure read of an already-loaded DataFrame row —
 no network, no I/O, no mutation, no decision change — but it is a read the
 inline path sometimes skips, and that difference is recorded here deliberately.
 
+**Truth-value contract.** The captured value must equal the exact Boolean
+interpretation the existing inline branch would have computed. Phase 0.5 does
+**not** normalise missing, `None`, or NaN values differently, and does not
+"clean up" the existing behaviour. If the inline path treats a value as truthy,
+the packet captures it as truthy, even if that is arguably wrong; correcting it
+would be a separate production decision with its own authorization.
+
+Measured, so the risk is bounded rather than assumed:
+`detect_bearish_divergence` returns `pd.Series(False, index=df.index)` and only
+ever assigns `True`, so the column is **bool dtype and NaN is not reachable**
+under the current implementation. `bool(float("nan"))` is `True`, which would be
+a semantic trap if NaN ever became possible — so the fixture set below exists to
+catch a future change to `indicators.py`, not to paper over today's behaviour.
+
+Required truth-semantics fixtures: `False`, `True`, field absent (default
+`False`), `None`, `0`, `1`, `numpy.bool_(False)`, `numpy.bool_(True)`, and
+`float("nan")` — the last asserting the **currently unreachable** NaN case is
+captured identically to how the inline condition would interpret it.
+
 ### 2.4 Cycle identity and the stale-record hazard
 
 A module-level dict persists across cycles. Without protection:
@@ -140,13 +235,35 @@ cycle N+1 fails on SDGR before instrumentation
 
 That would be false evidence of the most persuasive kind. Required contract:
 
-- A `_EVAL_CYCLE_TOKEN` is set once per `check_open_trades` invocation, and
-  `_LAST_EVAL` is cleared at the same point.
+- A new token is generated and the packet store cleared once per
+  `check_open_trades` invocation, unconditionally (operation 1 above).
 - Every packet carries that token.
-- The parity bridge reads the token **before** the inline call and accepts only
-  packets bearing it.
+- **Corrected:** an earlier draft said the bridge "reads the token before the
+  inline call". That is impossible for a tracker-owned token — before the call,
+  the token for that call does not exist. The correct sequence is:
+
+```
+parity clears and snapshots NO tracker telemetry itself
+        v
+inline check_open_trades begins
+        v
+tracker generates a new token and clears the store
+        v
+tracker writes current-invocation packets
+        v
+inline call returns
+        v
+parity reads tracker._LAST_EVAL cycle_token and packets
+        v
+parity accepts only packets whose embedded token == the store's cycle_token
+```
+
+  After the authoritative inline call returns, the parity bridge reads the
+  invocation token and packet store produced by **that** call, and accepts only
+  packets whose embedded token matches the store's invocation token.
 - A symbol with no packet, or a packet with a non-matching token, classifies
   `INLINE_INPUT_NOT_CAPTURED` and **never** falls back to an older value.
+- The parity bridge must not clear, write, or reorder the store. It is a reader.
 
 Clearing is unconditional, not gated on `ARES_PARITY`. A store that is cleared
 only when parity is enabled would behave differently in the two modes, which
@@ -314,6 +431,38 @@ value, since the inline decision uses the unrounded local.
 | entry-day skip | `skipped_entry_day`, derived from `bar_date` |
 | multiple symbols | no cross-contamination between packets |
 
+### 6.4b Token-contract tests
+
+The spec hole that made this correction necessary must be closed by test, not by
+prose:
+
+1. **Tokens rotate.** Two consecutive `check_open_trades` invocations produce
+   different `cycle_token` values.
+2. **A new invocation clears the previous one.** After invocation 2 begins, no
+   packet written during invocation 1 remains in the store.
+3. **Packet token matches its enclosing store.** For every packet,
+   `packet["cycle_token"] == _LAST_EVAL["cycle_token"]`.
+4. **A partial cycle cannot reuse an earlier packet.** Invocation 1 writes a
+   packet for symbol S; invocation 2 fails on S before the capture point. Parity
+   must classify S `INLINE_INPUT_NOT_CAPTURED` and must **not** read
+   invocation 1's values. This is the exact stale-record failure the token
+   exists to prevent, and it is the single most important test in Phase 0.5.
+5. **Tracker never reads the telemetry.** AST: `_LAST_EVAL` and
+   `_EVAL_CYCLE_SEQ` appear in `tracker.py` only as assignment targets,
+   subscript stores, and `.clear()` — never as a value feeding a comparison,
+   branch, return, or call argument in any decision path.
+6. **Disabled mode rotates and clears identically.** With `ARES_PARITY` unset,
+   invoking `check_open_trades` still increments the token and still clears the
+   store. The two modes must not diverge in telemetry behaviour, or the
+   disabled-mode equivalence proven in Phase 4 no longer covers the real code
+   path.
+7. **The store never reaches disk.** No `save_*`, `json.dump`, or file write
+   receives `_LAST_EVAL` or any packet; `logs/virtual_trades.json` is
+   byte-identical across an instrumented cycle that changes no position.
+8. **Only the bridge reads it.** `_LAST_EVAL` is read solely by
+   `engine/parity_hook.py` and `engine/parity_eval.py`; no report, scorecard,
+   dashboard, or analytics module references it.
+
 ### 6.5 Zero new network calls — structural and dynamic
 
 The parity path must never call `get_live_price`, `_get_ib`, `load_stock`,
@@ -340,6 +489,34 @@ equivalence must be replaced with:
 
 To be applied in: the migration plan, Phase 0 status, Phase 4 prerequisites, the
 final parity report template, and any executive summary.
+
+---
+
+## 7b. Revised core contract
+
+```
+At the start of every check_open_trades invocation:
+  1. Generate a new non-persisted invocation token (monotonic counter).
+  2. Store it as the current invocation token.
+  3. Clear all prior decision-input packets.
+
+For each open trade:
+  4. Resolve the exact inputs the inline decision will use.
+  5. Write one packet immediately before the entry-day skip.
+  6. Continue through the existing inline decision path UNCHANGED.
+
+After the authoritative inline call returns:
+  7. Parity reads the completed invocation token and packets.
+  8. It accepts only packets whose embedded token matches that invocation token.
+  9. Missing or mismatched packets classify INLINE_INPUT_NOT_CAPTURED.
+ 10. Tracker decision logic never reads the telemetry.
+```
+
+One-line statement of the whole phase:
+
+> Capture the exact inputs used by the authoritative inline decision, identify
+> them by invocation, and expose them one-way to parity without changing
+> decisions, persistence, networking, or failure handling.
 
 ---
 
