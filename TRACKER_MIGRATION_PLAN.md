@@ -13,7 +13,7 @@ that result or reopens it.
 | Item | State |
 |---|---|
 | Phase 0 — differential equivalence | **COMPLETE** over tested coverage |
-| Phase 1 — precision contract | **DECIDED below, adapter placement approved, not implemented** |
+| Phase 1 — precision contract | **COMPLETE offline** — `engine/tracker_compat.py`, dormant, 65 tests passing |
 | Phase 0.5 — indicator/exception hardening | **REGISTERED, separate change** |
 | Phase 2 — position clearance | Pending: ABM and SDGR still open |
 | Phase 3 — rollback point | Pending |
@@ -73,9 +73,50 @@ calls:
 | `shares` | `round(x, 2)` |
 | `scale_out_price` | `round(x, 2)` |
 | `scale_out_shares` | `round(x, 2)` |
-| exit fill | `round(round(effective_stop, 2) * (1 - slippage), 2)` |
+| `scale_out_shares`, `scale_out_pnl`, `scale_out_pnl_pct` | `round(x, 2)` |
+| exit fill | `round(raw * (1 - slippage), 2)` — a **single** round |
+| `exit_slippage` | `round(raw - raw * (1 - slippage), 4)` — 4dp, not 2 |
 
 Event ordering, inputs, commissions and outputs are preserved unchanged.
+
+**Correction to an earlier statement in this document.** The fill was previously
+written here as `round(round(effective_stop, 2) * (1 - slippage), 2)`. Reading
+`tracker._close_trade` directly shows that is wrong as a *fill rule*: the fill is a
+single round, `round(raw_exit * (1 - slippage), 2)`, and within one bar `raw_exit` is
+the **unrounded** `effective_stop`.
+
+The double round merely *reproduced* the FDX 2022-06-21 and NFLX 2022-07-22
+differences by coincidence of arithmetic. The real mechanism is that `trailing_stop`
+is persisted at 2dp on bar N and read back rounded on bar N+1, so the tracker's fill
+derives from a rounded carry-forward while the canonical module carried full
+precision. **State persistence compounds; the fill does not.** The adapter's tests
+assert the true mechanism, building the carry-forward explicitly rather than
+double-rounding. Anyone who "fixes" the fill into a double round has misread this.
+
+### Implementation: `engine/tracker_compat.py` (dormant)
+
+Two responsibilities only — `to_canonical_state` and `apply_tracker_v3_2dp`, plus
+`tracker_v3_2dp_fill` and `tracker_v3_2dp_slippage`. It does not retrieve market
+data, add indicators, decide commissions, write logs, save positions, send alerts,
+execute closes, or mutate its input. It is not a second tracker.
+
+Dormancy is **enforced by test**, not merely asserted: `tests/test_tracker_compat.py`
+greps the repository and fails if anything outside the adapter and its own tests
+references it, and separately asserts `tracker.py` imports neither `tracker_compat`
+nor `exit_policy`, and that `engine/__init__.py` auto-imports nothing. That check is
+expected to be updated deliberately in the Phase 5 wiring commit.
+
+65 assertions cover: tracker's exact defaults; half-cent boundaries below, at and
+above; which fields round and which must not; the fill and 4dp slippage; both
+observed rounding classes; stop-equals-trail equality preserved exactly; scale-out
+quantities; signed and zero P&L; non-mutation with `in_place` opt-in; determinism;
+idempotence; JSON round-trip and native float types; `None` passthrough.
+
+One test literal was initially wrong and the adapter was right: `100.015` rounds
+**up**, because its float is `100.015000000000000568`, above the midpoint. Of the
+boundary values used, only `0.125` is exactly representable, so banker's rounding is
+rarely what decides the result — the float representation is. Expectations are
+measured, not reasoned.
 
 **Placement: APPROVED at the adapter.** The rounding lives in the call-site adapter,
 not inside `exit_policy.py`. The canonical module stays precision-neutral.
