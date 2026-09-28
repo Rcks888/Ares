@@ -64,21 +64,50 @@ def pkg_version(name):
         return "UNKNOWN"
 
 
-def _has_concurrency():
-    """True if Ares code introduces concurrency, which would void stdout capture.
+CONCURRENCY_MODULES = {"threading", "multiprocessing", "asyncio",
+                       "concurrent", "concurrent.futures", "_thread"}
+CONCURRENCY_CALLS = {"Thread", "Process", "ThreadPoolExecutor",
+                     "ProcessPoolExecutor", "Pool", "start_new_thread"}
 
-    Scans first-party code only; venv dependencies legitimately use threads.
+
+def _concurrency_findings():
+    """Files introducing concurrency, which would void stdout-capture safety.
+
+    Parses the AST rather than grepping text. A string scan is wrong here and
+    was measurably wrong: the first version flagged parity_runner.py because a
+    COMMENT in it says "no threading, multiprocessing or asyncio anywhere".
+    Prose about concurrency is not concurrency. Only real imports and call
+    targets count.
+
+    First-party code only; venv dependencies legitimately use threads.
     """
-    pats = ("import threading", "Thread(", "multiprocessing",
-            "concurrent.futures", "import asyncio", "ThreadPool")
-    for p in list((ROOT / "engine").glob("*.py")) + list(ROOT.glob("*.py")):
+    import ast as _ast
+    hits = []
+    files = sorted(set(list((ROOT / "engine").glob("*.py"))
+                       + list(ROOT.glob("*.py"))))
+    for p in files:
         try:
-            txt = p.read_text(errors="replace")
+            tree = _ast.parse(p.read_text(errors="replace"))
         except Exception:                           # noqa: BLE001
             continue
-        if any(pat in txt for pat in pats):
-            return True
-    return False
+        for node in _ast.walk(tree):
+            if isinstance(node, _ast.Import):
+                for a in node.names:
+                    if a.name.split(".")[0] in CONCURRENCY_MODULES:
+                        hits.append(f"{p.name}: import {a.name}")
+            elif isinstance(node, _ast.ImportFrom):
+                if node.module and node.module.split(".")[0] in CONCURRENCY_MODULES:
+                    hits.append(f"{p.name}: from {node.module} import ...")
+            elif isinstance(node, _ast.Call):
+                fn = node.func
+                name = getattr(fn, "attr", None) or getattr(fn, "id", None)
+                if name in CONCURRENCY_CALLS:
+                    hits.append(f"{p.name}:{node.lineno}: {name}()")
+    return hits
+
+
+def _has_concurrency():
+    return bool(_concurrency_findings())
 
 
 def main():
@@ -227,13 +256,15 @@ def main():
                                      / "tracker_parity_v1.jsonl").exists(),
         # stdout capture is only safe while evaluation is sequential.
         "single_threaded_verified": not _has_concurrency(),
+        "concurrency_findings": _concurrency_findings(),
         "NOTE": ("Tests here ran in THIS runtime. The gate requires them to "
                  "pass in the VPS-equivalent runtime; run this same script on "
                  "the VPS and diff the 'runtime' and 'marker_contract' blocks "
                  "before authorizing Phase 4."),
     }
     snap["phase3_gate"]["all_local_checks_pass"] = all(
-        v for k, v in snap["phase3_gate"].items() if isinstance(v, bool))
+        v for k, v in snap["phase3_gate"].items()
+        if isinstance(v, bool) and k != "all_local_checks_pass")
 
     print(json.dumps(snap, indent=2))
     if "--write" in sys.argv:
