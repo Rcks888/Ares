@@ -25,13 +25,46 @@ that result or reopens it.
 | Artifact | Value |
 |---|---|
 | Ares production commit | `777225c` |
-| Ares commit on VPS | `0396d10` — behind by one, documentation only |
+| Ares commit on VPS | `0396d10` — behind by four; see below |
 | Athena research commit | `1cf6633` |
 | `engine/exit_policy.py` md5 | `d00e621da121dc19320c739bc6b81f84` |
 | `tracker.py` imports the module | **No** |
 
 Research outputs and live runtime lineage are tracked separately on purpose. Do not
 pull merely to align numbers; pull when there is an operational reason.
+
+**VPS divergence, stated precisely.** The VPS is four commits behind. The difference
+includes documentation **and the dormant, unreferenced `tracker_v3_2dp` adapter plus
+its tests** — that is source code, not documentation, so the earlier
+"documentation-only" wording no longer holds. No missing commit is imported or
+reachable by the current live runtime, so there is still no operational reason to
+pull.
+
+### Runtime the contract depends on
+
+`tracker_v3_2dp` reproduces observed **Python float** behaviour, so the runtime is
+part of the contract rather than incidental.
+
+| | Laptop (captured) | VPS |
+|---|---|---|
+| Python | 3.12.3 CPython | **to capture before Phase 5** |
+| OS / arch | Linux 6.18.33.2 WSL2 / x86_64 | to capture |
+| pandas | 3.0.3 | to capture |
+| numpy | 2.2.6 | to capture |
+| pandas_ta | 0.4.71b0 | to capture |
+| `float_info.mant_dig` | 53 | to capture |
+
+Rounding fingerprint, laptop:
+`[100.015, 100.005, 2.675, 0.125, 0.135, 109.985]` →
+`[100.02, 100.0, 2.67, 0.12, 0.14, 109.98]`
+
+**Phase 5 pre-deployment check:** run all 65 adapter assertions in the
+VPS-equivalent environment and confirm the fingerprint matches. Not because a
+mismatch is expected, but because the contract intentionally depends on observed
+runtime float behaviour, so "it passed on the laptop" is not evidence about the VPS.
+
+Note `pandas_ta` exposes no `__version__` attribute; resolve it with
+`importlib.metadata.version("pandas_ta")`. A naive probe reports it as missing.
 
 ## Phase 0 — differential equivalence: COMPLETE
 
@@ -93,6 +126,17 @@ precision. **State persistence compounds; the fill does not.** The adapter's tes
 assert the true mechanism, building the carry-forward explicitly rather than
 double-rounding. Anyone who "fixes" the fill into a double round has misread this.
 
+> **`tracker_v3_2dp` reproduces tracker state persistence. It must not be
+> simplified into an explicit double-round fill formula.**
+
+Verified sequence:
+
+    bar N    trailing_stop calculated
+             -> tracker persists trailing_stop at 2dp
+    bar N+1  tracker reads the persisted 2dp value
+             -> _close_trade applies slippage to that value
+             -> fill rounded ONCE
+
 ### Implementation: `engine/tracker_compat.py` (dormant)
 
 Two responsibilities only — `to_canonical_state` and `apply_tracker_v3_2dp`, plus
@@ -103,8 +147,20 @@ execute closes, or mutate its input. It is not a second tracker.
 Dormancy is **enforced by test**, not merely asserted: `tests/test_tracker_compat.py`
 greps the repository and fails if anything outside the adapter and its own tests
 references it, and separately asserts `tracker.py` imports neither `tracker_compat`
-nor `exit_policy`, and that `engine/__init__.py` auto-imports nothing. That check is
-expected to be updated deliberately in the Phase 5 wiring commit.
+nor `exit_policy`, and that `engine/__init__.py` auto-imports nothing.
+
+**Phase 5 must CONVERT this test, not delete it.** It transitions from:
+
+    no runtime reference is allowed
+
+to an allowed-import boundary test:
+
+    only tracker.py may reference tracker_compat
+    no other runtime entry point may import it
+
+Deleting it would let the adapter later become reachable from a second call site
+through an unnoticed import — precisely the failure the "not silently bypassed by
+another call site" condition exists to prevent.
 
 65 assertions cover: tracker's exact defaults; half-cent boundaries below, at and
 above; which fields round and which must not; the fill and 4dp slippage; both
@@ -286,6 +342,22 @@ unscaled, so the scale-out branch is live for each.
 This table is the post-rollback expectation. Any divergence after a rollback is a
 defect, not drift. **Re-snapshot immediately before the swap** — these values move
 daily.
+
+### Clearance sequence, to run when ABM and SDGR close
+
+1. Confirm ABM and SDGR are no longer open.
+2. Verify their resolution by **symbol and `entry_date`**, not by the open-record
+   `phase` field, which is unstamped until closure. Do **not** treat disappearance
+   from the open list as closure — confirm each moved to the expected closed or
+   otherwise resolved state.
+3. Re-snapshot: open positions, closed count, realised P&L, `psi_state.json`,
+   relevant log checksums, current production commit, canonical module md5,
+   `tracker_compat` contract version, scheduler state.
+4. Re-verify `pre-tracker-swap` resolves to `d6cbd55`.
+5. Re-verify the rollback command.
+6. Run all adapter and dormancy tests in the **VPS-equivalent** environment.
+7. Authorize Phase 4 only then. Keep the inline tracker authoritative throughout.
+8. Do not authorize Phase 5 unless the shadow comparison is clean.
 
 ## Phase 4 — shadow comparison
 
