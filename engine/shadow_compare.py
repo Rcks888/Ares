@@ -48,7 +48,13 @@ tracker source by the test suite, so a format change breaks the build rather
 than corrupting the record.
 """
 
+import hashlib
+import inspect
+import json
+
 from engine.tracker_compat import CONTRACT_VERSION, STORED_2DP
+
+RECORD_SCHEMA_VERSION = 1
 
 # Asserted against engine/tracker.py by tests/test_shadow_compare.py.
 MARKER_CONTRACT = '  Error checking {trade[\'symbol\']}: {e}'
@@ -68,6 +74,9 @@ INLINE_EVALUATION_FAILURE = "INLINE_EVALUATION_FAILURE"
 SHADOW_EVALUATION_FAILURE = "SHADOW_EVALUATION_FAILURE"
 BOTH_EVALUATIONS_FAILED = "BOTH_EVALUATIONS_FAILED"
 INVALID_SHADOW_RECORD = "INVALID_SHADOW_RECORD"
+# The loaded tracker source does not match the reviewed source, so failure
+# detection cannot be trusted. Inline trading continues; coverage is void.
+SHADOW_CONTRACT_INVALID = "SHADOW_CONTRACT_INVALID"
 
 PASSING_CLASSES = (MATCH, NON_DECISION_STATE_DIFFERENCE)
 
@@ -77,6 +86,42 @@ DECISION_FIELDS = ("status", "exit_reason", "exit_date", "exit_price",
 
 # Fields compared for persistent-state equivalence under tracker_v3_2dp.
 STATE_FIELDS = STORED_2DP + ("stop_loss", "entry_price", "original_shares")
+
+
+def canonical_hash(obj):
+    """Stable hash of a state object.
+
+    Serialised with sorted keys before hashing, because dict ordering and repr
+    are not stable enough to compare raw. Used for the before/after production
+    state hashes that evidence non-mutation.
+    """
+    return hashlib.md5(
+        json.dumps(obj, sort_keys=True, default=str).encode()).hexdigest()
+
+
+def verify_marker_contract(tracker_module):
+    """Confirm the LOADED tracker source carries the error marker.
+
+    Checking the working-tree file is not sufficient: Python may have loaded a
+    different installed or cached module path. This inspects the module object
+    actually in use and records its file and source hash, so a mismatch between
+    the reviewed source and the executing source is visible rather than assumed
+    away.
+
+    Returns a dict; `valid` False means shadow classification must not claim
+    coverage. The inline tracker is unaffected either way.
+    """
+    info = {"tracker_file": None, "tracker_source_hash": None,
+            "marker_contract_match": False, "valid": False, "error": None}
+    try:
+        info["tracker_file"] = getattr(tracker_module, "__file__", None)
+        src = inspect.getsource(tracker_module)
+        info["tracker_source_hash"] = hashlib.md5(src.encode()).hexdigest()
+        info["marker_contract_match"] = MARKER_CONTRACT in src
+        info["valid"] = info["marker_contract_match"]
+    except Exception as exc:                        # noqa: BLE001
+        info["error"] = f"{type(exc).__name__}: {exc}"
+    return info
 
 
 def inline_failed_for(symbol, captured_stdout):
@@ -168,7 +213,12 @@ def build_record(symbol, entry_date, timestamp, lineage,
                  inline_status, shadow_status,
                  inline_before=None, inline_after=None,
                  shadow_after=None, available_history_bars=None,
-                 exception_type=None, exception_message=None):
+                 exception_type=None, exception_message=None,
+                 cycle_id=None, shadow_exception_type=None,
+                 shadow_exception_message=None,
+                 production_state_hash_before=None,
+                 production_state_hash_after=None,
+                 contract=None):
     """Assemble one comparison event. Pure; performs no I/O.
 
     `would_change_action` is True only for a decision-changing mismatch. It is
@@ -177,6 +227,16 @@ def build_record(symbol, entry_date, timestamp, lineage,
     """
     result, diffs = classify_result(inline_status, shadow_status,
                                     inline_after, shadow_after)
+    # A broken marker contract voids coverage regardless of payload agreement:
+    # if failure detection cannot be trusted, neither can "no failure".
+    if contract is not None and not contract.get("valid", False):
+        result, diffs = SHADOW_CONTRACT_INVALID, ["<marker_contract>"]
+    # Shadow execution must not mutate production state. If it did, the
+    # comparison is void no matter what it concluded.
+    if (production_state_hash_before is not None
+            and production_state_hash_after is not None
+            and production_state_hash_before != production_state_hash_after):
+        result, diffs = INVALID_SHADOW_RECORD, ["<production_state_mutated>"]
     if result == DECISION_CHANGING_MISMATCH:
         would_change = True
     elif result in PASSING_CLASSES:
@@ -188,7 +248,9 @@ def build_record(symbol, entry_date, timestamp, lineage,
         return None if d is None else d.get(key)
 
     return {
+        "record_schema_version": RECORD_SCHEMA_VERSION,
         "timestamp": timestamp,
+        "cycle_id": cycle_id,
         "symbol": symbol,
         "entry_date": entry_date,
         "production_commit": lineage.get("production_commit"),
@@ -213,9 +275,52 @@ def build_record(symbol, entry_date, timestamp, lineage,
         "differing_fields": diffs,
         "would_change_action": would_change,
         "available_history_bars": available_history_bars,
+        # Named inline_* for symmetry with shadow_*. The unprefixed
+        # exception_type/message are retained as aliases so existing readers
+        # do not break.
+        "inline_exception_type": exception_type,
+        "inline_exception_message": exception_message,
         "exception_type": exception_type,
         "exception_message": exception_message,
+        "shadow_exception_type": shadow_exception_type,
+        "shadow_exception_message": shadow_exception_message,
+        "tracker_source_hash": (contract or {}).get("tracker_source_hash"),
+        "tracker_file": (contract or {}).get("tracker_file"),
+        "marker_contract_match": (contract or {}).get("marker_contract_match"),
+        "production_state_hash_before": production_state_hash_before,
+        "production_state_hash_after": production_state_hash_after,
+        "abm_equality_boundary": _abm_boundary(symbol, inline_after
+                                               or inline_before),
+        "sdgr_dead_band_state": _sdgr_dead_band(symbol, inline_after
+                                                or inline_before),
     }
+
+
+def _abm_boundary(symbol, state):
+    """trailing_stop == stop_loss, ABM's required-coverage boundary."""
+    if symbol != "ABM" or not state:
+        return None
+    ts = state.get("trailing_stop", state.get("stop_loss"))
+    sl = state.get("stop_loss")
+    if ts is None or sl is None:
+        return None
+    return {"trailing_stop": ts, "stop_loss": sl, "equal": ts == sl,
+            "ratcheted": ts > sl,
+            "labels_stop_loss_if_stopped": ts <= sl}
+
+
+def _sdgr_dead_band(symbol, state):
+    """Active trail below entry, SDGR's required-coverage condition."""
+    if symbol != "SDGR" or not state:
+        return None
+    ts = state.get("trailing_stop", state.get("stop_loss"))
+    sl, entry = state.get("stop_loss"), state.get("entry_price")
+    if None in (ts, sl, entry):
+        return None
+    return {"trailing_stop": ts, "entry_price": entry, "peak_price":
+            state.get("peak_price"), "ratcheted": ts > sl,
+            "in_dead_band": ts > sl and ts < entry,
+            "gap_below_entry_pct": round((ts / entry - 1) * 100, 4)}
 
 
 def _decision_of(before, after, status):

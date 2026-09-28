@@ -294,7 +294,8 @@ def test_dormancy_boundary():
          "-e", "tracker_compat", str(ROOT)],
         capture_output=True, text=True).stdout.strip().splitlines()
     allowed = ("engine/tracker_compat.py", "engine/shadow_compare.py",
-               "tests/test_tracker_compat.py", "tests/test_shadow_compare.py",
+               "engine/shadow_runner.py", "tests/test_tracker_compat.py",
+               "tests/test_shadow_compare.py", "tests/test_shadow_runner.py",
                "tools/pre_shadow_snapshot.py")
     offenders = [h for h in hits if not any(a in h for a in allowed)]
     check("only the adapter, shadow module and their tests reference them",
@@ -305,10 +306,14 @@ def test_dormancy_boundary():
     check("engine/__init__.py auto-imports neither",
           "shadow_compare" not in (ROOT / "engine" / "__init__.py").read_text()
           and "tracker_compat" not in (ROOT / "engine" / "__init__.py").read_text())
+    # json.dumps() is serialisation; json.dump() writes to a stream. Only the
+    # latter is I/O, and the earlier predicate matched both.
+    csrc = (ROOT / "engine" / "shadow_compare.py").read_text()
     check("shadow_compare performs no I/O",
-          not any(t in (ROOT / "engine" / "shadow_compare.py").read_text()
-                  for t in ("open(", "save_trades", "requests.",
-                            "send_telegram", "json.dump")))
+          not any(t in csrc for t in ("open(", "save_trades", "requests.",
+                                      "send_telegram", "json.dump(")),
+          [t for t in ("open(", "save_trades", "requests.", "send_telegram",
+                       "json.dump(") if t in csrc])
 
 
 def main():

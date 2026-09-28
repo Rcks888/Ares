@@ -218,7 +218,8 @@ def test_dormant_in_production():
     # tests/test_shadow_compare.py. Phase 5 adds engine/tracker.py here
     # deliberately; this list is the review checkpoint for activation.
     allowed = ("engine/tracker_compat.py", "engine/shadow_compare.py",
-               "tests/test_tracker_compat.py", "tests/test_shadow_compare.py",
+               "engine/shadow_runner.py", "tests/test_tracker_compat.py",
+               "tests/test_shadow_compare.py", "tests/test_shadow_runner.py",
                "tools/pre_shadow_snapshot.py")
     offenders = [h for h in hits if not any(a in h for a in allowed)]
     check("only permitted modules reference the adapter", not offenders,

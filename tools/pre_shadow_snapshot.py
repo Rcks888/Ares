@@ -22,7 +22,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from engine import shadow_compare as sc  # noqa: E402
 from engine.tracker_compat import CONTRACT_VERSION  # noqa: E402
+
+SUITES = {
+    "adapter": "tests/test_tracker_compat.py",
+    "classifier": "tests/test_shadow_compare.py",
+    "wiring": "tests/test_shadow_runner.py",
+}
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
 ROLLBACK_TAG = "pre-tracker-swap"
@@ -81,6 +88,7 @@ def main():
             "exit_policy_md5": md5(ROOT / "engine" / "exit_policy.py"),
             "tracker_md5": md5(ROOT / "engine" / "tracker.py"),
             "compatibility_contract": CONTRACT_VERSION,
+            "record_schema_version": sc.RECORD_SCHEMA_VERSION,
             "tracker_compat_md5": md5(ROOT / "engine" / "tracker_compat.py"),
             "shadow_compare_md5": md5(ROOT / "engine" / "shadow_compare.py"),
         },
@@ -161,11 +169,32 @@ def main():
         "phase3_gate": {},
     }
 
+    # Marker contract against the ACTUALLY LOADED tracker module, not the
+    # working-tree file: Python may have loaded another installed or cached
+    # path, and stdout-based failure detection would then be unverified.
+    try:
+        from engine import tracker as _tracker
+        snap["marker_contract"] = sc.verify_marker_contract(_tracker)
+    except Exception as exc:                        # noqa: BLE001
+        snap["marker_contract"] = {"valid": False,
+                                   "error": f"{type(exc).__name__}: {exc}"}
+
     lin = snap["lineage"]
-    tests = {
-        "adapter": sh(sys.executable, "tests/test_tracker_compat.py"),
-        "shadow": sh(sys.executable, "tests/test_shadow_compare.py"),
-    }
+    tests = {}
+    for name, path in SUITES.items():
+        out = sh(sys.executable, path)
+        tests[name] = {
+            "path": path,
+            "passed": out.rstrip().endswith("ALL PASS"),
+            "assertions": out.count("  pass  "),
+            "tail": out.strip().splitlines()[-1] if out.strip() else "NO OUTPUT",
+        }
+    snap["test_suites"] = tests
+    snap["assertion_total"] = sum(t["assertions"] for t in tests.values())
+    snap["assertion_note"] = (
+        "The three suites are DISJOINT files; assertion_total is their sum, "
+        "not a superset relationship. Do not read it as requiring any other "
+        "count to pass independently.")
     snap["phase3_gate"] = {
         "rollback_tag_resolves": lin["rollback_tag_commit"].startswith(
             EXPECTED_TAG_COMMIT),
@@ -174,12 +203,15 @@ def main():
             "engine/tracker.py") == "",
         "logs_unchanged_since_tag": sh(
             "git", "diff", "--stat", ROLLBACK_TAG, "HEAD", "--", "logs/") == "",
-        "adapter_tests_pass": tests["adapter"].rstrip().endswith("ALL PASS"),
-        "shadow_tests_pass": tests["shadow"].rstrip().endswith("ALL PASS"),
+        "all_suites_pass": all(t["passed"] for t in tests.values()),
+        "marker_contract_valid": bool(snap["marker_contract"].get("valid")),
         "working_tree_clean": lin["working_tree_clean"],
+        "shadow_output_absent": not (ROOT / "logs"
+                                     / "tracker_shadow_v1.jsonl").exists(),
         "NOTE": ("Tests here ran in THIS runtime. The gate requires them to "
-                 "pass in the VPS-equivalent runtime; compare the 'runtime' "
-                 "block against a VPS snapshot before authorizing Phase 4."),
+                 "pass in the VPS-equivalent runtime; run this same script on "
+                 "the VPS and diff the 'runtime' and 'marker_contract' blocks "
+                 "before authorizing Phase 4."),
     }
     snap["phase3_gate"]["all_local_checks_pass"] = all(
         v for k, v in snap["phase3_gate"].items() if isinstance(v, bool))
