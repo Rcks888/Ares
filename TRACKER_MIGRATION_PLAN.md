@@ -15,10 +15,28 @@ that result or reopens it.
 | Phase 0 — differential equivalence | **COMPLETE** over tested coverage |
 | Phase 1 — precision contract | **COMPLETE offline** — `engine/tracker_compat.py`, dormant, 65 tests passing |
 | Phase 0.5 — indicator/exception hardening | **REGISTERED, separate change** |
-| Phase 2 — position clearance | Pending: ABM and SDGR still open |
-| Phase 3 — rollback point | Pending |
-| Phase 4 — shadow comparison | Pending |
-| Phase 5 — controlled deployment | Pending, unauthorized |
+| Phase 2 — legacy-position clearance | Pending: ABM and SDGR open. **Gates Phase 5 only** |
+| Phase 3 — rollback and state isolation | **ESTABLISHED** |
+| Phase 4 — shadow comparison | **READY TO AUTHORIZE.** ABM and SDGR are required coverage |
+| Phase 5 — controlled wiring | Pending, unauthorized |
+
+**The phases are control domains, not a numerical execution order.** Numbering is
+retained for document stability. Actual order: 0 → 1 → 3 → 4 → 2 → 5.
+
+    Phase 0  differential equivalence      COMPLETE
+    Phase 1  tracker_v3_2dp adapter        COMPLETE, dormant
+    Phase 3  rollback + state isolation    ESTABLISHED
+    Phase 4  live shadow comparison        AUTHORIZE NOW
+             |
+             ABM and SDGR stay under inline Policy A authority
+             their full remaining lifecycles captured in shadow
+             both close naturally
+             |
+    Phase 2  legacy-position clearance     COMPLETE at that point
+             |
+             review shadow evidence
+             |
+    Phase 5  controlled tracker wiring     only if all gates pass
 
 ## Lineage at time of writing
 
@@ -299,10 +317,58 @@ Escalation, to be finalised later and **not** inserted into the migration: first
 failure logs a data-quality warning; second consecutive failure escalates to Telegram;
 further consecutive failures raise a high-priority unmanaged-position alert.
 
-## Phase 2 — position clearance
+## Phase 2 — legacy-position clearance
 
-Wait for **ABM** and **SDGR** to close. Both are pre-clean and their lifecycles began
-under inline tracker behaviour; they must not end under the canonical module.
+**Gates Phase 5 only. It does not gate Phase 4.** Corrected from an earlier draft of
+this plan, which gated shadow comparison on clearance. That was over-conservative and
+had the value backwards: shadow mode has no trading authority, so open legacy
+positions are not a reason to delay it — they are the best reason to start it.
+
+Wait for **ABM** and **SDGR** to close **naturally, under Policy A**. Both are
+pre-clean and their lifecycles began under inline tracker behaviour; they must not end
+under the canonical module.
+
+### Administrative closure is prohibited
+
+Do **not** force-close either position under a "slot cleaning" or "pre-V3" reason to
+unblock the migration. Rejected for four reasons:
+
+1. **It inverts the dependency.** Infrastructure scheduling would drive a live trading
+   decision. ECO and NEOG were allowed to run to their policy exits even when the
+   outcome was obvious; this is the same line and there is no deadline forcing it.
+2. **It permanently pollutes the trade log.** An administrative exit is not a policy
+   decision. It creates a third exit category every future analysis must special-case,
+   and it is unrecoverable — what Policy A would have done cannot be reconstructed.
+3. **It destroys the two most relevant live observations.** SDGR is one of only two
+   live instances of the giveback dead band, the exact mechanism Block A spent its
+   whole budget on, where Universe A's equivalent population went 12 of 12 losers.
+   ABM is the cleanest live `trail == stop, never ratcheted` case.
+4. **It worsens realised P&L for no return.** Both are underwater; forcing them
+   realises losses early, and the freed slots interact with the unfunded-sizing
+   defect already being tracked.
+
+### Verification at clearance
+
+`phase` is `None` on all five open records — it is stamped at close, not at entry.
+Clearance therefore cannot key off a phase field. Verify by **symbol and original
+`entry_date`**, plus closed-or-resolved destination, recorded exit reason, and no
+remaining open record for the same lifecycle. ABM 2026-09-09 and SDGR 2026-09-18 are
+pre-clean; TMO 2026-09-21, WBD 2026-09-22 and SECZ 2026-09-25 are `clean_v3`.
+
+This keeps the lifecycle boundary clean: ABM and SDGR open *and* close under inline
+tracker authority; post-swap positions open *and* close under canonical authority.
+
+### If either stays open a long time
+
+Ares has **no time stop**, so natural closure has no guaranteed horizon. ABM is
+already at day 16. Practically both are close — ABM 1.8% above its stop, SDGR 3.0%
+above its trail — but if either drifts:
+
+**Infrastructure scheduling will not cause an administrative exit.** The absence of a
+V3.1 time stop becomes a separate portfolio-policy question, evaluated on its own
+evidence — historical holding periods, capital occupancy, opportunity cost, MFE/MAE,
+outcomes after stagnant periods, slot constraints, costs, with its own
+pre-registration. It must **not** be retroactively justified as migration housekeeping.
 
 **Tracking caveat, measured:** `phase` is `None` on all five open records — it is
 stamped at close, not at entry. Phase 2 clearance therefore cannot key off a phase
@@ -343,6 +409,22 @@ This table is the post-rollback expectation. Any divergence after a rollback is 
 defect, not drift. **Re-snapshot immediately before the swap** — these values move
 daily.
 
+### Phase 3 gate — conditions for starting Phase 4
+
+All must hold. Per current status these appear ready except the VPS-runtime test run.
+
+1. Rollback tag resolves correctly (`pre-tracker-swap` → `d6cbd55`)
+2. Rollback command tested
+3. Pre-shadow state snapshot exists
+4. Canonical module md5 recorded
+5. Adapter contract version recorded
+6. Adapter tests pass — in the **VPS-equivalent** runtime
+7. Shadow state is cloned
+8. Shadow results cannot mutate production state
+9. Inline tracker remains authoritative
+10. **Shadow failure cannot prevent the inline tracker from running**
+11. Research scripts remain outside scheduled runtime entry points
+
 ### Clearance sequence, to run when ABM and SDGR close
 
 1. Confirm ABM and SDGR are no longer open.
@@ -356,8 +438,10 @@ daily.
 4. Re-verify `pre-tracker-swap` resolves to `d6cbd55`.
 5. Re-verify the rollback command.
 6. Run all adapter and dormancy tests in the **VPS-equivalent** environment.
-7. Authorize Phase 4 only then. Keep the inline tracker authoritative throughout.
-8. Do not authorize Phase 5 unless the shadow comparison is clean.
+7. Confirm Phase 4 coverage for both symbols is complete, including their exit bars.
+8. Review the shadow summary. Do not authorize Phase 5 unless every Phase 4
+   acceptance condition passes. **Both positions closing is not sufficient** if the
+   shadow record was missing or failed during important bars.
 
 ## Phase 4 — shadow comparison
 
@@ -366,11 +450,98 @@ exist and be unit-tested, because the shadow run compares the adapter's output, 
 the bare module's. The adapter can be written as a new unreferenced module with zero
 live effect, which also reduces the Phase 5 commit to wiring only.
 
-Both implementations run from cloned state; **only the current tracker controls paper
-actions.** The shadow module runs under `tracker_v3_2dp`, since full-precision state
-is already known to differ. Record per evaluation: timestamp, symbol, tracker
-decision, module decision, tracker state, module-compatible state, difference class,
-`would_change_action`.
+**Gated by Phase 1 complete + Phase 3 controls established. NOT gated by Phase 2.**
+The inline tracker remains authoritative throughout, so shadow operation cannot alter
+entry or exit timing, stops or trailing stops, position state, scale-out behaviour,
+commissions, trade logs, `clean_v3`, or ABM/SDGR outcomes. **Phase 4 is measurement,
+not migration.**
+
+    inline tracker   = authoritative, controls paper actions, persists state
+    module + adapter = cloned-state observer, records counterfactual, no side effects
+
+### Fail-open requirement
+
+**Shadow execution must fail open with respect to the inline tracker.** The inline
+decision is produced and preserved independently; the shadow path receives cloned
+inputs; if the shadow crashes, the inline action still proceeds.
+
+The shadow path must not: hold a shared mutable reference to a live position, write
+production position records or trade outcomes, submit or cancel orders, send ordinary
+trade alerts, change cache contents, prevent inline evaluation, modify
+`psi_state.json`, or change queue behaviour. A shadow failure may write a dedicated
+diagnostic record and optionally raise a non-trading warning.
+
+Note the interaction with the Phase 0.5 finding: the inline tracker's blanket
+`except Exception` means an inline evaluation failure is currently silent. Phase 4
+must therefore record inline status explicitly rather than inferring success from the
+absence of an error.
+
+### Required shadow coverage — ABM and SDGR
+
+Designated **required coverage**, not blockers. They are the only live positions
+carrying pre-clean stored state and sitting on the boundaries the contract must
+preserve.
+
+**ABM** exercises `trailing_stop == stop_loss` exactly. Capture: at least one
+successful evaluation at equality; subsequent evaluations showing whether equality
+persists or separates; every state transition to natural exit; the final exit decision
+and exit bar; exact inline-versus-shadow comparison at exit. Tests whether equality
+survives adapter projection, effective-stop selection stays consistent, exit
+attribution uses the same comparison operator, carry-forward rounding stays identical,
+and whether a later one-cent divergence could flip either side.
+
+**SDGR** exercises the giveback dead band — entry 29.35, active trail 28.23, roughly
+3.8% below entry. Capture: current dead-band state; every peak update and trail
+ratchet; every effective-stop calculation; movement toward or away from entry; the bar
+where the exit condition first becomes true; the final inline-versus-shadow decision;
+whether the exit is attributed identically.
+
+Per-evaluation success requires `inline_evaluation_succeeded` and
+`shadow_evaluation_succeeded` both true, `would_change_action` false, decision fields
+equivalent, and tracker-compatible state equivalent. **Any exception or missing shadow
+result must be visible and classified, never treated as agreement.**
+
+### Output contract
+
+Record per comparison event: `timestamp`, `symbol`, `entry_date`,
+`production_commit`, `exit_policy_md5`, `compatibility_contract`,
+`inline_evaluation_status`, `shadow_evaluation_status`, `inline_decision`,
+`shadow_decision`, `inline_exit_reason`, `shadow_exit_reason`,
+`inline_effective_stop`, `shadow_effective_stop`, `inline_scaled_out`,
+`shadow_scaled_out`, `inline_persistent_state`, `shadow_compatible_state`,
+`difference_class`, `would_change_action`, `exception_type`, `exception_message`.
+
+Lineage must be sufficient to reproduce every mismatch.
+
+Result classes — at least six, because **a missing evaluation is not a match**:
+
+| Class | Meaning |
+|---|---|
+| `MATCH` | Both evaluated, equivalent decisions |
+| `NON_DECISION_STATE_DIFFERENCE` | Stored values differ, fully explained, cannot change the current action |
+| `DECISION_CHANGING_MISMATCH` | Exit, scale-out, state transition, reason or action differs |
+| `INLINE_EVALUATION_FAILURE` | |
+| `SHADOW_EVALUATION_FAILURE` | |
+| `BOTH_EVALUATIONS_FAILED` | |
+
+### Phase 4 acceptance
+
+Success is **not** merely "zero mismatches" — observation requirements count too.
+
+1. No decision-changing mismatches
+2. No unexplained persistent-state differences
+3. No shadow mutation of production state
+4. ABM equality-boundary coverage complete
+5. SDGR dead-band lifecycle coverage complete
+6. Both natural exit bars compared
+7. Every evaluation failure separately classified
+8. Adapter tests passing in the VPS-equivalent runtime
+9. Lineage complete for every comparison record
+10. Final summary generated before Phase 5 review
+
+**No arbitrary calendar minimum** if ABM and SDGR supply the required lifecycle
+transitions. Conversely, do not authorize Phase 5 merely because both positions
+closed, if the shadow record was missing or failed during important bars.
 
 ## Phase 5 — controlled deployment
 
