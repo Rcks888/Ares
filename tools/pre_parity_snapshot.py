@@ -64,6 +64,11 @@ ALLOWED_RUNTIME_LOGS = (
     "logs/trades_report.csv",
     "logs/signal_queue.json",
     "logs/queue_ranked.json",
+    # Unignored by a scoped .gitignore negation and committed by the bot every
+    # cycle it changes, but never registered here -- so the first cycle that
+    # touched it failed the allow-list gate. Latent since before Phase 4;
+    # activation only exposed it.
+    "logs/pending_signals.json",
     "logs/queue_events.jsonl",
     "logs/last_scan_summary.txt",
     # Phase 4 migration evidence. Append-only, bot-committed for off-host backup.
