@@ -1,8 +1,12 @@
 {
   "baseline_schema_version": 1,
-  "generated_at": "2026-09-29T07:53:10.233757+00:00",
-  "generated_from_commit": "393acea",
+  "generated_at": "2026-09-29T09:13:29.126673+00:00",
+  "generated_from_commit": "d335471",
   "schema_v2_activation_commit": "8a43064",
+  "parity_activation_commit": "64f6b9c",
+  "parity_activation_effective_at": "2026-09-29T05:52:22.528410+00:00",
+  "parity_activation_timestamp_source": "first_parity_record",
+  "parity_activation_timestamp_confidence": "upper_bound",
   "tracker_raw_bytes_md5": "3c23d191b4bccea221678502bd82f30a",
   "tracker_normalized_text_md5": "186ca378a37dbcef58a96abe4f273ff7",
   "tracker_loaded_source_md5": "490baafcf03e91d13b92dabbda0e5369",
@@ -33,16 +37,17 @@
     "phase05_integrity": 76,
     "phase05_network": 89,
     "blast_radius": 26,
-    "output_path": 32,
+    "output_path": 38,
     "tracker_diff": 102,
-    "vps_verify": 90,
-    "parity_output": 129
+    "vps_verify": 94,
+    "parity_output": 129,
+    "parity_freshness": 90
   },
-  "assertion_total": 1692,
+  "assertion_total": 1792,
   "parity_collection_at_generation": {
     "state": "ACTIVE_VALID",
     "collection_declared": true,
-    "records": 4,
+    "records": 8,
     "NOTE": "informational only; the state advances and records grow, so these are never compared"
   },
   "suite_count_changes_since_previous_baseline": {
