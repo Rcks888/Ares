@@ -1030,6 +1030,14 @@ def main():
             # commit; the baseline artifact lives in the following commit, which
             # git history already records.
             "generated_from_commit": lin["ares_commit"],
+            # The commit that activated record schema v2, i.e. the first commit
+            # whose code emits v2 records. Recorded here rather than hardcoded in
+            # the implementation because a commit cannot contain its own SHA; a
+            # placeholder would require amending the very commit meant to be the
+            # stable anchor. Preserved across rebaselines once set, so a later
+            # regeneration cannot silently move the activation point.
+            "schema_v2_activation_commit": (
+                _schema_v2_activation() or lin["ares_commit"]),
             # Three hashes of ONE file, named by SERIALIZATION rather than by
             # role, because a mismatch between them is not evidence of tampering.
             # Each answers a different question and must never be cross-compared.
