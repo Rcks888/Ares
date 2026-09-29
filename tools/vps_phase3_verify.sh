@@ -227,6 +227,70 @@ else:
     if st in NEEDS_AO and not ao:
         display_failures.append(f"append_only block required for state {st}")
 
+# --- collection health -------------------------------------------------------
+# This block governs Phase 4 readiness and blocks Phase 5, and it was NOT printed
+# on the first deployment that shipped it. DISPLAY CONTRACT passed anyway, because
+# it only validated the parity_output state enumeration -- so the gate that
+# authorises phase advancement was invisible in the one report read during a
+# deployment. Presence is now enforced, not assumed.
+ch = s.get("collection_health")
+print("--- collection health ---")
+if not isinstance(ch, dict):
+    display_failures.append("collection_health block absent or not an object")
+    print("  ABSENT")
+else:
+    for k in ("host_context", "host_role_source", "measures", "state",
+              "last_due_cycle", "last_heartbeat", "covers_last_due_cycle",
+              "parity_collection_recent", "phase4_operational_ready",
+              "phase5_gates_satisfied", "phase5_authorization"):
+        print(f"  {k:26s} = {ch.get(k)}")
+    if ch.get("incomplete_cycles"):
+        print(f"  incomplete_cycles          = {ch['incomplete_cycles']}")
+    if ch.get("malformed"):
+        print(f"  malformed                  = {ch['malformed']}")
+    blockers = ch.get("phase5_blockers")
+    if blockers:
+        print("  phase5_blockers:")
+        for b in blockers:
+            print(f"    - {b}")
+    elif blockers == []:
+        print("  phase5_blockers: none")
+
+    # Structural contract. Each of these was displayable-but-unchecked before.
+    if ch.get("host_context") not in ("live", "archive", "unknown"):
+        display_failures.append(
+            f"host_context {ch.get('host_context')!r} unrecognised")
+    if ch.get("host_role_source") is None:
+        display_failures.append("host_role_source absent")
+    # Tri-state: True / False / None(unknown). None is legitimate and must be
+    # printed, but the KEY must exist -- a missing key is not an unknown value.
+    if "parity_collection_recent" not in ch:
+        display_failures.append("parity_collection_recent absent")
+    elif ch["parity_collection_recent"] not in (True, False, None):
+        display_failures.append(
+            f"parity_collection_recent {ch['parity_collection_recent']!r} "
+            f"is not True/False/None")
+    if not isinstance(ch.get("phase4_operational_ready"), bool):
+        display_failures.append("phase4_operational_ready is not a bool")
+    if not isinstance(ch.get("phase5_gates_satisfied"), bool):
+        display_failures.append("phase5_gates_satisfied is not a bool")
+    auth = ch.get("phase5_authorization")
+    if not isinstance(auth, str) or not auth.startswith("PROHIBITED"):
+        display_failures.append(
+            f"phase5_authorization must be the standing prohibition, got "
+            f"{auth!r}")
+    if blockers is None:
+        display_failures.append("phase5_blockers absent")
+    # A satisfied-gates claim alongside listed blockers is self-contradictory.
+    if ch.get("phase5_gates_satisfied") is True and blockers:
+        display_failures.append(
+            f"phase5_gates_satisfied True while blockers listed: {blockers}")
+    # Freshness must never read fresh on a host that cannot measure it.
+    if ch.get("host_context") == "unknown" and \
+            ch.get("parity_collection_recent") is not None:
+        display_failures.append(
+            "host_context unknown but parity_collection_recent is not None")
+
 if display_failures:
     print()
     for f in display_failures:

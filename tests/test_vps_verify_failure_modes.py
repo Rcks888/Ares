@@ -113,7 +113,98 @@ def good_snapshot():
                             "export_lines": [], "entry_point_line": 8,
                             "value": None, "failures": []}},
         "parity_output_tracking": {"ignored": False, "trackable": True},
+        # Required by the display contract. Absent here originally, which is
+        # exactly how the block shipped unprinted: nothing demanded it.
+        "collection_health": {
+            "host_context": "archive", "host_role_source": "marker",
+            "measures": "archived_collection_recent",
+            "state": "NOT_DECLARED_ABSENT", "last_due_cycle": None,
+            "last_heartbeat": None, "covers_last_due_cycle": None,
+            "parity_collection_recent": None,
+            "incomplete_cycles": [], "malformed": [],
+            "phase4_operational_ready": False,
+            "phase5_gates_satisfied": False,
+            "phase5_blockers": ["parity_collection_recent is None"],
+            "phase5_authorization": "PROHIBITED -- requires operator sign-off"},
     }
+
+
+# ---- collection health display ---------------------------------------------
+def test_collection_health_is_printed_not_merely_present():
+    """THE defect this exists to prevent.
+
+    Item 1 shipped collection_health and the verifier displayed nothing, while
+    DISPLAY CONTRACT still reported PASS -- it only validated the parity_output
+    state enumeration. The block that gates Phase 4 readiness and blocks Phase 5
+    was invisible in the report actually read during deployment.
+    """
+    rc, out = run_block(good_snapshot(), good_baseline())
+    check("the collection health section is printed",
+          "--- collection health ---" in out, out[-400:])
+    for k in ("host_context", "measures", "parity_collection_recent",
+              "phase4_operational_ready", "phase5_gates_satisfied",
+              "phase5_authorization"):
+        check(f"{k} is displayed", k in out)
+    check("the standing prohibition is displayed", "PROHIBITED" in out)
+    check("blockers are enumerated, not summarised as a count",
+          "parity_collection_recent is None" in out, out[-500:])
+    check("display contract still passes on a complete block",
+          "DISPLAY CONTRACT: PASS" in out, out[-300:])
+
+
+def test_absent_collection_health_fails_the_display_contract():
+    s = good_snapshot()
+    del s["collection_health"]
+    rc, out = run_block(s, good_baseline())
+    check("a missing collection_health block is a display failure",
+          "collection_health block absent" in out, out[-400:])
+    check("and the display contract FAILS rather than passing silently",
+          "DISPLAY CONTRACT: FAIL" in out, out[-300:])
+
+
+def test_unrecognised_host_context_is_refused():
+    s = good_snapshot()
+    s["collection_health"]["host_context"] = "development_checkout"
+    rc, out = run_block(s, good_baseline())
+    check("an unregistered host_context is refused",
+          "unrecognised" in out, out[-400:])
+
+
+def test_missing_freshness_key_is_not_an_unknown_value():
+    """None means 'cannot be measured'. An ABSENT key means the report is
+    incomplete. Conflating them would let a truncated block read as unknown."""
+    s = good_snapshot()
+    del s["collection_health"]["parity_collection_recent"]
+    rc, out = run_block(s, good_baseline())
+    check("an absent freshness key is a display failure",
+          "parity_collection_recent absent" in out, out[-400:])
+
+
+def test_freshness_must_not_read_measured_on_an_unknown_host():
+    s = good_snapshot()
+    s["collection_health"]["host_context"] = "unknown"
+    s["collection_health"]["parity_collection_recent"] = True
+    rc, out = run_block(s, good_baseline())
+    check("a host that cannot identify itself cannot report fresh",
+          "host_context unknown but parity_collection_recent is not None" in out,
+          out[-400:])
+
+
+def test_satisfied_gates_with_listed_blockers_is_contradictory():
+    s = good_snapshot()
+    s["collection_health"]["phase5_gates_satisfied"] = True
+    rc, out = run_block(s, good_baseline())
+    check("claiming satisfied gates while listing blockers is refused",
+          "while blockers listed" in out, out[-400:])
+
+
+def test_phase5_authorization_cannot_be_weakened():
+    for bad in ("GRANTED", "ok", "", None):
+        s = good_snapshot()
+        s["collection_health"]["phase5_authorization"] = bad
+        rc, out = run_block(s, good_baseline())
+        check(f"phase5_authorization {bad!r} is refused",
+              "standing prohibition" in out, out[-300:])
 
 
 # ---- positive control -----------------------------------------------------
