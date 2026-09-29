@@ -81,6 +81,48 @@ def cycle(output_path="__omit__", symbols=("ABM",), packets=None):
                             lineage={"production_commit": "test"}, **kw)
 
 
+def test_production_heartbeat_is_never_created_by_tests():
+    """Structural guard, not a convention.
+
+    The heartbeat writes on every observed cycle including zero-record and failed
+    ones, so any observe_cycle call that forgets output_path appends to the
+    production heartbeat. append_record never had this exposure, because it only
+    fires per record -- which is precisely why the omission went unnoticed until
+    the heartbeat existed.
+    """
+    prod = ROOT / "logs" / pr.HEARTBEAT_NAME
+
+    def state():
+        if not prod.exists():
+            return ("absent", None, None)
+        b = prod.read_bytes()
+        return ("present", len(b), hashlib.md5(b).hexdigest())
+
+    before = state()
+    tmp = Path(tempfile.mkdtemp())
+    cycle(output_path=str(tmp / "iso.jsonl"), symbols=("ABM",))
+    after = state()
+    # Unchanged, not absent: absence would be phase-dependent once the live host
+    # has a heartbeat, and this suite must count the same on both hosts.
+    check("a redirected cycle leaves the production heartbeat unchanged",
+          before == after, (before, after))
+    check("the redirected heartbeat was written instead",
+          (tmp / pr.HEARTBEAT_NAME).exists())
+    beats = (tmp / pr.HEARTBEAT_NAME).read_text().strip().splitlines()
+    check("exactly one heartbeat per observed cycle", len(beats) == 1,
+          len(beats))
+    beat = json.loads(beats[0])
+    # Field names match the summary (attempted/written) rather than renaming to
+    # open_positions/records_written: two names for one quantity is how a reader
+    # ends up asserting on the wrong one.
+    check("heartbeat records what the suppressed print would have said",
+          beat["attempted"] == 1 and beat["written"] == 1,
+          (beat["attempted"], beat["written"]))
+    check("heartbeat carries a resolvable schema version",
+          beat["heartbeat_schema_version"] == pr.HEARTBEAT_SCHEMA_VERSION,
+          beat["heartbeat_schema_version"])
+
+
 # ---- 1. explicit path is authoritative ------------------------------------
 def test_explicit_path_receives_every_record():
     before = fingerprint()
@@ -92,9 +134,18 @@ def test_explicit_path_receives_every_record():
     lines = out.read_text().strip().splitlines() if out.exists() else []
     check("explicit: all 3 records written there", len(lines) == 3, len(lines))
     check("explicit: summary agrees", summ["written"] == 3, summ["written"])
-    check("explicit: no second file created in that directory",
-          sorted(p.name for p in tmp.iterdir()) == ["explicit.jsonl"],
+    # The heartbeat is a DERIVED sibling of the evidence path, so exactly two
+    # files are expected. Stated as an exact set rather than loosened to "at
+    # least the evidence file": the point of this assertion is that nothing
+    # UNREGISTERED appears beside the evidence, and a subset test would accept a
+    # third unexplained file.
+    check("explicit: only the evidence file and its heartbeat exist",
+          sorted(p.name for p in tmp.iterdir())
+          == ["explicit.jsonl", pr.HEARTBEAT_NAME],
           sorted(p.name for p in tmp.iterdir()))
+    check("explicit: heartbeat landed beside the redirected evidence, "
+          "not in production",
+          (tmp / pr.HEARTBEAT_NAME).exists())
     check("explicit: production file unchanged", fingerprint() == before,
           (before, fingerprint()))
 

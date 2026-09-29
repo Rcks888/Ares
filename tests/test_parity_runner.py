@@ -169,8 +169,15 @@ def test_load_state_failure_does_not_break_cycle():
         return "OK"
     def bad_load():
         raise IOError("disk gone")
+    # output_path is explicit even though this test writes no records: the
+    # heartbeat is written on EVERY observed cycle, including failed ones, so an
+    # unredirected call appends to the production heartbeat. It did exactly that
+    # until caught -- append_record only fires per record, so a zero-record test
+    # never used to touch production and the omission was invisible.
     res, summ = sr.observe_cycle(mod, inline_call, bad_load,
-                                 lambda t, p, bb: dict(t))
+                                 lambda t, p, bb: dict(t),
+                                 output_path=str(Path(tempfile.mkdtemp())
+                                                 / "p.jsonl"))
     check("inline result survives load_state failure", res == "OK")
     check("shadow system error recorded",
           summ["shadow_system_error"] is not None, summ)

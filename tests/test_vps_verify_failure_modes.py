@@ -392,11 +392,23 @@ def test_display_states_come_from_the_single_contract():
     for st in ("NOT_DECLARED_ABSENT", "ARMED_NOT_STARTED", "ACTIVE_VALID",
                "UNDECLARED_OUTPUT_PRESENT", "UNPARSEABLE_JSONL", "SCHEMA_DRIFT",
                "DECISION_CHANGING_MISMATCH_PRESENT", "EVIDENCE_TRUNCATED",
-               "EVIDENCE_REWRITTEN", "LINEAGE_INCOMPLETE"):
+               "EVIDENCE_REWRITTEN", "LINEAGE_INCOMPLETE",
+               "ARMED_NO_HEARTBEAT", "ACTIVE_STALE"):
         check(f"contract contains {st}", st in pps.PARITY_OUTPUT_STATES)
-    check("append-only requirement is state-scoped",
-          pps.PARITY_STATES_REQUIRING_APPEND_ONLY == ("ACTIVE_VALID",),
-          pps.PARITY_STATES_REQUIRING_APPEND_ONLY)
+    # Derived from the invariant rather than pinned to a literal tuple. The
+    # requirement is: every state reached THROUGH a validated evidence file must
+    # demand append-only, and no state reachable before a file exists may demand
+    # it. Pinning the literal made adding ACTIVE_STALE look like a regression,
+    # when the real risk is the opposite -- silently DROPPING the requirement at
+    # the moment collection stops.
+    scoped = set(pps.PARITY_STATES_REQUIRING_APPEND_ONLY)
+    check("every validated-evidence state requires append-only",
+          {"ACTIVE_VALID", "ACTIVE_STALE"} <= scoped, sorted(scoped))
+    check("no pre-file state requires append-only",
+          not scoped & {"NOT_DECLARED_ABSENT", "ARMED_NOT_STARTED",
+                        "ARMED_NO_HEARTBEAT"}, sorted(scoped))
+    check("every scoped state is a registered state",
+          scoped <= set(pps.PARITY_OUTPUT_STATES), sorted(scoped))
 
 
 def test_display_failure_does_not_corrupt_comparison_count():

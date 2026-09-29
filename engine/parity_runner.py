@@ -83,6 +83,67 @@ def _now():
     return datetime.now(timezone.utc).isoformat()
 
 
+HEARTBEAT_NAME = "parity_heartbeat_v1.jsonl"
+HEARTBEAT_SCHEMA_VERSION = 1
+
+
+def heartbeat_path(output_path=None):
+    """Sibling of the evidence file, so ONE redirect seam covers both.
+
+    Deriving it rather than giving it an independent default matters for tests:
+    the live-path fixtures redirect DEFAULT_OUTPUT to a temp file, and a
+    separately-defaulted heartbeat would have kept writing into the production
+    log while the fixtures appeared isolated.
+    """
+    return Path(output_path or DEFAULT_OUTPUT).with_name(HEARTBEAT_NAME)
+
+
+def append_heartbeat(summary, lineage, cycle_id, output_path=None):
+    """Record that an observed cycle RAN, regardless of what it produced.
+
+    Zero records is ambiguous without this: a cycle with no open positions and a
+    cycle where the bridge never executed are indistinguishable, because the
+    diagnostic print fires only on trouble. Silence is the success signature, and
+    that ambiguity produced four wrong diagnoses during activation.
+
+    Never raises: a heartbeat failure must not affect the inline result, and must
+    not be able to turn an observation-only path into a production incident.
+    """
+    try:
+        beat = {
+            "heartbeat_schema_version": HEARTBEAT_SCHEMA_VERSION,
+            # Composite identity. capture_cycle_token alone is NOT unique: it is
+            # a process-local counter that restarts at 1 in every new Python
+            # process, which is exactly what cron creates twice a day. Two
+            # different cycles would otherwise share token 1.
+            "production_commit": (lineage or {}).get("ares_commit"),
+            "cycle_started_at": summary.get("cycle_started_at"),
+            "capture_cycle_token": summary.get("capture_cycle_token"),
+            "cycle_completed_at": _now(),
+            "cycle_id": cycle_id,
+            # Field names match the summary rather than renaming to
+            # open_positions/records_written -- two names for one quantity is how
+            # a reader ends up checking the wrong one.
+            "attempted": summary.get("attempted"),
+            "written": summary.get("written"),
+            "write_failures": summary.get("write_failures"),
+            "record_schema_version": sc.RECORD_SCHEMA_VERSION,
+            "contract_valid": summary.get("contract_valid"),
+            "shadow_system_error": summary.get("shadow_system_error"),
+            "capture_error": summary.get("capture_error"),
+            "results_error": summary.get("results_error"),
+        }
+        p = heartbeat_path(output_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with open(p, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(beat, sort_keys=True, default=str) + "\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+        return True
+    except Exception:                               # noqa: BLE001
+        return False
+
+
 def append_record(record, output_path=DEFAULT_OUTPUT):
     """Append one JSONL record. Returns True on success, never raises.
 
@@ -151,7 +212,7 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     cycle_id = cycle_id or str(uuid.uuid4())[:8]
     summary = {"cycle_id": cycle_id, "attempted": 0, "written": 0,
                "write_failures": 0, "records": [], "shadow_system_error": None,
-               "contract_valid": None}
+               "contract_valid": None, "cycle_started_at": _now()}
 
     # --- inline path first, outside all shadow protection --------------------
     before = None
@@ -179,6 +240,13 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
                                     params_fn, packets_fn, results_fn))
     except Exception as exc:                        # noqa: BLE001
         summary["shadow_system_error"] = f"{type(exc).__name__}: {exc}"
+
+    # Written even when the shadow pass raised, and even when nothing was
+    # observed: the question the heartbeat answers is "did this cycle run", which
+    # is exactly the question that has no answer when the cycle produced no
+    # records and printed nothing.
+    summary["heartbeat_written"] = append_heartbeat(summary, lineage, cycle_id,
+                                                   output_path)
 
     if warn and (summary["shadow_system_error"] or summary["write_failures"]):
         try:

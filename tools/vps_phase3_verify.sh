@@ -381,6 +381,61 @@ PY
 CMP_RC=$?
 
 echo
+echo "=== 4b. COLLECTION SCHEDULE CONTRACT vs LIVE CRONTAB ==="
+# The registered schedule in pre_parity_snapshot.py is what freshness is computed
+# against. Asserted only in the repo it would be UNFALSIFIABLE: staleness would be
+# measured against a fiction and report PASS while cron actually ran at other
+# times. This is the only place the two can be compared, because the crontab
+# exists solely on the live host.
+#
+# Reported, NOT fatal: a schedule mismatch must not block deploying the fix for a
+# schedule mismatch. It feeds collection health, not deployment integrity.
+CRON_RAW="$(crontab -l 2>/dev/null | grep -E "run_ares|daily_report" | grep -v '^[[:space:]]*#' || true)"
+if [ -z "$CRON_RAW" ]; then
+  echo "  UNRESOLVED: no ares cron entries found (schedule unverifiable here)"
+  echo "  SCHEDULE CONTRACT: UNRESOLVED"
+else
+  echo "$CRON_RAW" | sed 's/^/  cron: /'
+  python3 - "$CRON_RAW" <<'PY'
+import re, sys
+sys.path.insert(0, ".")
+import tools.pre_parity_snapshot as pps
+
+registered = sorted(pps.PARITY_CYCLE_SCHEDULE_UTC)
+found = []
+for line in sys.argv[1].splitlines():
+    f = line.split()
+    if len(f) < 5:
+        continue
+    mins, hrs, dom, mon, dow = f[:5]
+    for h in hrs.split(","):
+        for m in mins.split(","):
+            try:
+                found.append((int(h), int(m), dow))
+            except ValueError:
+                pass
+print(f"  registered contract : {registered} weekdays="
+      f"{list(pps.PARITY_CYCLE_WEEKDAYS)} grace={pps.PARITY_CYCLE_GRACE_MINUTES}m")
+times = sorted({(h, m) for h, m, _ in found})
+print(f"  live crontab times  : {times}")
+dows = sorted({d for _, _, d in found})
+print(f"  live crontab dow    : {dows}")
+problems = []
+if times != registered:
+    problems.append(f"time mismatch: contract {registered} vs cron {times}")
+# A weekday-only contract against a cron that also fires at the weekend would
+# under-report: no cycle would be EXPECTED on a day one actually ran.
+if any(d in ("*", "*/1") for d in dows):
+    problems.append(
+        f"contract is weekday-only but cron day-of-week is {dows} -- weekend "
+        f"cycles would run UNEXPECTED and their absence never detected")
+for p in problems:
+    print(f"  MISMATCH: {p}")
+print("  SCHEDULE CONTRACT: " + ("FAIL" if problems else "PASS"))
+PY
+fi
+
+echo
 echo "=== 5. FINAL STATUS ==="
 # The comparison exit code was previously DISCARDED: the script ended with echo
 # statements, so it always exited 0 even when the comparison reported

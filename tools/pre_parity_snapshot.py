@@ -19,7 +19,8 @@ import platform
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+import os
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -46,6 +47,8 @@ SUITES = {
     "tracker_diff": "tests/test_tracker_diff.py",
     "vps_verify": "tests/test_vps_verify_failure_modes.py",
     "parity_output": "tests/test_parity_output_gate.py",
+    # Schedule-aware collection freshness and the states derived from it.
+    "parity_freshness": "tests/test_parity_freshness.py",
 }
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
@@ -77,6 +80,11 @@ ALLOWED_RUNTIME_LOGS = (
     # path only stops the log gate from flagging it, and on its own that would
     # replace one check with no check.
     "logs/tracker_parity_v1.jsonl",
+    # Phase 4 collection heartbeat, appended every observed cycle. Registered
+    # here BEFORE the first cycle writes it: pending_signals.json taught us that
+    # an unignored, bot-committed, unregistered log fails the allow-list gate the
+    # first time it changes, which looks like a regression in unrelated work.
+    "logs/parity_heartbeat_v1.jsonl",
 )
 RUNTIME_COMMIT_AUTHORS = ("ares-bot@users.noreply.github.com",)
 
@@ -89,7 +97,16 @@ ACTIVATION_ENTRY_POINT = "daily_report.py"
 PARITY_OUTPUT_STATES = (
     "NOT_DECLARED_ABSENT",
     "ARMED_NOT_STARTED",
+    # Collection never began: the first scheduled cycle after activation became
+    # effective has passed its grace deadline with no heartbeat ever recorded.
+    # Distinct from ACTIVE_STALE, which means collection began and later stopped.
+    # Conflating them would hide which of two different faults occurred.
+    "ARMED_NO_HEARTBEAT",
     "ACTIVE_VALID",
+    # Evidence integrity intact, collection not current. Deliberately NOT folded
+    # into ACTIVE_INVALID: the records already written remain valid and must not
+    # be impeached because the collector stopped afterwards.
+    "ACTIVE_STALE",
     "UNDECLARED_OUTPUT_PRESENT",
     "DECLARATION_MALFORMED",
     "UNPARSEABLE_JSONL",
@@ -103,7 +120,287 @@ PARITY_OUTPUT_STATES = (
 )
 # States for which an append_only block is expected. Before the first cycle no
 # file exists, so requiring it unconditionally would fail a legitimate state.
-PARITY_STATES_REQUIRING_APPEND_ONLY = ("ACTIVE_VALID",)
+# ACTIVE_STALE included: it is reached only from a fully-validated ACTIVE_VALID,
+# so omitting it would silently DROP the append-only requirement at the exact
+# moment collection stopped -- turning one check into no check.
+PARITY_STATES_REQUIRING_APPEND_ONLY = ("ACTIVE_VALID", "ACTIVE_STALE")
+
+PARITY_HEARTBEAT = "logs/parity_heartbeat_v1.jsonl"
+
+# THE registered collection schedule -- the single source for expected-cycle math.
+# Nothing else in the tree may hardcode these times; tools/vps_phase3_verify.sh
+# reads this contract and diffs it against the live crontab, because a schedule
+# asserted only in the repo is unfalsifiable: it would compute freshness against a
+# fiction and pass while the real cron said something else.
+#
+# Weekday-only, UTC, minutes past midnight. Deliberately NOT market-calendar
+# aware: the question is whether the COLLECTOR ran, and cron fires on US market
+# holidays too. The trading calendar governs Item 3b's expected data bar, not
+# instrumentation liveness.
+PARITY_CYCLE_SCHEDULE_UTC = ((13, 30), (21, 0))
+PARITY_CYCLE_WEEKDAYS = (0, 1, 2, 3, 4)          # Mon-Fri, datetime.weekday()
+# Time allowed for a scheduled cycle to complete before its heartbeat is overdue.
+# A fixed hour-count threshold cannot work: Friday 21:00 to Monday 13:30 is 64.5h,
+# so 36h and 48h both cry wolf every weekend, and 72h would hide several missed
+# weekday cycles.
+PARITY_CYCLE_GRACE_MINUTES = 90
+
+
+def _scheduled_cycles(day):
+    """The datetimes at which collection is expected on `day`, or () if none."""
+    if day.weekday() not in PARITY_CYCLE_WEEKDAYS:
+        return ()
+    return tuple(datetime(day.year, day.month, day.day, h, m,
+                          tzinfo=timezone.utc)
+                 for h, m in sorted(PARITY_CYCLE_SCHEDULE_UTC))
+
+
+def last_due_cycle(now):
+    """Most recent scheduled cycle whose grace period has already expired.
+
+    Returns None when no scheduled cycle is yet overdue -- which is the correct
+    answer all weekend, and the reason this is schedule-aware rather than a fixed
+    age limit. Searches back 10 days to cross a long holiday weekend.
+    """
+    deadline_delta = timedelta(minutes=PARITY_CYCLE_GRACE_MINUTES)
+    for back in range(0, 10):
+        day = (now - timedelta(days=back))
+        for cyc in reversed(_scheduled_cycles(day)):
+            if now >= cyc + deadline_delta:
+                return cyc
+    return None
+
+
+def next_cycle_deadline(after):
+    """Deadline of the first scheduled cycle strictly after `after`.
+
+    Used for ARMED_NOT_STARTED: until this moment passes, a missing heartbeat is
+    a legitimate armed state rather than a failed collector.
+    """
+    deadline_delta = timedelta(minutes=PARITY_CYCLE_GRACE_MINUTES)
+    for fwd in range(0, 10):
+        day = after + timedelta(days=fwd)
+        for cyc in _scheduled_cycles(day):
+            if cyc > after:
+                return cyc + deadline_delta
+    return None
+
+
+# Host role is an EXPLICIT contract, never an inference. The previous detector
+# read "operational logs changed" as "this is the live VPS", which is false: a
+# development checkout that pulls the bot's log commits has identical git history.
+# Repository contents cannot identify the machine executing the verifier.
+#
+# Hostname is also rejected: it can be changed, cloned, or reproduced in a
+# container, and a wrong "live" reading would let a laptop assert the collector is
+# healthy when it cannot observe the collector at all.
+HOST_MARKER_NAME = ".ares_live_host"
+HOST_MARKER_CONTENT = "ARES_LIVE_HOST_V1"
+HOST_MARKER_PATH = ROOT.parent / HOST_MARKER_NAME   # outside the repo, uncommitted
+HOST_CONTEXT_ENV = "ARES_HOST_CONTEXT"
+HOST_CONTEXTS = ("live", "archive")
+
+
+def _host_role(env=None, marker_path=None):
+    """Resolve host role. Precedence: env override, marker, absence, malformed.
+
+    Returns 'live', 'archive', or 'unknown'. 'unknown' fails closed for phase
+    readiness but must NOT block a repair deployment -- a host that cannot
+    identify itself is still allowed to install the fix that makes it identifiable.
+    """
+    env = os.environ if env is None else env
+    p = Path(marker_path) if marker_path is not None else HOST_MARKER_PATH
+    out = {"role": None, "source": None, "marker_path": str(p),
+           "marker_present": None, "detail": None}
+
+    override = env.get(HOST_CONTEXT_ENV)
+    if override is not None:
+        out["source"] = f"env:{HOST_CONTEXT_ENV}"
+        if override in HOST_CONTEXTS:
+            out["role"] = override
+            out["detail"] = "explicit override (test seam)"
+        else:
+            # An unrecognised override is a configuration error. Falling through
+            # to marker detection would let a typo silently restore inference.
+            out["role"] = "unknown"
+            out["detail"] = (f"invalid {HOST_CONTEXT_ENV}={override!r}; "
+                             f"expected one of {HOST_CONTEXTS}")
+        return out
+
+    out["source"] = "marker"
+    try:
+        out["marker_present"] = p.exists()
+    except Exception as exc:                        # noqa: BLE001
+        out["role"] = "unknown"
+        out["detail"] = f"marker unstattable: {type(exc).__name__}: {exc}"
+        return out
+    if not out["marker_present"]:
+        # Only the live host is provisioned. A checkout without the marker is
+        # naturally an archive consumer -- including one holding bot log commits.
+        out["role"] = "archive"
+        out["detail"] = "no marker; development or archive checkout"
+        return out
+    try:
+        body = p.read_text().strip()
+    except Exception as exc:                        # noqa: BLE001
+        out["role"] = "unknown"
+        out["detail"] = f"marker unreadable: {type(exc).__name__}: {exc}"
+        return out
+    if body == HOST_MARKER_CONTENT:
+        out["role"] = "live"
+        out["detail"] = "valid live-host marker"
+    else:
+        out["role"] = "unknown"
+        out["detail"] = f"malformed marker body {body[:40]!r}"
+    return out
+
+
+def _as_utc(v):
+    """Coerce str/datetime/None to an aware UTC datetime, or None."""
+    if v is None:
+        return None
+    d = datetime.fromisoformat(v) if isinstance(v, str) else v
+    return d.replace(tzinfo=timezone.utc) if d.tzinfo is None else d
+
+
+# Explicit enumeration, strongest first. Prevents a future reader from treating a
+# git author timestamp as equivalent to an observed VPS activation.
+ACTIVATION_TIMESTAMP_SOURCES = ("vps_snapshot", "first_parity_record",
+                                "deployment_log", "commit_timestamp_fallback")
+
+# Seed values, used ONLY when the baseline does not already carry them. Once
+# written they are preserved, so these literals never override recorded history.
+#
+# The declaration commit that set ARES_PARITY=1 in run_ares.sh.
+ACTIVATION_COMMIT = "64f6b9c"
+# The first observed parity record's timestamp. This is an UPPER BOUND, not the
+# transition itself: collection was definitely active by then, but became
+# effective at some point between the declaration deploy and this cycle. The
+# declaration commit was authored 2026-09-29T03:30:28Z, so the true transition
+# lies in that ~2h22m window. Recorded as an upper bound rather than narrowed by
+# guesswork -- inventing precision here would corrupt the ARMED deadline math that
+# depends on it. Upgrade to source=vps_snapshot, confidence=observed if the 5B
+# activation snapshot showing ARMED_NOT_STARTED is recovered from the VPS.
+ACTIVATION_EFFECTIVE_AT = "2026-09-29T05:52:22.528410+00:00"
+ACTIVATION_TIMESTAMP_SOURCE = "first_parity_record"
+ACTIVATION_CONFIDENCE = "upper_bound"
+
+
+def _activation_effective_at():
+    """When the VPS first VERIFIED the active declaration in the deployed tree.
+
+    Not the declaration commit date. The commit identifies the code version; only
+    a VPS-side snapshot identifies when that code actually became effective
+    there. Using the commit date would let the verifier blame the collector for
+    the pull latency between commit and deploy.
+    """
+    rel = "tools/parity_baseline.json"
+    out = {"effective_at": None, "parsed": None, "baseline": rel,
+           "commit": None, "timestamp_source": None, "confidence": None,
+           "error": None}
+    try:
+        data = json.loads((ROOT / rel).read_text())
+        out["effective_at"] = data.get("parity_activation_effective_at")
+        out["commit"] = data.get("parity_activation_commit")
+        out["timestamp_source"] = data.get("parity_activation_timestamp_source")
+        out["confidence"] = data.get("parity_activation_timestamp_confidence")
+        out["parsed"] = _as_utc(out["effective_at"])
+        # An unlabelled timestamp is refused. Provenance is the whole point: a git
+        # author timestamp and an observed VPS transition are not interchangeable,
+        # and a bare datetime invites a future reader to treat them as equal.
+        if out["effective_at"] and out["timestamp_source"] not in \
+                ACTIVATION_TIMESTAMP_SOURCES:
+            out["parsed"] = None
+            out["error"] = (
+                f"activation timestamp has unregistered source "
+                f"{out['timestamp_source']!r}; expected one of "
+                f"{ACTIVATION_TIMESTAMP_SOURCES}")
+    except Exception as exc:                        # noqa: BLE001
+        out["error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
+def _parity_heartbeat(now=None):
+    """Read the collection heartbeat. Answers 'did a cycle RUN', not 'did it
+    produce records'.
+
+    `now` is injectable: a gate whose verdict depends on the wall clock is not
+    reproducible, and the tests must be able to pin time rather than pass or fail
+    according to when the suite happens to run.
+    """
+    p = ROOT / PARITY_HEARTBEAT
+    out = {"path": PARITY_HEARTBEAT, "present": p.exists(), "beats": 0,
+           "last_timestamp": None, "last_cycle_id": None,
+           "last_production_commit": None, "age_hours": None,
+           "stale": None, "grace_minutes": PARITY_CYCLE_GRACE_MINUTES,
+           "schedule_utc": PARITY_CYCLE_SCHEDULE_UTC,
+           "last_due_cycle": None, "covers_last_due_cycle": None,
+           "identities": 0, "malformed": [], "last_errors": {}}
+    if not p.exists():
+        return out
+    beats = []
+    for i, line in enumerate(p.read_text().splitlines(), 1):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            beats.append(json.loads(line))
+        except Exception as exc:
+            out["malformed"].append(f"heartbeat line {i}: {exc}")
+    out["beats"] = len(beats)
+    if not beats:
+        return out
+    last = beats[-1]
+    out["last_timestamp"] = last.get("cycle_completed_at")
+    out["last_cycle_id"] = last.get("cycle_id")
+    out["last_production_commit"] = last.get("production_commit")
+    out["last_attempted"] = last.get("attempted")
+    out["last_written"] = last.get("written")
+    # Composite identity: the capture token restarts at 1 in each cron process,
+    # so counting distinct tokens would collapse every cycle into one.
+    out["identities"] = len({(b.get("production_commit"),
+                              b.get("cycle_started_at"),
+                              b.get("capture_cycle_token")) for b in beats})
+    # attempted != written means positions were observed but not all recorded --
+    # a silent partial collection that a bare freshness check would call healthy.
+    out["incomplete_cycles"] = [
+        {"cycle_id": b.get("cycle_id"), "attempted": b.get("attempted"),
+         "written": b.get("written")}
+        for b in beats
+        if isinstance(b.get("attempted"), int)
+        and isinstance(b.get("written"), int)
+        and b.get("attempted") != b.get("written")]
+    out["last_errors"] = {
+        k: last.get(k) for k in ("shadow_system_error", "capture_error",
+                                 "results_error", "write_failures")
+        if last.get(k)}
+    ts = last.get("cycle_completed_at")
+    try:
+        when = datetime.fromisoformat(str(ts))
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        ref = now or datetime.now(timezone.utc)
+        if isinstance(ref, str):
+            ref = datetime.fromisoformat(ref)
+        if ref.tzinfo is None:
+            ref = ref.replace(tzinfo=timezone.utc)
+        out["age_hours"] = round((ref - when).total_seconds() / 3600.0, 2)
+        due = last_due_cycle(ref)
+        out["last_due_cycle"] = due.isoformat() if due else None
+        if due is None:
+            # No scheduled cycle is overdue -- true all weekend. Not stale, and
+            # not "unknown" either: the schedule says nothing was expected.
+            out["covers_last_due_cycle"] = True
+            out["stale"] = False
+        else:
+            out["covers_last_due_cycle"] = when >= due
+            out["stale"] = not out["covers_last_due_cycle"]
+    except Exception as exc:
+        # Unparseable timestamp leaves stale as None -- UNKNOWN, never False. A
+        # freshness check that cannot run has not passed.
+        out["malformed"].append(
+            f"unparseable cycle_completed_at {ts!r}: {exc}")
+    return out
 
 
 # Schema v1, frozen as an immutable literal on 2026-09-29 from the AST derivation
@@ -422,7 +719,7 @@ def _append_only_history():
     return out
 
 
-def _parity_output_state():
+def _parity_output_state(now=None):
     """Phase-aware evidence gate.
 
     parity_output_absent encoded "Phase 4 has not started", so the first write
@@ -433,7 +730,12 @@ def _parity_output_state():
     """
     decl = _collection_declared()
     p = ROOT / PARITY_OUTPUT
-    out = {"collection_declared": decl["declared"],
+    # Set FIRST, so it is reported on every early-return path too. A freshness
+    # signal that disappears whenever something else fails is useless precisely
+    # when it is most needed.
+    heartbeat = _parity_heartbeat(now)
+    out = {"heartbeat": heartbeat,
+           "collection_declared": decl["declared"],
            "declaration": decl, "exists": p.exists(), "records": 0,
            "state": None, "valid": False, "failures": [], "notes": []}
 
@@ -455,9 +757,44 @@ def _parity_output_state():
         return out
 
     if not p.exists():
-        out["state"] = "ARMED_NOT_STARTED"
-        out["valid"] = True
-        out["notes"].append("collection declared; no cycle recorded")
+        # Armed is only legitimate UNTIL the first scheduled cycle after
+        # activation became effective has had its grace period. Past that, a
+        # missing heartbeat means the collector never started -- previously
+        # indistinguishable from "armed, about to run", which is the ambiguity
+        # this state split exists to remove.
+        eff = _activation_effective_at()
+        out["activation_effective_at"] = eff.get("effective_at")
+        deadline = None
+        if eff.get("parsed") is not None:
+            deadline = next_cycle_deadline(eff["parsed"])
+        out["first_expected_heartbeat_deadline"] = (
+            deadline.isoformat() if deadline else None)
+        ref = _as_utc(now) or datetime.now(timezone.utc)
+        if deadline is None:
+            # Cannot be tightened. Reported as unresolved rather than silently
+            # granted the benign reading: the commit date alone is NOT a
+            # substitute, because the VPS may pull hours after the commit and a
+            # commit-derived deadline would blame the collector for that gap.
+            out["state"] = "ARMED_NOT_STARTED"
+            out["valid"] = True
+            out["armed_deadline_unresolved"] = True
+            out["notes"].append(
+                "collection declared; no cycle recorded; armed deadline "
+                "UNRESOLVED (no activation_effective_at recorded) -- cannot "
+                "distinguish 'about to run' from 'never started'")
+        elif ref >= deadline:
+            out["state"] = "ARMED_NO_HEARTBEAT"
+            out["valid"] = False
+            out["failures"].append(
+                f"collection declared and effective at {eff.get('effective_at')}"
+                f" but no heartbeat by first expected deadline "
+                f"{deadline.isoformat()}")
+        else:
+            out["state"] = "ARMED_NOT_STARTED"
+            out["valid"] = True
+            out["notes"].append(
+                f"collection declared; no cycle recorded; first expected "
+                f"heartbeat deadline {deadline.isoformat()} not yet reached")
         return out
 
     recs = []
@@ -593,6 +930,21 @@ def _parity_output_state():
     else:
         out["state"] = "ACTIVE_VALID"
         out["valid"] = True
+        # Reached ONLY from a fully-validated ACTIVE_VALID, so `valid` stays True:
+        # the records already written are not impeached by the collector stopping
+        # afterwards. Freshness is reported separately and gates phase advancement.
+        if heartbeat["present"] and heartbeat["stale"] is True:
+            out["state"] = "ACTIVE_STALE"
+            out["notes"].append(
+                f"evidence integrity intact; collection not current -- last "
+                f"heartbeat {heartbeat['last_timestamp']} does not cover "
+                f"expected cycle {heartbeat['last_due_cycle']}")
+        elif not heartbeat["present"]:
+            # Records exist but no heartbeat: they predate the heartbeat contract.
+            # Not stale, but freshness is UNKNOWN, never assumed fresh.
+            out["notes"].append(
+                "records present but no heartbeat log -- evidence predates the "
+                "heartbeat contract; freshness UNKNOWN")
     # Self-check: a state not in the contract would render as unrecognised
     # downstream, so catch it here rather than at the display.
     if out["state"] not in PARITY_OUTPUT_STATES:
@@ -1001,9 +1353,105 @@ def main():
                  "the VPS and diff the 'runtime' and 'marker_contract' blocks "
                  "before authorizing Phase 4."),
     }
+    # DEPLOYMENT INTEGRITY. Remains the exit-code authority so a maintenance
+    # deployment whose PURPOSE is to repair collection can still be installed.
+    # Collection freshness is deliberately NOT a member of this dict: every bool
+    # here joins the all() below, so putting it here would create the deadlock
+    # where a stale collector blocks deploying the fix for the stale collector.
     snap["phase3_gate"]["all_local_checks_pass"] = all(
         v for k, v in snap["phase3_gate"].items()
         if isinstance(v, bool) and k != "all_local_checks_pass")
+    snap["phase3_gate"]["deployment_integrity_valid"] = \
+        snap["phase3_gate"]["all_local_checks_pass"]
+
+    # COLLECTION OPERATIONAL HEALTH. Blocking for evidence acceptance and Phase 5,
+    # non-blocking for deployment and repair.
+    hb = snap["parity_output"]["heartbeat"]
+    st = snap["parity_output"]["state"]
+    # Host context decides what freshness even MEASURES. The heartbeat is
+    # bot-committed, so a development checkout reads the last ARCHIVED VPS
+    # activity; a delayed or failed bot push would otherwise make the laptop
+    # announce that the VPS is stale when only the archival lagged.
+    role = _host_role()
+    act = _activation_effective_at()
+    recent = None if hb["stale"] is None else (not hb["stale"])
+    if st == "ARMED_NO_HEARTBEAT":
+        recent = False
+    if role["role"] == "unknown":
+        # A host that cannot identify itself cannot say what its freshness
+        # measures, so the measurement is void rather than optimistic.
+        recent = None
+    label = {"live": "live_collection_recent",
+             "archive": "archived_collection_recent"}.get(
+                 role["role"], "collection_recency_unmeasurable")
+    snap["collection_health"] = {
+        "measures": label,
+        "host_context": role["role"],
+        "host_role_source": role["source"],
+        "host_role_detail": role["detail"],
+        "host_marker_path": role["marker_path"],
+        # Retained for comparison ONLY. It is the discredited inference: a
+        # development checkout holding bot log commits reports True. Kept visible
+        # so a future reader can see the two disagree rather than rediscovering it.
+        "legacy_is_live_host_inference": snap["live_logs"]["is_live_host"],
+        "interpretation": (
+            "current liveness of this host's collector"
+            if role["role"] == "live" else
+            "last VPS activity that reached git; NOT the live host state -- a "
+            "lagging or failed bot push presents here as staleness"
+            if role["role"] == "archive" else
+            "host role unresolved; freshness is not measurable here"),
+        "parity_collection_recent": recent,
+        "state": st,
+        "last_heartbeat": hb["last_timestamp"],
+        "last_due_cycle": hb["last_due_cycle"],
+        "covers_last_due_cycle": hb["covers_last_due_cycle"],
+        "distinct_cycle_identities": hb["identities"],
+        "incomplete_cycles": hb.get("incomplete_cycles", []),
+        "malformed": hb["malformed"],
+        # Read from the activation contract directly, NOT from parity_output.
+        # parity_output only populates it on the ARMED early-return path, so in
+        # every ACTIVE state -- i.e. normal operation -- the provenance of the
+        # activation timestamp was invisible in the report that depends on it.
+        "activation": {k: act[k] for k in
+                       ("effective_at", "commit", "timestamp_source",
+                        "confidence", "error")},
+        "activation_effective_at": act["effective_at"],
+    }
+
+    # PHASE READINESS. None (unknown) is NOT truthy, so an unrunnable freshness
+    # check fails closed here rather than defaulting to ready.
+    # PHASE 5 ELIGIBILITY. Freshness must VISIBLY prevent Phase 5 rather than be
+    # informational: a stalled collector means the evidence backing the swap is
+    # not current, whatever the already-written records say.
+    cov = snap["phase3_gate"].get("required_shadow_coverage", {})
+    blockers = []
+    if not snap["phase3_gate"]["deployment_integrity_valid"]:
+        blockers.append("deployment_integrity_valid is False")
+    if not snap["parity_output"]["valid"]:
+        blockers.append(f"evidence state {st}")
+    if recent is not True:
+        blockers.append(
+            f"parity_collection_recent is {recent} "
+            f"({snap['collection_health']['measures']})")
+    for sym, d in sorted(cov.items()):
+        if not d.get("entry_date_matches"):
+            blockers.append(f"required shadow coverage incomplete: {sym}")
+    # PHASE 5 IS PROHIBITED independently of this computation. The field reports
+    # whether the registered technical gates are satisfied; it is not an
+    # authorization, and an empty blocker list does not grant one.
+    snap["collection_health"]["phase5_gates_satisfied"] = not blockers
+    snap["collection_health"]["phase5_blockers"] = blockers
+    snap["collection_health"]["phase5_authorization"] = (
+        "PROHIBITED -- Phase 5 requires explicit operator sign-off regardless "
+        "of gate state")
+
+    snap["collection_health"]["phase4_operational_ready"] = bool(
+        snap["phase3_gate"]["deployment_integrity_valid"]
+        and snap["parity_output"]["valid"]
+        and recent is True
+        and not snap["collection_health"]["incomplete_cycles"]
+        and not hb["malformed"])
 
     print(json.dumps(snap, indent=2))
 
@@ -1038,6 +1486,23 @@ def main():
             # regeneration cannot silently move the activation point.
             "schema_v2_activation_commit": (
                 _schema_v2_activation() or lin["ares_commit"]),
+            # Phase 4 activation provenance. PRESERVED, never regenerated: this
+            # records a historical operational transition, so a rebaseline that
+            # recomputed it would silently rewrite when collection is believed to
+            # have become active. Re-arming after a disable requires a NEW
+            # collection epoch with its own timestamp -- it must not overwrite
+            # these fields.
+            "parity_activation_commit":
+                _activation_effective_at()["commit"] or ACTIVATION_COMMIT,
+            "parity_activation_effective_at":
+                _activation_effective_at()["effective_at"]
+                or ACTIVATION_EFFECTIVE_AT,
+            "parity_activation_timestamp_source":
+                _activation_effective_at()["timestamp_source"]
+                or ACTIVATION_TIMESTAMP_SOURCE,
+            "parity_activation_timestamp_confidence":
+                _activation_effective_at()["confidence"]
+                or ACTIVATION_CONFIDENCE,
             # Three hashes of ONE file, named by SERIALIZATION rather than by
             # role, because a mismatch between them is not evidence of tampering.
             # Each answers a different question and must never be cross-compared.

@@ -53,6 +53,11 @@ logs/*
 # implied it was archived. Scoped to this exact path -- `git add -f logs/`
 # would stage other ignored runtime artifacts as well.
 !logs/tracker_parity_v1.jsonl
+# Phase 4 collection heartbeat. Re-included for the same reason as the evidence:
+# its whole purpose is to prove a cycle RAN, and an untracked heartbeat would be
+# invisible to any host that did not run it -- including during cross-host
+# verification, which is where a stalled collector would otherwise hide.
+!logs/parity_heartbeat_v1.jsonl
 
 # Deliberately NOT re-included: logs/psi_state.json (per-host counter
 # baseline), logs/archive/ (V1 data), *.bak (repair backups), cron.log.
