@@ -1,6 +1,6 @@
 candidates_screened:103
 signals_found:1
 signal_details:BCE | mean_reversion | conf2 | range
-  Price: $20.56 | RSI: 26.6 | Vol: 1.0x
+  Price: $20.56 | RSI: 26.6 | Vol: 1.03x
   Buy: $150 (7.3 shares)
   SL: $20.18 | TP: $22.62 (+10%) | TS: 10%
