@@ -1,7 +1,7 @@
 {
   "baseline_schema_version": 1,
-  "generated_at": "2026-09-29T03:33:13.451057+00:00",
-  "generated_from_commit": "06c7003",
+  "generated_at": "2026-09-29T06:03:08.377279+00:00",
+  "generated_from_commit": "613ffa7",
   "tracker_raw_bytes_md5": "c0e9e9bc1d6ba09aeb2c0be9409ad4fb",
   "tracker_normalized_text_md5": "465fe06ff6533e9d4e30f07c22d16f15",
   "tracker_loaded_source_md5": "12bd27d3582dc60f5dd3110b9692d458",
@@ -35,13 +35,13 @@
     "output_path": 32,
     "tracker_diff": 51,
     "vps_verify": 90,
-    "parity_output": 90
+    "parity_output": 89
   },
-  "assertion_total": 1525,
+  "assertion_total": 1524,
   "parity_collection_at_generation": {
-    "state": "ARMED_NOT_STARTED",
+    "state": "ACTIVE_VALID",
     "collection_declared": true,
-    "records": 0,
+    "records": 4,
     "NOTE": "informational only; the state advances and records grow, so these are never compared"
   },
   "suite_count_changes_since_previous_baseline": {
