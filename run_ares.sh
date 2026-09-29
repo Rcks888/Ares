@@ -3,6 +3,14 @@ export ARES_SCHEDULED=1
 export PATH=/root/jdk-17.0.12/bin:$PATH
 export DISPLAY=:1
 
+# Phase 4 parity collection. OBSERVATION ONLY: the inline tracker remains the
+# sole decision authority, and the parity path never writes production state.
+# Must stay ABOVE the daily_report.py line -- /root/ares/.env is sourced further
+# down, so a variable placed there would not reach the trading process and parity
+# would silently stay off while appearing configured.
+# To disable, comment out this single line.
+export ARES_PARITY=1
+
 cd /root/ares/Ares
 source /root/ares/Ares/venv/bin/activate
 python daily_report.py 2>&1 | tee /tmp/ares_output.txt
