@@ -11,9 +11,11 @@ than none.
 Captures the Phase 3 gate evidence plus the boundary state that makes ABM and
 SDGR valuable shadow subjects.
 """
+import ast
 import hashlib
 import json
 import platform
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -42,6 +44,7 @@ SUITES = {
     "output_path": "tests/test_output_path.py",
     "tracker_diff": "tests/test_tracker_diff.py",
     "vps_verify": "tests/test_vps_verify_failure_modes.py",
+    "parity_output": "tests/test_parity_output_gate.py",
 }
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
@@ -63,8 +66,312 @@ ALLOWED_RUNTIME_LOGS = (
     "logs/queue_ranked.json",
     "logs/queue_events.jsonl",
     "logs/last_scan_summary.txt",
+    # Phase 4 migration evidence. Append-only, bot-committed for off-host backup.
+    # Validated by _parity_output_state(), not merely tolerated: allow-listing a
+    # path only stops the log gate from flagging it, and on its own that would
+    # replace one check with no check.
+    "logs/tracker_parity_v1.jsonl",
 )
 RUNTIME_COMMIT_AUTHORS = ("ares-bot@users.noreply.github.com",)
+
+PARITY_OUTPUT = "logs/tracker_parity_v1.jsonl"
+ACTIVATION_ENTRY_POINT = "daily_report.py"
+
+
+def _frozen_record_fields():
+    """The record schema, DERIVED from build_record itself.
+
+    Not a local list. A hand-copied field set drifts the moment build_record
+    changes, and the gate would keep validating a schema that no longer exists
+    while still reporting success. Raises if the structure cannot be found --
+    an underivable schema is a failure, not an empty requirement.
+    """
+    src = (ROOT / "engine" / "parity_compare.py").read_text()
+    fn = [n for n in ast.walk(ast.parse(src))
+          if isinstance(n, ast.FunctionDef) and n.name == "build_record"]
+    if not fn:
+        raise RuntimeError("build_record not found in engine/parity_compare.py")
+    dicts = [n for n in ast.walk(fn[0])
+             if isinstance(n, ast.Dict) and len(n.keys) > 10]
+    if not dicts:
+        raise RuntimeError("build_record's record dict not found")
+    d = max(dicts, key=lambda n: len(n.keys))
+    keys = {k.value for k in d.keys if isinstance(k, ast.Constant)}
+    if len(keys) != len(d.keys):
+        raise RuntimeError("build_record has computed keys; schema not derivable")
+    return keys
+
+
+def _collection_declared():
+    """Is Phase 4 collection declared, AND declared where it takes effect?
+
+    Placement is the whole point. run_ares.sh sources /root/ares/.env AFTER
+    daily_report.py runs, so a declaration below the Python invocation -- or in
+    .env -- never reaches the trading process. Parity would stay off while
+    appearing configured, and the only symptom would be an empty evidence file
+    indistinguishable from "no positions to compare".
+
+    A loose search for the export anywhere in the file cannot tell those apart,
+    so this walks the script in line order and tracks the value as the shell
+    would, up to the entry point.
+    """
+    out = {"declared": False, "valid": True, "failures": [],
+           "export_lines": [], "entry_point_line": None, "value": None}
+    path = ROOT / "run_ares.sh"
+    if not path.exists():
+        out["valid"] = False
+        out["failures"].append("run_ares.sh absent")
+        return out
+
+    lines = path.read_text().splitlines()
+    entry = None
+    for i, raw in enumerate(lines, 1):
+        stripped = raw.strip()
+        if stripped.startswith("#"):
+            continue
+        if re.search(rf"python3?\s+{re.escape(ACTIVATION_ENTRY_POINT)}\b",
+                     stripped):
+            entry = i
+            break
+    out["entry_point_line"] = entry
+    if entry is None:
+        out["valid"] = False
+        out["failures"].append(
+            f"{ACTIVATION_ENTRY_POINT} invocation not found; placement of the "
+            "declaration cannot be verified")
+        return out
+
+    # Assignments and unsets in line order, tracking the effective value.
+    value = None
+    for i, raw in enumerate(lines, 1):
+        stripped = raw.strip()
+        if stripped.startswith("#"):
+            continue
+        m = re.match(r"(?:export\s+)?ARES_PARITY=(\S*)", stripped)
+        if m:
+            after = i > entry
+            out["export_lines"].append(
+                {"line": i, "value": m.group(1).strip('"\''),
+                 "after_entry_point": after})
+            if not after:
+                value = m.group(1).strip('"\'')
+            continue
+        if re.match(r"unset\s+ARES_PARITY\b", stripped):
+            out["export_lines"].append(
+                {"line": i, "value": "<unset>", "after_entry_point": i > entry})
+            if i <= entry:
+                value = None
+
+    out["value"] = value
+    out["declared"] = value == "1"
+    pre = [e for e in out["export_lines"] if not e["after_entry_point"]]
+    post = [e for e in out["export_lines"] if e["after_entry_point"]]
+
+    assigns = [e for e in pre if e["value"] != "<unset>"]
+    if len(assigns) > 1:
+        out["valid"] = False
+        out["failures"].append(
+            f"{len(assigns)} pre-invocation ARES_PARITY assignments at lines "
+            f"{[e['line'] for e in assigns]}; exactly one is required")
+    if post and any(e["value"] == "1" for e in post):
+        out["valid"] = False
+        out["failures"].append(
+            f"ARES_PARITY=1 at line {[e['line'] for e in post if e['value']=='1']} "
+            f"is AFTER the {ACTIVATION_ENTRY_POINT} invocation at line {entry}; "
+            "it cannot reach the trading process")
+    if assigns and value is None:
+        out["valid"] = False
+        out["failures"].append(
+            "ARES_PARITY is unset before the invocation after being assigned; "
+            "the declaration has no effect")
+    return out
+
+
+def _git_show(rev, path):
+    """Bytes of path at rev, or None when absent there."""
+    try:
+        return subprocess.run(["git", "show", f"{rev}:{path}"], cwd=ROOT,
+                              capture_output=True, check=True).stdout
+    except subprocess.CalledProcessError:
+        return None
+
+
+def _append_only_history():
+    """Append-only, anchored to Git rather than to a mutable sidecar count.
+
+    A recorded line count stored next to the evidence can be rewritten together
+    with the evidence. Byte-prefix containment across committed history cannot:
+    it detects truncation, rewriting of old records, reordering, replacement and
+    mid-file insertion, none of which a line count necessarily changes.
+    """
+    out = {"prefix_preserved": None, "history_append_only": None,
+           "committed_records": 0, "working_tree_records": 0,
+           "new_records": 0, "violations": []}
+    wt = ROOT / PARITY_OUTPUT
+    head = _git_show("HEAD", PARITY_OUTPUT)
+    if wt.exists():
+        cur = wt.read_bytes()
+        out["working_tree_records"] = len(
+            [l for l in cur.splitlines() if l.strip()])
+        base = head or b""
+        out["committed_records"] = len(
+            [l for l in base.splitlines() if l.strip()])
+        out["prefix_preserved"] = cur.startswith(base)
+        out["new_records"] = (out["working_tree_records"]
+                              - out["committed_records"])
+        if not out["prefix_preserved"]:
+            out["violations"].append(
+                "working tree is not a byte-extension of the committed "
+                "evidence: history was truncated, reordered or rewritten")
+
+    revs = subprocess.run(
+        ["git", "log", "--format=%H", "--", PARITY_OUTPUT],
+        cwd=ROOT, capture_output=True, text=True).stdout.split()
+    revs.reverse()
+    ok = True
+    prev = b""
+    for rev in revs:
+        cur = _git_show(rev, PARITY_OUTPUT)
+        if cur is None:
+            ok = False
+            out["violations"].append(f"{rev[:7]} deleted the evidence file")
+            continue
+        if not cur.startswith(prev):
+            ok = False
+            out["violations"].append(
+                f"{rev[:7]} is not a byte-extension of its parent")
+        prev = cur
+    out["history_append_only"] = ok if revs else None
+    return out
+
+
+def _parity_output_state():
+    """Phase-aware evidence gate.
+
+    parity_output_absent encoded "Phase 4 has not started", so the first write
+    would have made every later run fail permanently -- a known-false gate needing
+    manual interpretation, which is what replacing logs_unchanged_since_tag was
+    meant to end. The states below are explicit so ARMED_NOT_STARTED is not
+    reported as a footnote inside a failure list.
+    """
+    decl = _collection_declared()
+    p = ROOT / PARITY_OUTPUT
+    out = {"collection_declared": decl["declared"],
+           "declaration": decl, "exists": p.exists(), "records": 0,
+           "state": None, "valid": False, "failures": [], "notes": []}
+
+    if not decl["valid"]:
+        out["state"] = "DECLARATION_MALFORMED"
+        out["failures"] = list(decl["failures"])
+        return out
+
+    if not decl["declared"]:
+        if p.exists():
+            out["state"] = "UNDECLARED_OUTPUT_PRESENT"
+            out["failures"].append(
+                "parity output present but collection is not declared where it "
+                "takes effect in run_ares.sh")
+            return out
+        out["state"] = "NOT_DECLARED_ABSENT"
+        out["valid"] = True
+        out["notes"].append("Phase 0.5: collection disabled, no evidence file")
+        return out
+
+    if not p.exists():
+        out["state"] = "ARMED_NOT_STARTED"
+        out["valid"] = True
+        out["notes"].append("collection declared; no cycle recorded")
+        return out
+
+    recs = []
+    for i, line in enumerate(p.read_text().splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            recs.append(json.loads(line))
+        except Exception as exc:
+            out["failures"].append(f"line {i} unparseable: {exc}")
+    out["records"] = len(recs)
+    if out["failures"]:
+        out["state"] = "UNPARSEABLE_JSONL"
+        return out
+
+    try:
+        required = _frozen_record_fields()
+    except Exception as exc:
+        out["state"] = "SCHEMA_UNDERIVABLE"
+        out["failures"].append(f"record schema not derivable: {exc}")
+        return out
+
+    lineage = ("production_commit", "exit_policy_md5", "compatibility_contract",
+               "tracker_source_hash", "cycle_id", "timestamp")
+    drift, mismatches, incomplete = [], [], []
+    seen = set()
+    for n, r in enumerate(recs, 1):
+        missing = required - set(r)
+        if missing:
+            drift.append(f"record {n} missing {sorted(missing)}")
+        extra = set(r) - required
+        if extra:
+            drift.append(f"record {n} has unregistered {sorted(extra)}")
+        if r.get("record_schema_version") != sc.RECORD_SCHEMA_VERSION:
+            drift.append(f"record {n} schema_version "
+                         f"{r.get('record_schema_version')!r}")
+        # Constant comes from the classifier. The field is difference_class --
+        # NOT verdict and NOT result_class, both of which would have made
+        # r.get(...) return None and silently pass every real mismatch.
+        if r.get("difference_class") == sc.DECISION_CHANGING_MISMATCH:
+            mismatches.append(f"record {n} {r.get('symbol')}")
+        if [k for k in lineage if r.get(k) in (None, "")]:
+            incomplete.append(
+                f"record {n} lineage incomplete: "
+                f"{[k for k in lineage if r.get(k) in (None, '')]}")
+        ident = (r.get("cycle_id"), r.get("symbol"))
+        if ident in seen:
+            drift.append(f"record {n} duplicate cycle/symbol identity {ident}")
+        seen.add(ident)
+
+    hist = _append_only_history()
+    out["append_only"] = hist
+
+    # Failures are CUMULATIVE and the state is the most severe one present.
+    # Selecting a single branch would have let unrelated schema drift mask a
+    # DECISION_CHANGING_MISMATCH: the drift branch would report only its own
+    # failures and the mismatch would never appear anywhere in the output.
+    out["failures"].extend(mismatches + drift + incomplete + hist["violations"])
+    if mismatches:
+        out["state"] = "DECISION_CHANGING_MISMATCH_PRESENT"
+    elif drift:
+        out["state"] = "SCHEMA_DRIFT"
+    elif incomplete:
+        out["state"] = "LINEAGE_INCOMPLETE"
+    elif hist["prefix_preserved"] is False:
+        out["state"] = "EVIDENCE_TRUNCATED"
+    elif hist["history_append_only"] is False:
+        out["state"] = "EVIDENCE_REWRITTEN"
+    elif not recs:
+        out["state"] = "DECLARED_BUT_EMPTY"
+        out["failures"].append("evidence file exists but contains no records")
+    else:
+        out["state"] = "ACTIVE_VALID"
+        out["valid"] = True
+    return out
+
+
+def _parity_output_trackable():
+    """Would an ordinary `git add logs/` stage the evidence?
+
+    .gitignore has `logs/*`, and allow-listing a path in ALLOWED_RUNTIME_LOGS
+    does not override it. Without a scoped negation the bot's `git add logs/`
+    silently skips the file, so the evidence would exist on one host with no
+    backup while the allow-list entry suggested it was being archived.
+    """
+    out = {"ignored": None, "trackable": None, "newly_trackable_others": []}
+    r = subprocess.run(["git", "check-ignore", "-q", PARITY_OUTPUT],
+                       cwd=ROOT, capture_output=True)
+    out["ignored"] = r.returncode == 0
+    out["trackable"] = not out["ignored"]
+    return out
 
 
 def _live_log_changes_are_bot_only_and_allowlisted():
@@ -404,6 +711,8 @@ def main():
     snap["tracker_diff"] = _tracker_diff_evidence()
     snap["baseline_validity"] = _baseline_still_describes_head()
     snap["live_logs"] = _live_log_changes_are_bot_only_and_allowlisted()
+    snap["parity_output"] = _parity_output_state()
+    snap["parity_output_tracking"] = _parity_output_trackable()
     snap["phase3_gate"] = {
         "baseline_describes_head": snap["baseline_validity"]["valid"],
         "rollback_tag_resolves": lin["rollback_tag_commit"].startswith(
@@ -429,8 +738,11 @@ def main():
         "all_suites_pass": all(t["passed"] for t in tests.values()),
         "marker_contract_valid": bool(snap["marker_contract"].get("valid")),
         "working_tree_clean": lin["working_tree_clean"],
-        "parity_output_absent": not (ROOT / "logs"
-                                     / "tracker_parity_v1.jsonl").exists(),
+        # Was parity_output_absent, a bare .exists() that encoded "Phase 4 has
+        # not started" and would therefore have failed permanently from the first
+        # write onward. Now phase-aware: see _parity_output_state().
+        "parity_output_state_valid": snap["parity_output"]["valid"],
+        "parity_output_trackable": snap["parity_output_tracking"]["trackable"],
         # stdout capture is only safe while evaluation is sequential.
         "single_threaded_verified": not _has_concurrency(),
         "concurrency_findings": _concurrency_findings(),

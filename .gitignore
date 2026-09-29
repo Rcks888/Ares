@@ -47,6 +47,12 @@ logs/*
 !logs/queue_ranked.json
 !logs/queue_events.jsonl
 !logs/last_scan_summary.txt
+# Phase 4 tracker-migration evidence. Re-included deliberately: without this
+# negation `logs/*` hides it from the bot's `git add logs/`, so the evidence
+# would live on a single host with no backup while the runtime allow-list
+# implied it was archived. Scoped to this exact path -- `git add -f logs/`
+# would stage other ignored runtime artifacts as well.
+!logs/tracker_parity_v1.jsonl
 
 # Deliberately NOT re-included: logs/psi_state.json (per-host counter
 # baseline), logs/archive/ (V1 data), *.bak (repair backups), cron.log.

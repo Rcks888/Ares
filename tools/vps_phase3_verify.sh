@@ -60,12 +60,15 @@ if [ "$PRE" = "$POST" ]; then
   # Do not claim this passed. If the pull was performed manually beforehand,
   # PRE == POST and the section compares a state to itself, so "identical" is
   # guaranteed regardless of what the deployment actually changed.
-  ADDITIVE_STATUS="NOT EVALUATED (repository already at target commit)"
-  echo "  NOT EVALUATED: repository was already at target commit $POST"
-  echo "  This section can only prove additivity when it performs the pull"
-  echo "  itself. Re-run before pulling, or pass the pre-pull commit:"
-  echo "      bash tools/vps_phase3_verify.sh --pre-pull-commit <sha>"
-  if [ -n "$PRE_PULL_COMMIT" ]; then
+  if [ -z "$PRE_PULL_COMMIT" ]; then
+    # Only advise when there is genuinely nothing to evaluate. Printing this
+    # before then evaluating against a supplied commit read as contradictory.
+    ADDITIVE_STATUS="NOT EVALUATED (repository already at target commit)"
+    echo "  NOT EVALUATED: repository was already at target commit $POST"
+    echo "  This section can only prove additivity when it performs the pull"
+    echo "  itself. Re-run before pulling, or pass the pre-pull commit:"
+    echo "      bash tools/vps_phase3_verify.sh --pre-pull-commit <sha>"
+  else
     echo "  --- evaluating against supplied pre-pull commit $PRE_PULL_COMMIT ---"
     CHANGED=$(git diff --name-only "$PRE_PULL_COMMIT" "$POST" -- $RUNTIME_FILES)
     if [ -n "$CHANGED" ]; then
@@ -301,7 +304,8 @@ echo "This script enabled nothing."
 if [ "$SNAP" = "B" ]; then
   echo "The Phase 4 bridge is present but OFF: parity runs only when"
   echo "ARES_PARITY=1 is set on an invocation. This run did not set it, and"
-  echo "parity_output_absent above confirms no records exist yet."
+  echo "the parity_output state above reports whether collection is declared,"
+  echo "armed, or active, and validates the evidence in each case."
   echo "Phase 5 remains prohibited: observation only."
 else
   echo "Phase 4 needs a call site that does not exist yet;"
