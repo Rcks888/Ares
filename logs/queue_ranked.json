@@ -15,11 +15,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-09-29T08:00:56",
-    "drift_pct": -2.41,
+    "checked_at": "2026-09-29T13:31:35",
+    "drift_pct": 1.0,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 179.6
+    "live_price": 185.87
   },
   {
     "symbol": "BCE",
@@ -36,11 +36,11 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-09-29T08:00:57",
-    "drift_pct": -1.96,
+    "checked_at": "2026-09-29T13:31:36",
+    "drift_pct": -2.24,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 20.56
+    "live_price": 20.5
   },
   {
     "symbol": "ADT",
@@ -57,10 +57,10 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-09-29T08:00:57",
-    "drift_pct": -2.67,
+    "checked_at": "2026-09-29T13:31:37",
+    "drift_pct": -2.99,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 6.19
+    "live_price": 6.17
   }
 ]
