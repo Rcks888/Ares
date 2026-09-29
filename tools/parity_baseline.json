@@ -1,7 +1,16 @@
 {
-  "generated_utc": "2026-09-28T07:09:38.689763+00:00",
-  "generated_on_commit": "b5129b4",
-  "tracker_source_hash": "be7b60383dba5d718821e8ef52209953",
+  "baseline_schema_version": 1,
+  "generated_at": "2026-09-29T02:06:18.590744+00:00",
+  "generated_from_commit": "e8bc137",
+  "tracker_raw_bytes_md5": "c0e9e9bc1d6ba09aeb2c0be9409ad4fb",
+  "tracker_normalized_text_md5": "465fe06ff6533e9d4e30f07c22d16f15",
+  "tracker_loaded_source_md5": "12bd27d3582dc60f5dd3110b9692d458",
+  "tracker_hash_bases": {
+    "tracker_raw_bytes_md5": "md5(Path.read_bytes()) -- CRLF preserved as stored on disk; file-integrity evidence",
+    "tracker_normalized_text_md5": "md5(Path.read_text().encode()) -- CRLF normalised to LF; the AST/diff-gate input, equals tracker_diff candidate_tracker_md5",
+    "tracker_loaded_source_md5": "md5(inspect.getsource(tracker).encode()) -- LF plus a trailing newline getsource appends; marker-contract and runtime-loaded-source evidence",
+    "note": "engine/tracker.py has no trailing newline, so tracker_loaded_source_md5 differs from tracker_normalized_text_md5 by exactly one byte. Do not normalise one into another to make them agree."
+  },
   "exit_policy_md5": "d00e621da121dc19320c739bc6b81f84",
   "compatibility_contract": "tracker_v3_2dp",
   "record_schema_version": 1,
@@ -15,9 +24,84 @@
   "suite_assertions": {
     "adapter": 65,
     "classifier": 98,
-    "wiring": 95,
-    "evaluator": 61,
-    "bridge": 86
+    "wiring": 132,
+    "evaluator": 63,
+    "bridge": 66,
+    "phase05_capture": 80,
+    "phase05_live_path": 570,
+    "phase05_integrity": 73,
+    "phase05_network": 89,
+    "blast_radius": 26,
+    "output_path": 32,
+    "tracker_diff": 51
+  },
+  "assertion_total": 1345,
+  "suite_count_changes_since_previous_baseline": {
+    "wiring": {
+      "was": 95,
+      "now": 132,
+      "reason": "registered 8 omitted refusal tests plus the registration-completeness guard"
+    },
+    "evaluator": {
+      "was": 61,
+      "now": 63,
+      "reason": "packet-schema refusal coverage"
+    },
+    "bridge": {
+      "was": 86,
+      "now": 66,
+      "reason": "Phase 4 premise/bar reconstruction tests deleted with the architecture they tested; replaced by packet-capture tests"
+    }
+  },
+  "tracker_diff_is_registered_phase05_only": {
+    "rollback_tag": "pre-tracker-swap",
+    "rollback_commit": "d6cbd55d710bb839ad655ecf4194250f15244ac9",
+    "rollback_tag_kind": "tag",
+    "reference_tracker_md5": "6fd6e692104e87632542423bc9855970",
+    "candidate_tracker_md5": "465fe06ff6533e9d4e30f07c22d16f15",
+    "source_differs": true,
+    "registered_telemetry_node_count": 7,
+    "registered_telemetry_nodes": [
+      "global_decl",
+      "module_seq_decl",
+      "module_store_decl",
+      "packet_clear",
+      "packet_write",
+      "seq_increment",
+      "token_publish"
+    ],
+    "packet_fields": [
+      "cycle_token",
+      "price",
+      "price_source",
+      "rsi",
+      "bearish_div",
+      "bar_date"
+    ],
+    "normalized_non_telemetry_ast": "identical",
+    "telemetry_readback": "none",
+    "tracker_parity_references": "none",
+    "expected_verdict": "PASS"
+  },
+  "withdrawn_phase4_dependencies": {
+    "must_be_absent": [
+      "_bar_fn",
+      "_bar_recheck",
+      "_cache_file",
+      "BarStale",
+      "BarUnavailable",
+      "_premise",
+      "PREMISE_DAILY_ONLY",
+      "_ib_connection",
+      "make_bar",
+      "NonDeterministicPrice",
+      "daily_only_price_premise",
+      "cache_mtime_sentinel"
+    ],
+    "readable_but_unassigned": [
+      "PRICE_SOURCE_NONDETERMINISTIC"
+    ],
+    "note": "An unassigned enum name kept for record readability is NOT an execution dependency. The distinction matters: absence of the name would break historical reads, while assignment of it would resurrect a withdrawn premise."
   },
   "note": "Regenerate deliberately with 'python3 tools/pre_parity_snapshot.py --update-baseline' when assertions are added or tracker.py legitimately changes. A diff here must be reviewed, never auto-synced."
 }
