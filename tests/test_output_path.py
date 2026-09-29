@@ -146,12 +146,16 @@ def test_signature_does_not_bind_the_default_at_definition_time():
 def test_production_default_path_resolves_but_is_not_created():
     check("the production default is logs/tracker_parity_v1.jsonl",
           pr.DEFAULT_OUTPUT == "logs/tracker_parity_v1.jsonl", pr.DEFAULT_OUTPUT)
-    check("the production parity file does not exist while ARES_PARITY is unset",
-          not PROD_FILE.exists(), str(PROD_FILE))
-    # Resolving the path must not touch the filesystem.
+    # Phase-aware. Asserting the production file is ABSENT was only true before
+    # activation; after the first declared cycle it legitimately exists, and the
+    # assertion would fail forever. The invariant in both phases is that merely
+    # resolving the default neither creates nor modifies it.
+    before = fingerprint()
     resolved = Path(pr.DEFAULT_OUTPUT)
-    check("resolving the default creates nothing", not resolved.exists()
-          or resolved.resolve() != PROD_FILE.resolve(), str(resolved))
+    check("resolving the default performs no filesystem mutation",
+          fingerprint() == before, (before, fingerprint()))
+    check("the default resolves to the production evidence path",
+          resolved.resolve() == PROD_FILE.resolve(), str(resolved))
 
 
 # ---- 4. no test may write to the production parity file -------------------
@@ -170,8 +174,17 @@ def test_no_test_writes_to_the_production_parity_file():
     after = fingerprint()
     check("production parity file: existence/size/checksum unchanged",
           before == after, (before, after))
-    check("production parity file: still absent as expected",
-          after[0] == "absent", after)
+    # Negative control for the check above. If fingerprint() ever returned a
+    # constant -- or silently swallowed a stat error -- then before == after
+    # would pass vacuously and every non-contamination assertion in this suite
+    # would report green while tests wrote freely to the real evidence file.
+    probe = tmp / "fp_probe.jsonl"
+    probe.write_text('{"a": 1}\n')
+    s1 = (probe.stat().st_size, hashlib.md5(probe.read_bytes()).hexdigest())
+    probe.write_text('{"a": 1}\n{"b": 2}\n')
+    s2 = (probe.stat().st_size, hashlib.md5(probe.read_bytes()).hexdigest())
+    check("size+checksum fingerprinting discriminates a changed file",
+          s1 != s2, (s1, s2))
 
 
 def test_unwritable_explicit_path_does_not_fall_back_to_the_default():

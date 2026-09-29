@@ -456,15 +456,33 @@ def test_entry_day_skip_does_not_acquire():
     assert_zero_parity("entry-day", sp, 1)
 
 
+def _evidence_fingerprint():
+    """Existence + size + checksum of the real evidence file.
+
+    Deliberately NOT an existence check. Once collection is declared and a cycle
+    has run, the file legitimately exists, so "absent" is a Phase 0.5 statement
+    rather than an invariant. "Neither created nor modified" holds in every phase
+    and is strictly stronger.
+    """
+    import hashlib
+    p = ROOT / "logs" / "tracker_parity_v1.jsonl"
+    if not p.exists():
+        return ("absent", None, None)
+    b = p.read_bytes()
+    return ("present", len(b), hashlib.md5(b).hexdigest())
+
+
 def test_disabled_mode_writes_no_parity_output():
+    before = _evidence_fingerprint()
     sp, recs, out = run([st()], {"ABM": frame(99.00)}, live={"ABM": 49.78},
                         enable=False)
     check("disabled: zero parity acquisitions", sp.counts("parity") == 0,
           sp.by("parity"))
     check("disabled: no parity record written", not recs, sorted(recs))
     check("disabled: no output file created", not Path(out).exists(), out)
-    check("disabled: the real evidence file was not created",
-          not (ROOT / "logs" / "tracker_parity_v1.jsonl").exists())
+    check("disabled: the real evidence file was neither created nor modified",
+          _evidence_fingerprint() == before,
+          (before, _evidence_fingerprint()))
 
 
 def test_no_cache_file_is_created_or_modified():
