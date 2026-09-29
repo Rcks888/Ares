@@ -178,8 +178,60 @@ def test_real_script_declaration_is_well_formed():
 
 
 # --------------------------------------------------------------- schema source
+def test_v1_literal_matches_the_builder_while_v1_is_current():
+    """The single-source property, kept where it still applies.
+
+    v1 had to become a literal: an AST-derived set returns whatever build_record
+    emits today, so adding a v2 field would silently widen v1 and the four
+    existing records would be judged against a schema that postdates them. The
+    derivation is therefore pinned to the NEWEST registered version only.
+
+    When v2 lands, CURRENT_RECORD_SCHEMA becomes 2 and this compares the builder
+    against V2; V1 is then immutable history and must never change again.
+    """
+    builder = pps._builder_record_fields()
+    current = pps.frozen_record_fields(pps.CURRENT_RECORD_SCHEMA)
+    check("builder matches the newest registered schema", builder == current,
+          (sorted(builder - current), sorted(current - builder)))
+    check("v1 is registered", 1 in pps.RECORD_FIELDS_BY_VERSION)
+    check("v1 has 45 fields", len(pps.V1_RECORD_FIELDS) == 45,
+          len(pps.V1_RECORD_FIELDS))
+
+
+def test_unknown_schema_version_fails_closed():
+    """A future version must not be validated against the newest known set."""
+    raised = False
+    try:
+        pps.frozen_record_fields(3)
+    except Exception:
+        raised = True
+    check("unknown version raises", raised)
+    r = gate_with(ON, [good_record(record_schema_version=3)], git=True)
+    check("v3 record -> SCHEMA_DRIFT", r["state"] == "SCHEMA_DRIFT", r["state"])
+    check("names the unsupported version",
+          any("unsupported record_schema_version" in f for f in r["failures"]),
+          r["failures"])
+    check("v3 record -> invalid", r["valid"] is False, r)
+    raised_none = False
+    try:
+        pps.frozen_record_fields(None)
+    except Exception:
+        raised_none = True
+    check("missing version raises rather than defaulting", raised_none)
+
+
+def test_v1_record_with_a_v2_only_field_is_drift():
+    """Forward-dated fields must not pass under a v1 declaration."""
+    r = gate_with(ON, [good_record(inline_effective_stop_basis="x")], git=True)
+    check("v2-only field under v1 -> SCHEMA_DRIFT",
+          r["state"] == "SCHEMA_DRIFT", r["state"])
+    check("names the unregistered field",
+          any("inline_effective_stop_basis" in f for f in r["failures"]),
+          r["failures"])
+
+
 def test_schema_is_derived_not_hardcoded():
-    f = pps._frozen_record_fields()
+    f = pps._builder_record_fields()
     check("45 frozen fields derived", len(f) == 45, len(f))
     check("difference_class is in the derived set", "difference_class" in f)
     check("'verdict' is NOT a real field", "verdict" not in f)
@@ -205,7 +257,7 @@ def test_schema_underivable_is_a_failure():
     try:
         pps.ROOT = d
         try:
-            pps._frozen_record_fields()
+            pps._builder_record_fields()
         except Exception:
             raised = True
     finally:
@@ -215,7 +267,7 @@ def test_schema_underivable_is_a_failure():
 
 # ----------------------------------------------------------------- gate states
 def good_record(**over):
-    r = {k: "x" for k in pps._frozen_record_fields()}
+    r = {k: "x" for k in pps.frozen_record_fields(1)}
     r.update({"record_schema_version": sc.RECORD_SCHEMA_VERSION,
               "difference_class": sc.MATCH, "symbol": "ABM",
               "cycle_id": "c1", "timestamp": "2026-09-29T13:30:00Z",
@@ -290,7 +342,7 @@ def test_schema_valid_mismatch_record_is_rejected():
     bad = good_record(symbol="ABM",
                       difference_class=sc.DECISION_CHANGING_MISMATCH)
     check("mismatch record is schema-complete",
-          set(bad) == pps._frozen_record_fields())
+          set(bad) == pps.frozen_record_fields(1))
     r = gate_with(ON, [good_record(symbol="SDGR"), bad], git=True)
     check("schema-valid mismatch -> DECISION_CHANGING_MISMATCH_PRESENT",
           r["state"] == "DECISION_CHANGING_MISMATCH_PRESENT", r["state"])

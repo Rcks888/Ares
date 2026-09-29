@@ -105,7 +105,53 @@ PARITY_OUTPUT_STATES = (
 PARITY_STATES_REQUIRING_APPEND_ONLY = ("ACTIVE_VALID",)
 
 
-def _frozen_record_fields():
+# Schema v1, frozen as an immutable literal on 2026-09-29 from the AST derivation
+# below, at the commit that produced the first four live records.
+#
+# It CANNOT stay AST-derived. The derivation returns whatever build_record emits
+# today, so the moment v2 adds a field the v1 record set would silently widen and
+# the four existing records -- which must remain valid byte-for-byte -- would be
+# judged against a schema that did not exist when they were written. History needs
+# a literal; only the CURRENT version can be derived. _builder_record_fields()
+# below is asserted equal to the newest registered version, so the single-source
+# property is kept exactly where it still applies.
+V1_RECORD_FIELDS = frozenset({
+    "abm_equality_boundary", "available_history_bars", "bar_bearish_div",
+    "bar_date", "bar_price", "bar_rsi", "capture_cycle_token", "capture_defect",
+    "compatibility_contract", "cycle_id", "difference_class", "differing_fields",
+    "entry_date", "exception_message", "exception_type", "exit_policy_md5",
+    "inline_decision", "inline_effective_stop", "inline_evaluation_status",
+    "inline_exception_message", "inline_exception_type", "inline_exit_reason",
+    "inline_persistent_state", "inline_scaled_out", "marker_contract_match",
+    "parity_action", "price_source", "production_commit",
+    "production_state_hash_after", "production_state_hash_before",
+    "record_schema_version", "sdgr_dead_band_state", "shadow_compatible_state",
+    "shadow_decision", "shadow_effective_stop", "shadow_evaluation_status",
+    "shadow_exception_message", "shadow_exception_type", "shadow_exit_reason",
+    "shadow_scaled_out", "symbol", "timestamp", "tracker_file",
+    "tracker_source_hash", "would_change_action",
+})
+
+RECORD_FIELDS_BY_VERSION = {1: V1_RECORD_FIELDS}
+CURRENT_RECORD_SCHEMA = max(RECORD_FIELDS_BY_VERSION)
+
+
+def frozen_record_fields(version):
+    """Required field set for ONE schema version. Fails closed on unknown.
+
+    An unrecognised version must never be validated against the newest known
+    field set: that would let a future writer emit anything and have it approved
+    by a validator that does not understand it.
+    """
+    try:
+        return RECORD_FIELDS_BY_VERSION[version]
+    except (KeyError, TypeError):
+        raise RuntimeError(
+            f"unsupported record_schema_version {version!r}; "
+            f"registered: {sorted(RECORD_FIELDS_BY_VERSION)}")
+
+
+def _builder_record_fields():
     """The record schema, DERIVED from build_record itself.
 
     Not a local list. A hand-copied field set drifts the moment build_record
@@ -323,8 +369,11 @@ def _parity_output_state():
         out["state"] = "UNPARSEABLE_JSONL"
         return out
 
+    # Each record is validated against ITS OWN declared version, not against the
+    # newest one. The four v1 records predate every later field and must keep
+    # passing untouched.
     try:
-        required = _frozen_record_fields()
+        _builder_record_fields()
     except Exception as exc:
         out["state"] = "SCHEMA_UNDERIVABLE"
         out["failures"].append(f"record schema not derivable: {exc}")
@@ -335,15 +384,17 @@ def _parity_output_state():
     drift, mismatches, incomplete = [], [], []
     seen = set()
     for n, r in enumerate(recs, 1):
+        try:
+            required = frozen_record_fields(r.get("record_schema_version"))
+        except Exception as exc:
+            drift.append(f"record {n} {exc}")
+            continue
         missing = required - set(r)
         if missing:
             drift.append(f"record {n} missing {sorted(missing)}")
         extra = set(r) - required
         if extra:
             drift.append(f"record {n} has unregistered {sorted(extra)}")
-        if r.get("record_schema_version") != sc.RECORD_SCHEMA_VERSION:
-            drift.append(f"record {n} schema_version "
-                         f"{r.get('record_schema_version')!r}")
         # Constant comes from the classifier. The field is difference_class --
         # NOT verdict and NOT result_class, both of which would have made
         # r.get(...) return None and silently pass every real mismatch.
