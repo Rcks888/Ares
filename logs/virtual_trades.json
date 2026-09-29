@@ -68,13 +68,13 @@
       "active": true,
       "days_tracked": 6,
       "max_days": 30,
-      "peak_after_exit": 9.38,
+      "peak_after_exit": 9.67,
       "trough_after_exit": 8.43,
       "peak_date": "2026-09-29",
       "trough_date": "2026-09-24",
-      "missed_upside_pct": 2.4,
+      "missed_upside_pct": 5.57,
       "avoided_downside_pct": 7.97,
-      "latest_price": 9.38
+      "latest_price": 9.67
     }
   },
   {
@@ -182,18 +182,18 @@
     "scale_out_price": null,
     "scale_out_date": null,
     "from_queue": false,
-    "status": "open",
-    "exit_date": null,
-    "exit_price": null,
-    "exit_reason": null,
-    "exit_slippage": null,
-    "exit_commission": null,
-    "total_commission": 1.0,
-    "pnl": null,
-    "pnl_pct": null,
-    "pnl_after_costs": null,
+    "status": "closed",
+    "exit_date": "2026-09-29",
+    "exit_price": 48.62,
+    "exit_reason": "stop_loss",
+    "exit_slippage": 0.0487,
+    "exit_commission": 1.0,
+    "total_commission": 2.0,
+    "pnl": -5.96,
+    "pnl_pct": -4.01,
+    "pnl_after_costs": -7.96,
     "version": "3.0",
-    "holding_days": 20,
+    "holding_days": 21,
     "entry_price_original": 45.86,
     "entry_true_open": 50.6,
     "entry_error_pct": -9.46,
@@ -205,7 +205,35 @@
       "pre_fix_accounting",
       "stale_entry",
       "unverified_fill_path"
-    ]
+    ],
+    "pnl_remaining": -5.96,
+    "post_mortem": {
+      "exit_reason": "stop_loss",
+      "max_favorable_excursion_pct": 0.51,
+      "locked_pct": -4.01,
+      "gave_back_pct": 0.0,
+      "entry_quality_pct": -0.1,
+      "scaled_out_before_exit": false,
+      "holding_days": 21,
+      "rsi_at_entry": 59.3,
+      "regime_at_entry": "uptrend",
+      "confluence": 3,
+      "verdict": "weak_follow_through",
+      "analysis": "Only reached +0.51% before reversing to SL. Weak momentum \u2014 entry may have been too late.",
+      "manual_note": ""
+    },
+    "shadow": {
+      "active": true,
+      "days_tracked": 0,
+      "max_days": 30,
+      "peak_after_exit": 48.83,
+      "trough_after_exit": 48.67,
+      "peak_date": "2026-09-29",
+      "trough_date": "2026-09-29",
+      "missed_upside_pct": 0.43,
+      "avoided_downside_pct": -0.1,
+      "latest_price": 48.83
+    }
   },
   {
     "symbol": "PINS",
@@ -595,12 +623,12 @@
       "days_tracked": 5,
       "max_days": 30,
       "peak_after_exit": 13.76,
-      "trough_after_exit": 13.66,
+      "trough_after_exit": 12.73,
       "peak_date": "2026-09-25",
-      "trough_date": "2026-09-24",
+      "trough_date": "2026-09-29",
       "missed_upside_pct": 0.15,
-      "avoided_downside_pct": 0.58,
-      "latest_price": 13.72
+      "avoided_downside_pct": 7.35,
+      "latest_price": 12.73
     }
   },
   {

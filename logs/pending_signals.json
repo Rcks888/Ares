@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "symbol": "TWST",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-09-29",
+    "price": 186.13,
+    "rsi": 73.9,
+    "vol_ratio": 1.92,
+    "stdev_20": 0.0541,
+    "strength": "unknown",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "from_queue": true
+  }
+]
