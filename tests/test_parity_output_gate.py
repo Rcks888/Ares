@@ -141,11 +141,40 @@ def test_missing_entry_point_is_invalid():
           any("placement" in f for f in r["failures"]), r["failures"])
 
 
-def test_real_script_currently_undeclared():
+def test_real_script_declaration_is_well_formed():
+    """Phase-aware, not phase-hardcoded.
+
+    This previously asserted the real run_ares.sh was NOT declared, which was
+    true only before activation. Committing the declaration turned it into a
+    permanent false failure -- the same known-false-gate shape that replacing
+    logs_unchanged_since_tag and parity_output_absent was meant to end. The
+    invariant that actually holds in both phases is that the declaration is
+    well-formed and that the parser agrees with an independent naive scan.
+    """
     r = pps._collection_declared()
-    check("real run_ares.sh not declared", r["declared"] is False, r)
+    check("real run_ares.sh declaration is well-formed", r["valid"] is True, r)
     check("real run_ares.sh entry point found",
           r["entry_point_line"] is not None, r)
+
+    # Independent derivation: a deliberately naive scan, so agreement is
+    # meaningful rather than the parser confirming itself.
+    lines = [l.strip() for l in (ROOT / "run_ares.sh").read_text().splitlines()]
+    entry = next(i for i, l in enumerate(lines)
+                 if not l.startswith("#") and "daily_report.py" in l)
+    naive = any(l.startswith("export ARES_PARITY=1")
+                for l in lines[:entry] if not l.startswith("#"))
+    check("parser agrees with an independent scan on declared",
+          r["declared"] is naive, (r["declared"], naive))
+
+    # Expectations vary by phase; the NUMBER of assertions must not. Conditional
+    # execution made the count 83 undeclared and 85 declared, so during a staged
+    # rollout -- when the laptop and VPS are briefly in different phases -- the
+    # cross-host suite-count comparison would have failed for no real reason.
+    check("value is '1' exactly when declared",
+          (r["value"] == "1") == r["declared"], (r["value"], r["declared"]))
+    check("no value-1 export sits after the entry point",
+          all(not e["after_entry_point"] for e in r["export_lines"]
+              if e["value"] == "1"), r["export_lines"])
 
 
 # --------------------------------------------------------------- schema source
@@ -475,6 +504,30 @@ def test_allowlist_contains_the_evidence_path():
     check("evidence path is allow-listed",
           pps.PARITY_OUTPUT in pps.ALLOWED_RUNTIME_LOGS,
           pps.ALLOWED_RUNTIME_LOGS)
+
+
+def test_declaration_assertions_are_phase_invariant():
+    """The suite count must not depend on whether collection is declared.
+
+    A phase-dependent count breaks the cross-host suite comparison during a
+    staged rollout, when the laptop and VPS are legitimately in different phases.
+    Enforced structurally: no check() call inside the declaration test may sit
+    under a conditional.
+    """
+    import ast as _ast
+    tree = _ast.parse(Path(__file__).read_text())
+    fn = [n for n in _ast.walk(tree)
+          if isinstance(n, _ast.FunctionDef)
+          and n.name == "test_real_script_declaration_is_well_formed"][0]
+    conditional = []
+    for node in _ast.walk(fn):
+        if isinstance(node, (_ast.If, _ast.For, _ast.While)):
+            for inner in _ast.walk(node):
+                if (isinstance(inner, _ast.Call)
+                        and getattr(inner.func, "id", None) == "check"):
+                    conditional.append(getattr(inner, "lineno", "?"))
+    check("no conditionally-executed check() in the declaration test",
+          conditional == [], conditional)
 
 
 def test_gate_key_renamed_and_wired():
