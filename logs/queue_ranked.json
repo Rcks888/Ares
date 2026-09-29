@@ -15,7 +15,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-09-29T05:52:23",
+    "checked_at": "2026-09-29T08:00:56",
     "drift_pct": -2.41,
     "rsi": 50.0,
     "ema20_ok": true,
@@ -36,7 +36,7 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-09-29T05:52:23",
+    "checked_at": "2026-09-29T08:00:57",
     "drift_pct": -1.96,
     "rsi": 50.0,
     "ema20_ok": true,
@@ -57,7 +57,7 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-09-29T05:52:23",
+    "checked_at": "2026-09-29T08:00:57",
     "drift_pct": -2.67,
     "rsi": 50.0,
     "ema20_ok": true,
