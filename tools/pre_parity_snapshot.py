@@ -41,6 +41,7 @@ SUITES = {
     "blast_radius": "tests/test_blast_radius.py",
     "output_path": "tests/test_output_path.py",
     "tracker_diff": "tests/test_tracker_diff.py",
+    "vps_verify": "tests/test_vps_verify_failure_modes.py",
 }
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
