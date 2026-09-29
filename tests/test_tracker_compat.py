@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from engine.tracker_compat import (  # noqa: E402
     CONTRACT_VERSION,
@@ -209,23 +210,19 @@ def test_none_and_missing_passthrough():
 
 # --- repository-level dormancy ----------------------------------------------
 def test_dormant_in_production():
-    hits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", "-e", "tracker_compat",
-         "-e", "apply_tracker_v3_2dp", str(ROOT)],
-        capture_output=True, text=True).stdout.strip().splitlines()
+
     # Allowed-import boundary, not a blanket ban. As of the Phase 4 deployment
     # the stack is no longer dormant: engine/parity_hook.py bridges production to
     # it. Phase 5 adds engine/tracker.py here deliberately; this list is the
     # review checkpoint for activation.
-    allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
-               "engine/parity_runner.py", "engine/parity_eval.py",
-               "engine/parity_hook.py", "tests/test_tracker_compat.py",
-               "tests/test_parity_compare.py", "tests/test_parity_runner.py",
-               "tests/test_parity_eval.py", "tests/test_parity_hook.py",
-               "tools/pre_parity_snapshot.py")
-    offenders = [h for h in hits if not any(a in h for a in allowed)]
-    check("only permitted modules reference the adapter", not offenders,
-          "\n        " + "\n        ".join(offenders))
+    # Delegated to tests/blast_radius.py -- the ONE structural contract.
+    # Previously a grep with a locally duplicated allow-list: it needed an edit
+    # per new test file (four during Phase 0.5) and once failed on a COMMENT that
+    # merely named a module. Structural questions now come from AST nodes.
+    import blast_radius as br
+    _, bad = br.audit()
+    check("only permitted modules reference the adapter", not bad,
+          "\n" + br.describe(bad))
     tracker = (ROOT / "engine" / "tracker.py").read_text(errors="replace")
     check("tracker.py does not import tracker_compat",
           "tracker_compat" not in tracker)

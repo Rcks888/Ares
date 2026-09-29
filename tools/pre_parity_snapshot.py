@@ -31,10 +31,85 @@ SUITES = {
     "wiring": "tests/test_parity_runner.py",
     "evaluator": "tests/test_parity_eval.py",
     "bridge": "tests/test_parity_hook.py",
+    # Phase 0.5. Registered here so the baseline cannot silently under-report:
+    # an unregistered suite contributes zero assertions and its failures never
+    # reach the gate, which is the same false-pass shape as an unregistered test.
+    "phase05_capture": "tests/test_phase05_capture.py",
+    "phase05_live_path": "tests/test_phase05_live_path.py",
+    "phase05_integrity": "tests/test_phase05_integrity.py",
+    "phase05_network": "tests/test_phase05_network.py",
+    "blast_radius": "tests/test_blast_radius.py",
+    "output_path": "tests/test_output_path.py",
+    "tracker_diff": "tests/test_tracker_diff.py",
 }
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
 ROLLBACK_TAG = "pre-tracker-swap"
+
+
+IMPLEMENTATION_GLOBS = ("engine/", "tests/", "tools/pre_parity_snapshot.py",
+                        "daily_report.py")
+# Changes permitted between generated_from_commit and HEAD without invalidating
+# the baseline. Everything else means the baseline no longer describes HEAD.
+BASELINE_DRIFT_ALLOWED = ("tools/parity_baseline.json",)
+
+
+def _baseline_still_describes_head():
+    """Ancestor-based validity, not equality.
+
+    Requiring HEAD == generated_from_commit is unsatisfiable under the two-commit
+    workflow: the baseline necessarily lands in the commit AFTER the one it
+    describes. Instead require that the recorded commit is an ancestor of HEAD
+    and that nothing but the baseline itself changed since.
+    """
+    dest = ROOT / "tools" / "parity_baseline.json"
+    if not dest.exists():
+        return {"valid": False, "reason": "baseline absent"}
+    try:
+        base = json.loads(dest.read_text())
+    except Exception as e:
+        return {"valid": False, "reason": f"unreadable baseline: {e}"}
+    commit = base.get("generated_from_commit") or base.get(
+        "generated_on_commit")          # tolerate the pre-rename field on read
+    if not commit:
+        return {"valid": False, "reason": "no generated_from_commit recorded"}
+    anc = subprocess.run(
+        ["git", "-C", str(ROOT), "merge-base", "--is-ancestor", commit, "HEAD"],
+        capture_output=True, text=True).returncode == 0
+    changed = [l for l in sh("git", "diff", "--name-only", commit,
+                             "HEAD").splitlines() if l.strip()]
+    relevant = [f for f in changed
+                if any(f.startswith(g) for g in IMPLEMENTATION_GLOBS)
+                and f not in BASELINE_DRIFT_ALLOWED]
+    return {"valid": bool(anc) and not relevant,
+            "generated_from_commit": commit,
+            "is_ancestor_of_head": anc,
+            "files_changed_since": changed,
+            "relevant_changes_since": relevant,
+            "reason": ("ok" if anc and not relevant
+                       else "not an ancestor of HEAD" if not anc
+                       else f"implementation changed since baseline: {relevant}")}
+
+
+def _tracker_diff_evidence():
+    """Structured evidence from the registered Phase 0.5 tracker-diff gate."""
+    sys.path.insert(0, str(ROOT / "tests"))
+    try:
+        import tracker_diff as td
+        v = td.evaluate()
+    except Exception as e:                                # pragma: no cover
+        return {"verdict": "ERROR", "error": f"{type(e).__name__}: {e}"}
+    # The unified diff is for human review and is intentionally not embedded.
+    return {k: v[k] for k in (
+        "rollback_tag", "rollback_commit", "rollback_tag_kind",
+        "rollback_commit_matches_registered", "reference_md5", "candidate_md5",
+        "source_differs", "registered_telemetry_nodes", "packet_fields",
+        "normalized_ast_identical", "telemetry_readback_lines",
+        "parity_references", "verdict", "failures") if k in v}
+
+
+def _tracker_diff_gate():
+    return _tracker_diff_evidence().get("verdict") == "PASS"
 EXPECTED_TAG_COMMIT = "d6cbd55"
 
 
@@ -257,12 +332,19 @@ def main():
         "The suites are DISJOINT files; assertion_total is their sum, "
         "not a superset relationship. Do not read it as requiring any other "
         "count to pass independently.")
+    snap["tracker_diff"] = _tracker_diff_evidence()
+    snap["baseline_validity"] = _baseline_still_describes_head()
     snap["phase3_gate"] = {
+        "baseline_describes_head": snap["baseline_validity"]["valid"],
         "rollback_tag_resolves": lin["rollback_tag_commit"].startswith(
             EXPECTED_TAG_COMMIT),
-        "tracker_unchanged_since_tag": sh(
-            "git", "diff", "--stat", ROLLBACK_TAG, "HEAD", "--",
-            "engine/tracker.py") == "",
+        # Renamed from tracker_unchanged_since_tag, which became objectively
+        # false once Phase 0.5 telemetry landed: the tracker source IS changed.
+        # The supportable claim is narrower -- tracker decision behavior remains
+        # structurally identical to pre-tracker-swap, and the source differs only
+        # through the registered Phase 0.5 inline decision-input telemetry.
+        # A text diff cannot establish that, so this delegates to the AST gate.
+        "tracker_diff_is_registered_phase05_only": _tracker_diff_gate(),
         "logs_unchanged_since_tag": sh(
             "git", "diff", "--stat", ROLLBACK_TAG, "HEAD", "--", "logs/") == "",
         "all_suites_pass": all(t["passed"] for t in tests.values()),
@@ -288,16 +370,131 @@ def main():
         # Deliberate, reviewable regeneration. The baseline is the ONE source of
         # truth for cross-host comparison; vps_phase3_verify.sh reads it instead
         # of embedding literals, which is what went stale before.
+        td_ev = snap["tracker_diff"]
+        if td_ev.get("verdict") != "PASS":
+            print("\nREFUSING to update the baseline: the tracker-diff gate is "
+                  f"{td_ev.get('verdict')}.\n  " +
+                  "\n  ".join(td_ev.get("failures") or ["(no detail)"]),
+                  file=sys.stderr)
+            return 1
+        tp = ROOT / "engine" / "tracker.py"
         base = {
-            "generated_utc": snap["snapshot_utc"],
-            "generated_on_commit": lin["ares_commit"],
-            "tracker_source_hash": snap["marker_contract"].get(
+            "baseline_schema_version": 1,
+            "generated_at": snap["snapshot_utc"],
+            # The commit whose implementation and test population this baseline
+            # DESCRIBES -- not the commit that CONTAINS this file. A baseline
+            # cannot name the commit containing itself without self-reference:
+            # recording it would change the file, producing another commit.
+            # Provenance is therefore: generated_from_commit = implementation
+            # commit; the baseline artifact lives in the following commit, which
+            # git history already records.
+            "generated_from_commit": lin["ares_commit"],
+            # Three hashes of ONE file, named by SERIALIZATION rather than by
+            # role, because a mismatch between them is not evidence of tampering.
+            # Each answers a different question and must never be cross-compared.
+            "tracker_raw_bytes_md5": hashlib.md5(tp.read_bytes()).hexdigest(),
+            "tracker_normalized_text_md5": hashlib.md5(
+                tp.read_text().encode()).hexdigest(),
+            "tracker_loaded_source_md5": snap["marker_contract"].get(
                 "tracker_source_hash"),
+            "tracker_hash_bases": {
+                "tracker_raw_bytes_md5": (
+                    "md5(Path.read_bytes()) -- CRLF preserved as stored on disk; "
+                    "file-integrity evidence"),
+                "tracker_normalized_text_md5": (
+                    "md5(Path.read_text().encode()) -- CRLF normalised to LF; "
+                    "the AST/diff-gate input, equals tracker_diff "
+                    "candidate_tracker_md5"),
+                "tracker_loaded_source_md5": (
+                    "md5(inspect.getsource(tracker).encode()) -- LF plus a "
+                    "trailing newline getsource appends; marker-contract and "
+                    "runtime-loaded-source evidence"),
+                "note": ("engine/tracker.py has no trailing newline, so "
+                         "tracker_loaded_source_md5 differs from "
+                         "tracker_normalized_text_md5 by exactly one byte. Do "
+                         "not normalise one into another to make them agree."),
+            },
+            # THREE different md5 values legitimately describe the same file.
+            # Recorded explicitly because a reviewer comparing them would
+            # otherwise reasonably suspect a mismatch:
+            #   raw bytes                  c0e9e9bc...  CRLF preserved on disk
+            #   read_text()                465fe06f...  CRLF normalised to LF
+            #   inspect.getsource()        12bd27d3...  LF + trailing newline
+            # engine/tracker.py has no trailing newline, and getsource appends
+            # one, so the marker-contract hash and the tracker-diff candidate
+            # hash differ by exactly one byte. Neither is wrong; they answer
+            # different questions and must not be cross-compared.
+
             "exit_policy_md5": lin["exit_policy_md5"],
             "compatibility_contract": lin["compatibility_contract"],
             "record_schema_version": lin["record_schema_version"],
             "rounding_fingerprint": snap["runtime"]["rounding_fingerprint"],
             "suite_assertions": {n: t["assertions"] for n, t in tests.items()},
+            "assertion_total": snap["assertion_total"],
+            # Reconciled, not absorbed. The bridge suite DECREASED 86 -> 66
+            # because Phase 4 reconstruction was withdrawn: 10 premise/bar tests
+            # were deleted and 5 packet tests added (17 -> 12 functions). Every
+            # deleted test targeted a name now listed under
+            # withdrawn_phase4_dependencies.must_be_absent, so the decrease is
+            # the expected consequence of the withdrawal. The zero-network
+            # coverage those tests provided did not vanish -- it moved to
+            # phase05_network (89 assertions) with negative controls.
+            "suite_count_changes_since_previous_baseline": {
+                "wiring": {"was": 95, "now": 132,
+                           "reason": "registered 8 omitted refusal tests plus "
+                                     "the registration-completeness guard"},
+                "evaluator": {"was": 61, "now": 63,
+                              "reason": "packet-schema refusal coverage"},
+                "bridge": {"was": 86, "now": 66,
+                           "reason": "Phase 4 premise/bar reconstruction tests "
+                                     "deleted with the architecture they tested; "
+                                     "replaced by packet-capture tests"},
+            },
+            # The reviewed Phase 0.5 contract, recorded as EXPECTATIONS rather
+            # than as whatever the working tree happened to produce. The
+            # tracker-diff gate replaces tracker_unchanged_since_tag, which
+            # became objectively false once telemetry landed.
+            "tracker_diff_is_registered_phase05_only": {
+                "rollback_tag": ROLLBACK_TAG,
+                "rollback_commit": td_ev.get("rollback_commit"),
+                "rollback_tag_kind": td_ev.get("rollback_tag_kind"),
+                "reference_tracker_md5": td_ev.get("reference_md5"),
+                "candidate_tracker_md5": td_ev.get("candidate_md5"),
+                "source_differs": td_ev.get("source_differs"),
+                "registered_telemetry_node_count": len(
+                    td_ev.get("registered_telemetry_nodes") or []),
+                "registered_telemetry_nodes": td_ev.get(
+                    "registered_telemetry_nodes"),
+                "packet_fields": list(td_ev.get("packet_fields") or ()),
+                "normalized_non_telemetry_ast": (
+                    "identical" if td_ev.get("normalized_ast_identical")
+                    else "DIFFERS"),
+                "telemetry_readback": (
+                    "none" if not td_ev.get("telemetry_readback_lines")
+                    else td_ev.get("telemetry_readback_lines")),
+                "tracker_parity_references": (
+                    "none" if not td_ev.get("parity_references")
+                    else td_ev.get("parity_references")),
+                "expected_verdict": "PASS",
+            },
+            # Phase 4 reconstruction was DELETED, not disabled. These names must
+            # not reappear as execution dependencies. PRICE_SOURCE_NONDETERMINISTIC
+            # survives as an UNASSIGNED name only, so historical records stay
+            # readable -- that is deliberately distinguished from an active
+            # dependency below.
+            "withdrawn_phase4_dependencies": {
+                "must_be_absent": [
+                    "_bar_fn", "_bar_recheck", "_cache_file", "BarStale",
+                    "BarUnavailable", "_premise", "PREMISE_DAILY_ONLY",
+                    "_ib_connection", "make_bar", "NonDeterministicPrice",
+                    "daily_only_price_premise", "cache_mtime_sentinel",
+                ],
+                "readable_but_unassigned": ["PRICE_SOURCE_NONDETERMINISTIC"],
+                "note": ("An unassigned enum name kept for record readability is "
+                         "NOT an execution dependency. The distinction matters: "
+                         "absence of the name would break historical reads, while "
+                         "assignment of it would resurrect a withdrawn premise."),
+            },
             "note": ("Regenerate deliberately with "
                      "'python3 tools/pre_parity_snapshot.py --update-baseline' "
                      "when assertions are added or tracker.py legitimately "

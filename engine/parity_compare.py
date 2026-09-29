@@ -77,8 +77,13 @@ INVALID_SHADOW_RECORD = "INVALID_SHADOW_RECORD"
 # The loaded tracker source does not match the reviewed source, so failure
 # detection cannot be trusted. Inline trading continues; coverage is void.
 SHADOW_CONTRACT_INVALID = "SHADOW_CONTRACT_INVALID"
-# The bar was not the deterministic daily Close, so any difference could be
-# market movement rather than a migration difference. Not comparable.
+# WITHDRAWN in Phase 0.5. This refused any bar that was not the deterministic
+# daily Close, because a re-derived price could differ through market movement
+# rather than through the migration. Parity now consumes the exact price the
+# inline decision used (tracker._LAST_EVAL), so live and daily prices are
+# equally comparable and price_source became a coverage dimension instead.
+# Retained as a name only so historical records remain readable; it is no longer
+# assigned. Refusal moved upstream to INLINE_INPUT_NOT_CAPTURED in the runner.
 PRICE_SOURCE_NONDETERMINISTIC = "PRICE_SOURCE_NONDETERMINISTIC"
 
 PASSING_CLASSES = (MATCH, NON_DECISION_STATE_DIFFERENCE)
@@ -221,7 +226,7 @@ def build_record(symbol, entry_date, timestamp, lineage,
                  shadow_exception_message=None,
                  production_state_hash_before=None,
                  production_state_hash_after=None,
-                 contract=None, bar=None):
+                 contract=None, bar=None, capture_defect=None):
     """Assemble one comparison event. Pure; performs no I/O.
 
     `would_change_action` is True only for a decision-changing mismatch. It is
@@ -240,9 +245,6 @@ def build_record(symbol, entry_date, timestamp, lineage,
             and production_state_hash_after is not None
             and production_state_hash_before != production_state_hash_after):
         result, diffs = INVALID_SHADOW_RECORD, ["<production_state_mutated>"]
-    # Refuse rather than compare when the price was not deterministic.
-    if bar is not None and bar.get("price_source") not in (None, "daily"):
-        result, diffs = PRICE_SOURCE_NONDETERMINISTIC, ["<price_source>"]
     if result == DECISION_CHANGING_MISMATCH:
         would_change = True
     elif result in PASSING_CLASSES:
@@ -271,6 +273,23 @@ def build_record(symbol, entry_date, timestamp, lineage,
                                         shadow_status),
         "inline_exit_reason": pick(inline_after, "exit_reason"),
         "shadow_exit_reason": pick(shadow_after, "exit_reason"),
+        # Phase 0.5: the evaluator's derived per-bar action. For an entry-day bar
+        # it is "skipped_entry_day", DERIVED from the captured packet's bar_date
+        # rather than from the packet's absence. Surfaced so §6.3 can assert the
+        # derivation instead of inferring it from a MATCH.
+        #
+        # The evaluator module is deliberately not named here: the blast-radius
+        # guard in tests is a text grep, and a prose mention in a comment reads
+        # to it as a production reference.
+        "parity_action": pick(shadow_after, "_parity_action"),
+        # Phase 0.5 refusal taxonomy, machine-readable so coverage queries do not
+        # have to parse prose: one of no_cycle_token, packet_absent,
+        # packet_not_a_mapping, packet_stale, packet_schema_drift, or None when
+        # the packet was accepted.
+        "capture_defect": capture_defect,
+        # tracker never STORES effective_stop -- it is a local in its exit chain --
+        # so inline_effective_stop is None by construction on every record. Kept
+        # for the module side's value; do not compare the two for equality.
         "inline_effective_stop": pick(inline_after, "effective_stop"),
         "shadow_effective_stop": pick(shadow_after, "effective_stop"),
         "inline_scaled_out": pick(inline_after, "scaled_out"),
@@ -295,11 +314,16 @@ def build_record(symbol, entry_date, timestamp, lineage,
         "marker_contract_match": (contract or {}).get("marker_contract_match"),
         "production_state_hash_before": production_state_hash_before,
         "production_state_hash_after": production_state_hash_after,
-        "bar_date": (bar or {}).get("date"),
+        # Phase 0.5: these mirror the tracker's captured decision-input packet.
+        # price_source is a COVERAGE DIMENSION (count daily and live separately),
+        # no longer a refusal reason -- both paths are now comparable because
+        # parity consumes the price the inline decision actually used.
+        "bar_date": (bar or {}).get("bar_date"),
         "bar_price": (bar or {}).get("price"),
         "bar_rsi": (bar or {}).get("rsi"),
         "bar_bearish_div": (bar or {}).get("bearish_div"),
         "price_source": (bar or {}).get("price_source"),
+        "capture_cycle_token": (bar or {}).get("cycle_token"),
         "abm_equality_boundary": _abm_boundary(symbol, inline_after
                                                or inline_before),
         "sdgr_dead_band_state": _sdgr_dead_band(symbol, inline_after

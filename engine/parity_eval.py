@@ -16,25 +16,27 @@ DOES NOT
     load market data, recompute an indicator frame, save or close a position,
     write trade logs, decide commissions, submit orders, alert, touch
     psi_state.json or the queue, or mutate its input. The caller supplies the
-    bar; this module never fetches one.
+    decision-input packet; this module never fetches or derives one.
 
-PRICE DETERMINISM — ENFORCED, NOT ASSUMED
-    tracker.py line 819 does `live = get_live_price(...)` then
-    `current_price = live if live else daily_price`. get_live_price returns a
-    LIVE IBKR 1-min bar close, which varies between calls seconds apart. If a
-    live price were ever in play, re-deriving the price here would produce
-    mismatches caused by market movement rather than by the migration.
+PRICE PROVENANCE — SUPPLIED, NOT RECONSTRUCTED (Phase 0.5)
+    This module does NOT derive a price. It consumes the decision-input packet
+    the inline tracker captured for that invocation (tracker._LAST_EVAL), so the
+    canonical module is evaluated against the exact values the authoritative
+    decision used.
 
-    Verified 2026-09-28: no IB Gateway is reachable on the VPS (127.0.0.1:4002
-    refused), so get_live_price returns None and the daily Close is always used.
-    That is also the condition under which Phase 0 was run -- its harness forced
-    get_live_price to None -- so the zero-mismatch result transfers only for the
-    daily-Close path.
+    This replaces the Phase 4 reconstruction approach, which was withdrawn after
+    a production-time measurement: tracker.py:819 does
+    `current_price = live if live else daily_price`, and the gateway IS up during
+    scheduled cycles (restart_gateway.sh at 13:00/16:00/17:25, run_ares.sh at
+    13:30/21:00 — the last real cycle reported "(live)" for all five positions).
+    A live IBKR 1-min close is not reproducible after the fact, so any
+    re-derivation would have produced mismatches caused by market movement rather
+    than by the migration.
 
-    A gateway could be started later without anyone revisiting this file, so the
-    premise is checked per bar rather than trusted: a bar whose price_source is
-    not "daily" is refused, and the caller classifies it
-    PRICE_SOURCE_NONDETERMINISTIC instead of comparing it.
+    Consequence: live and daily prices are now equally comparable, and
+    `price_source` is a COVERAGE DIMENSION recorded on every record rather than a
+    refusal reason. Refusal moved upstream: a missing or stale packet is
+    INLINE_INPUT_NOT_CAPTURED, decided by the runner before this module is called.
 """
 
 import copy
@@ -42,10 +44,6 @@ import copy
 from engine import exit_policy
 from engine.tracker_compat import (CONTRACT_VERSION, apply_tracker_v3_2dp,
                                    tracker_v3_2dp_fill)
-
-
-class NonDeterministicPrice(RuntimeError):
-    """The bar did not come from the deterministic daily Close."""
 
 
 def to_module_pos(trade, params=None):
@@ -104,7 +102,7 @@ def to_module_pos(trade, params=None):
     return pos, seeding
 
 
-def evaluate(trade, params, bar):
+def evaluate(trade, params, packet):
     """Evaluate ONE bar and return the tracker-shaped post-state.
 
     This is the module_eval handed to parity_runner.observe_cycle. It mirrors
@@ -113,20 +111,19 @@ def evaluate(trade, params, bar):
     comparison is against tracker's own precision contract rather than full
     precision.
 
-    `bar` must carry: price, rsi, bearish_div, date, price_source.
+    `packet` is the tracker's captured decision-input packet and must carry:
+    price, price_source, rsi, bearish_div, bar_date. Its validity (presence and
+    cycle-token match) is established by the runner BEFORE this is called; this
+    function assumes a verified current-invocation packet.
     """
-    if bar.get("price_source") != "daily":
-        raise NonDeterministicPrice(
-            f"price_source={bar.get('price_source')!r}; parity requires the "
-            "deterministic daily Close (see module docstring)")
-
     out = copy.deepcopy(trade)
     pos, seeding = to_module_pos(trade, params)
     out["_parity_seeding"] = seeding
     out["_parity_contract"] = CONTRACT_VERSION
 
-    price = float(bar["price"])
-    day = bar["date"]
+    price = float(packet["price"])
+    day = packet["bar_date"]
+    out["_parity_price_source"] = packet.get("price_source")
 
     # tracker skips the entry bar entirely (`if today == trade['entry_date']:
     # continue`), so no evaluation happens and state is unchanged. Mirror that
@@ -135,9 +132,11 @@ def evaluate(trade, params, bar):
         out["_parity_action"] = "skipped_entry_day"
         return out
 
-    rsi = bar.get("rsi")
+    rsi = packet.get("rsi")
     rsi = 50.0 if rsi is None else float(rsi)
-    div = bool(bar.get("bearish_div", False))
+    # Already a bool in the packet: the tracker captured its own truth-value
+    # interpretation, which must not be re-derived or normalised here.
+    div = bool(packet.get("bearish_div", False))
 
     # --- the proven sequence; ordering is Phase 0's, do not reorder -----------
     exit_policy.update_peak(pos, price, params)
@@ -195,19 +194,7 @@ def evaluate(trade, params, bar):
     return out
 
 
-def make_bar(row, price_source="daily"):
-    """Build a bar from an indicator-augmented frame's last row.
-
-    Mirrors tracker's reads exactly: Close, rsi, bearish_div, and the index date
-    truncated to 10 chars. Kept here so the caller does not have to reimplement
-    those reads and drift from tracker.
-    """
-    import pandas as pd
-    rsi = row.get("rsi")
-    return {
-        "price": float(row["Close"]),
-        "rsi": None if rsi is None or pd.isna(rsi) else float(rsi),
-        "bearish_div": bool(row.get("bearish_div", False)),
-        "date": str(row.name)[:10],
-        "price_source": price_source,
-    }
+# make_bar() was REMOVED in Phase 0.5. It reconstructed a bar from the daily
+# cache, which is no longer how parity obtains inputs and would now be a second,
+# non-authoritative source competing with the tracker's captured packet. Deleted
+# rather than left dormant so no future reader mistakes it for the live path.

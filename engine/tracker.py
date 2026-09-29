@@ -6,6 +6,15 @@ from engine.data_feed import load_stock, get_live_price
 from engine.indicators import add_indicators
 from engine import sample
 
+# Phase 0.5 migration telemetry -- NOT authoritative, never persisted.
+# Written by check_open_trades, read only by the parity bridge. No decision
+# path reads it back. See TRACKER_MIGRATION_PLAN_PHASE_0_5.md.
+_LAST_EVAL = {
+    "cycle_token": None,   # identity of the CURRENT invocation
+    "packets": {},         # symbol -> decision-input packet for that invocation
+}
+_EVAL_CYCLE_SEQ = 0        # monotonic in-process counter; not persisted
+
 def _holding_days(entry_date_str):
     """Calculate number of days held from entry date to today."""
     try:
@@ -807,6 +816,20 @@ def check_open_trades():
     scale_out_enabled = params.get('scale_out', False)
     scale_out_pct = params.get('scale_out_pct', 0.50)
 
+    # Phase 0.5: rotate migration telemetry. Unconditional -- the store must
+    # behave identically whether or not parity is enabled, or disabled-mode
+    # equivalence no longer covers this code path.
+    #
+    # Clear BEFORE publishing the token. The reverse order leaves an
+    # intermediate state of a new token beside prior-cycle packets, which a
+    # reader validating packet['cycle_token'] == store['cycle_token'] would
+    # wrongly accept as current evidence. Clearing first leaves only an old
+    # token with an empty store, which cannot be accepted.
+    global _EVAL_CYCLE_SEQ
+    _EVAL_CYCLE_SEQ += 1
+    _LAST_EVAL["packets"].clear()
+    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ
+
     for trade in trades:
         if trade['status'] != 'open':
             continue
@@ -822,6 +845,21 @@ def check_open_trades():
             price_source = "IBKR" if live else "daily"
             current_rsi = float(latest['rsi'])
             today = str(latest.name)[:10]
+
+            # Phase 0.5: the exact inputs this invocation's decision will use,
+            # captured after all five resolve and BEFORE the entry-day skip, so
+            # an absent packet means only that the inline path failed before
+            # reaching here. bearish_div is read eagerly: inline reads it lazily
+            # inside an elif chain, so it would otherwise be missing whenever an
+            # earlier branch fires. Pure read of an already-loaded row.
+            _LAST_EVAL["packets"][trade['symbol']] = {
+                "cycle_token": _LAST_EVAL["cycle_token"],
+                "price": current_price,
+                "price_source": price_source,
+                "rsi": current_rsi,
+                "bearish_div": bool(latest.get('bearish_div', False)),
+                "bar_date": today,
+            }
             if today == trade['entry_date']:
                 continue
 

@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from engine import parity_compare as sc  # noqa: E402
 
@@ -289,19 +290,15 @@ def test_summary():
 
 # --- dormancy, now an allowed-import boundary -------------------------------
 def test_dormancy_boundary():
-    hits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", "-e", "parity_compare",
-         "-e", "tracker_compat", str(ROOT)],
-        capture_output=True, text=True).stdout.strip().splitlines()
-    allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
-               "engine/parity_runner.py", "engine/parity_eval.py",
-               "engine/parity_hook.py", "tests/test_tracker_compat.py",
-               "tests/test_parity_compare.py", "tests/test_parity_runner.py",
-               "tests/test_parity_eval.py", "tests/test_parity_hook.py",
-               "tools/pre_parity_snapshot.py")
-    offenders = [h for h in hits if not any(a in h for a in allowed)]
+
+    # Delegated to tests/blast_radius.py -- the ONE structural contract.
+    # Previously a grep with a locally duplicated allow-list: it needed an edit
+    # per new test file (four during Phase 0.5) and once failed on a COMMENT that
+    # merely named a module. Structural questions now come from AST nodes.
+    import blast_radius as br
+    _, bad = br.audit()
     check("only the adapter, shadow module and their tests reference them",
-          not offenders, "\n        " + "\n        ".join(offenders))
+          not bad, "\n" + br.describe(bad))
     tracker = (ROOT / "engine" / "tracker.py").read_text(errors="replace")
     for name in ("parity_compare", "tracker_compat", "exit_policy"):
         check(f"tracker.py does not import {name}", name not in tracker)

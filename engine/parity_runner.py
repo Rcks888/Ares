@@ -104,9 +104,9 @@ def append_record(record, output_path=DEFAULT_OUTPUT):
 
 
 def observe_cycle(tracker_module, inline_call, load_state, module_eval,
-                  bar_fn=None, bar_recheck=None, params=None, params_fn=None,
-                  premise_fn=None, lineage=None, cycle_id=None,
-                  output_path=DEFAULT_OUTPUT, warn=None):
+                  packets_fn=None, params=None, params_fn=None,
+                  lineage=None, cycle_id=None,
+                  output_path=None, warn=None):
     """Run one shadow observation cycle around an inline tracker call.
 
     Returns (inline_result, summary). `inline_result` is whatever
@@ -115,16 +115,16 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     `load_state()` must return the list of trade dicts as persisted.
     `module_eval(cloned_trade, params, bar)` must return the post-evaluation
     state dict for the canonical module plus adapter, or raise.
-    `bar_fn(symbol)` must return the bar dict, and is called in the PRE-inline
-    phase so both paths are evaluated against the same market data. A bar_fn
-    failure is per-symbol and does not abort the cycle.
+    `packets_fn()` is called AFTER the inline call and returns
+    `(cycle_token, packets)` — the tracker's Phase 0.5 decision-input capture for
+    the invocation that just completed. Only packets whose embedded cycle_token
+    matches the returned token are accepted; anything else is
+    INLINE_INPUT_NOT_CAPTURED. It must be read after, not before: for a
+    tracker-owned token, the token for a call does not exist until that call runs.
 
-    `bar_recheck(symbol, bar)` is called AFTER the inline call and returns a
-    reason string if the pre-captured bar turned out not to be the bar the inline
-    path evaluated -- e.g. the inline path refreshed the underlying cache
-    mid-cycle. Capturing bars pre-inline keeps parity from seeing a LATER bar,
-    but it cannot by itself prove the inline path did not move to a newer one, so
-    the staleness direction is checked here instead of assumed.
+    This REPLACES the withdrawn Phase 4 bar_fn/bar_recheck reconstruction. Parity
+    no longer derives inputs, so there is nothing to go stale and no premise to
+    check -- see TRACKER_MIGRATION_PLAN_PHASE_0_5.md.
 
     `params_fn()` is preferred over `params`. Passing an already-evaluated
     `params` means the caller evaluated it BEFORE entering this function, so a
@@ -132,12 +132,21 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     tracker from running at all -- the exact failure mode fail-open exists to
     prevent. A callable is resolved inside the protected section instead.
 
-    `premise_fn()` is resolved AFTER the inline call, because it reports what the
-    inline path actually experienced (e.g. whether a live price source turned out
-    to be reachable). Returning anything other than a dict with
-    ok=True refuses the cycle rather than comparing against a premise that did
-    not hold.
     """
+    # Resolved at INVOCATION time, not at function-definition time.
+    #
+    # The previous signature was `output_path=DEFAULT_OUTPUT`, and Python
+    # evaluates default arguments once when the function is defined. Rebinding
+    # parity_runner.DEFAULT_OUTPUT afterwards therefore had NO effect, so a test
+    # that redirected output that way silently appended fixture records to the
+    # real logs/tracker_parity_v1.jsonl migration evidence while appearing to
+    # pass. Resolving here makes runtime redirection work as it reads.
+    #
+    # There is deliberately NO fallback to DEFAULT_OUTPUT when an EXPLICIT path
+    # fails: a failed write must stay visible as a missing record, not land
+    # somewhere the caller did not ask for.
+    if output_path is None:
+        output_path = DEFAULT_OUTPUT
     params = params or {}
     cycle_id = cycle_id or str(uuid.uuid4())[:8]
     summary = {"cycle_id": cycle_id, "attempted": 0, "written": 0,
@@ -150,22 +159,6 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
         before = copy.deepcopy(load_state())
     except Exception as exc:                        # noqa: BLE001
         summary["shadow_system_error"] = f"pre-state: {type(exc).__name__}: {exc}"
-
-    # Bars are captured BEFORE the inline call, alongside the pre-inline state,
-    # so the parity side cannot be handed a later bar than the inline path saw.
-    bars = {}
-    try:
-        if bar_fn:
-            for t in (before or []):
-                if t.get("status") != "open":
-                    continue
-                try:
-                    bars[t.get("symbol")] = bar_fn(t.get("symbol"))
-                except Exception as exc:            # noqa: BLE001
-                    bars[t.get("symbol")] = {"_error":
-                                             f"{type(exc).__name__}: {exc}"}
-    except Exception as exc:                        # noqa: BLE001
-        summary["shadow_system_error"] = f"bars: {type(exc).__name__}: {exc}"
 
     buf = io.StringIO()
     try:
@@ -182,8 +175,8 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     try:
         summary.update(_shadow_pass(tracker_module, load_state, module_eval,
                                     params, lineage or {}, cycle_id, before,
-                                    captured, output_path, summary, bars,
-                                    params_fn, premise_fn, bar_recheck))
+                                    captured, output_path, summary,
+                                    params_fn, packets_fn))
     except Exception as exc:                        # noqa: BLE001
         summary["shadow_system_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -197,19 +190,66 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
     return inline_result, summary
 
 
-def _recheck_failed(bar_recheck, symbol, bar):
-    """Return a reason string if the pre-captured bar is no longer trustworthy."""
-    if not bar_recheck:
+# The registered Phase 0.5 packet schema. EXACT set, not a minimum: an extra key
+# means the tracker's capture changed without this contract being reviewed, and a
+# missing key means the evaluator would read a default in place of a real decision
+# input. Both invalidate the packet until the schema is re-registered.
+REGISTERED_PACKET_FIELDS = frozenset(
+    {"cycle_token", "price", "price_source", "rsi", "bearish_div", "bar_date"})
+
+
+def _packet_defect(packets, symbol, cycle_token):
+    """Why this symbol's packet is unusable, or None if it is valid.
+
+    Precedence is fixed and must not be reordered: store readability, then cycle
+    identity, then symbol presence, then token match, then schema. A payload that
+    looks plausible must never override an earlier integrity failure, so the
+    schema is checked LAST and only on a packet already proven current.
+    """
+    if cycle_token is None:
+        return ("no_cycle_token",
+                f"the completed invocation published no cycle token, so no "
+                f"packet can be authenticated as current (symbol {symbol})")
+    p = (packets or {}).get(symbol)
+    if p is None:
+        return ("packet_absent",
+                f"no decision-input packet for {symbol} in the completed "
+                f"invocation (token {cycle_token!r}); the inline path did not "
+                f"reach the capture point")
+    if not isinstance(p, dict):
+        return ("packet_not_a_mapping",
+                f"packet for {symbol} is {type(p).__name__}, not a mapping")
+    if p.get("cycle_token") != cycle_token:
+        return ("packet_stale",
+                f"packet for {symbol} carries token {p.get('cycle_token')!r}, "
+                f"not the completed invocation's {cycle_token!r}; refusing "
+                f"stale inline inputs")
+    got = set(p)
+    if got != REGISTERED_PACKET_FIELDS:
+        missing = sorted(REGISTERED_PACKET_FIELDS - got)
+        extra = sorted(got - REGISTERED_PACKET_FIELDS)
+        return ("packet_schema_drift",
+                f"packet for {symbol} does not match the registered schema: "
+                f"missing {missing}, unregistered {extra}; refusing rather than "
+                f"evaluating against defaulted decision inputs")
+    return None
+
+
+def _valid_packet(packets, symbol, cycle_token):
+    """Return the packet only if it is current AND schema-exact."""
+    if _packet_defect(packets, symbol, cycle_token) is not None:
         return None
-    try:
-        return bar_recheck(symbol, bar) or None
-    except Exception as exc:                        # noqa: BLE001
-        return f"recheck failed: {type(exc).__name__}: {exc}"
+    return packets[symbol]
+
+
+def _capture_reason(packets, symbol, cycle_token):
+    defect = _packet_defect(packets, symbol, cycle_token)
+    return defect[1] if defect else None
 
 
 def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
-                 cycle_id, before, captured, output_path, summary, bars=None,
-                 params_fn=None, premise_fn=None, bar_recheck=None):
+                 cycle_id, before, captured, output_path, summary,
+                 params_fn=None, packets_fn=None):
     out = {}
     contract = sc.verify_marker_contract(tracker_module)
     out["contract_valid"] = contract.get("valid")
@@ -223,14 +263,17 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
             out["params_error"] = f"{type(exc).__name__}: {exc}"
             params = None
 
-    premise = {"ok": True, "source": "not_checked"}
-    if premise_fn is not None:
+    # Read the tracker's capture for the invocation that just completed. Read
+    # AFTER the inline call: a tracker-owned token does not exist before it.
+    cycle_token, packets, capture_error = None, {}, None
+    if packets_fn is not None:
         try:
-            premise = dict(premise_fn())
+            cycle_token, packets = packets_fn()
+            packets = dict(packets or {})
         except Exception as exc:                    # noqa: BLE001
-            premise = {"ok": False,
-                       "reason": f"{type(exc).__name__}: {exc}"}
-    out["premise"] = premise
+            capture_error = f"{type(exc).__name__}: {exc}"
+    out["capture_cycle_token"] = cycle_token
+    out["capture_error"] = capture_error
 
     after_inline = copy.deepcopy(load_state())
     hash_before = sc.canonical_hash(after_inline)
@@ -247,20 +290,21 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
         inline_failed = sc.inline_failed_for(symbol, captured)
         inline_status = sc.classify_status(pre, post, inline_failed)
 
-        bar = (bars or {}).get(symbol)
+        defect = _packet_defect(packets, symbol, cycle_token)
+        bar = None if defect else packets[symbol]
+        defect_kind = defect[0] if defect else None
         shadow_after, s_exc_t, s_exc_m = None, None, None
-        if not premise.get("ok", True):
-            s_exc_t = "PremiseNotHeld"
-            s_exc_m = str(premise.get("reason", "premise refused"))
-        elif params is None:
+        if params is None:
             s_exc_t = "ParamsUnavailable"
             s_exc_m = out.get("params_error", "params unavailable")
-        elif bar is None or bar.get("_error"):
-            s_exc_t = "BarUnavailable"
-            s_exc_m = (bar or {}).get("_error", "no bar supplied")
-        elif _recheck_failed(bar_recheck, symbol, bar):
-            s_exc_t = "BarStale"
-            s_exc_m = _recheck_failed(bar_recheck, symbol, bar)
+        elif bar is None:
+            # No packet, or a packet from a superseded invocation. Never fall
+            # back to an older value: that is the stale-record failure the
+            # cycle token exists to prevent.
+            s_exc_t = "INLINE_INPUT_NOT_CAPTURED"
+            s_exc_m = capture_error or defect[1]
+            if capture_error:
+                defect_kind = "store_unreadable"
         else:
             try:
                 shadow_after = module_eval(copy.deepcopy(pre), dict(params), bar)
@@ -270,12 +314,14 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
                                            s_exc_t is not None)
 
         records.append((symbol, pre, post, inline_status, shadow_status,
-                        shadow_after, s_exc_t, s_exc_m, contract, bar))
+                        shadow_after, s_exc_t, s_exc_m, contract, bar,
+                        defect_kind))
 
     hash_after = sc.canonical_hash(copy.deepcopy(load_state()))
 
     built = []
-    for (symbol, pre, post, i_st, s_st, s_after, s_t, s_m, ctr, bar) in records:
+    for (symbol, pre, post, i_st, s_st, s_after, s_t, s_m, ctr, bar,
+         defect_kind) in records:
         rec = sc.build_record(
             symbol=symbol, entry_date=pre.get("entry_date"),
             timestamp=_now(), lineage=lineage,
@@ -287,7 +333,7 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
             shadow_exception_type=s_t, shadow_exception_message=s_m,
             production_state_hash_before=hash_before,
             production_state_hash_after=hash_after,
-            contract=ctr, bar=bar)
+            contract=ctr, bar=bar, capture_defect=defect_kind)
         built.append(rec)
         if append_record(rec, output_path):
             summary["written"] += 1

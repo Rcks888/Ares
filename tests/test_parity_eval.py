@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from engine import parity_eval as pe          # noqa: E402
 from engine.exit_policy import POLICIES        # noqa: E402
@@ -63,25 +64,33 @@ def sdgr():
 
 
 def bar(price, rsi=55.0, div=False, date="2026-09-26", src="daily"):
-    return {"price": price, "rsi": rsi, "bearish_div": div, "date": date,
-            "price_source": src}
+    """A Phase 0.5 decision-input packet, as tracker._LAST_EVAL would supply it."""
+    return {"price": price, "rsi": rsi, "bearish_div": div, "bar_date": date,
+            "price_source": src, "cycle_token": 1}
 
 
-# --- price determinism: the premise is enforced, not trusted -----------------
-def test_price_source_refused():
-    for src in ("IBKR", "live", None, "unknown"):
-        try:
-            pe.evaluate(abm(), params(), bar(49.57, src=src))
-            check(f"refuses price_source={src!r}", False, "no raise")
-        except pe.NonDeterministicPrice:
-            check(f"refuses price_source={src!r}", True)
-        except Exception as exc:                    # noqa: BLE001
-            check(f"refuses price_source={src!r}", False, repr(exc))
-    try:
-        pe.evaluate(abm(), params(), bar(49.57))
-        check("accepts price_source='daily'", True)
-    except Exception as exc:                        # noqa: BLE001
-        check("accepts price_source='daily'", False, repr(exc))
+# --- Phase 0.5: live and daily are equally comparable -----------------------
+def test_both_price_sources_are_comparable():
+    """The Phase 4 refusal is withdrawn: parity now gets the price inline used.
+
+    Reconstruction had to refuse live prices because a re-derived price could
+    differ through market movement. The packet removes the re-derivation, so the
+    live path -- which is the ONLY path production actually takes during
+    scheduled cycles -- becomes comparable rather than refused.
+    """
+    for src in ("daily", "IBKR"):
+        out = pe.evaluate(abm(), params(), bar(49.57, src=src))
+        check(f"price_source={src!r} evaluates instead of raising",
+              out["_parity_action"] == "hold", out.get("_parity_action"))
+        check(f"price_source={src!r} recorded as a coverage dimension",
+              out["_parity_price_source"] == src, out.get("_parity_price_source"))
+    check("the withdrawn refusal no longer exists",
+          not hasattr(pe, "NonDeterministicPrice"))
+    check("make_bar was deleted, not left dormant", not hasattr(pe, "make_bar"))
+    live = pe.evaluate(abm(), params(), bar(48.00, src="IBKR"))
+    check("a live price can drive a real exit",
+          live["status"] == "closed" and live["exit_reason"] == "stop_loss",
+          (live["status"], live.get("exit_reason")))
 
 
 # --- no mutation of the supplied state ---------------------------------------
@@ -258,37 +267,37 @@ def test_contract_recorded():
           out.get("effective_stop"))
 
 
-# --- make_bar mirrors tracker's reads --------------------------------------
-def test_make_bar_matches_tracker_reads():
-    try:
-        import pandas as pd
-    except Exception:                               # noqa: BLE001
-        check("pandas available for make_bar", False)
-        return
-    df = pd.DataFrame({"Close": [10.0, 11.5], "rsi": [40.0, float("nan")],
-                       "bearish_div": [False, True]},
-                      index=pd.to_datetime(["2026-09-25", "2026-09-26"]))
-    b = pe.make_bar(df.iloc[-1])
-    check("price from Close", b["price"] == 11.5)
-    check("NaN rsi becomes None", b["rsi"] is None)
-    check("bearish_div coerced to bool", b["bearish_div"] is True)
-    check("date truncated to 10 chars like tracker",
-          b["date"] == "2026-09-26", b["date"])
-    check("default price_source is daily", b["price_source"] == "daily")
+# --- the packet is consumed verbatim, never re-derived ---------------------
+def test_packet_values_are_used_verbatim():
+    """No rounding, no normalising, no recomputation of the captured inputs."""
+    p = bar(52.123456789, rsi=61.4, div=False)
+    out = pe.evaluate(abm(), params(), p)
+    check("full-precision packet price drives the peak ratchet",
+          out["peak_price"] == 52.12, out["peak_price"])
+    check("evaluator does not mutate the packet", p["price"] == 52.123456789)
+    # bearish_div arrives already interpreted by tracker; do not re-derive it.
+    truthy = pe.evaluate(abm(), params(), bar(52.00, div=True))
+    check("packet bearish_div True is honoured",
+          truthy["exit_reason"] == "bearish_divergence",
+          truthy.get("exit_reason"))
+    out2 = pe.evaluate(abm(), params(), bar(52.00, rsi=None))
+    check("absent rsi is non-triggering, not an error",
+          out2.get("exit_reason") is None)
+    check("bar_date is read from the packet's bar_date field",
+          pe.evaluate(abm(), params(), bar(48.00))["exit_date"] == "2026-09-26")
 
 
 # --- dormancy --------------------------------------------------------------
 def test_dormant():
-    import subprocess
-    hits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", "parity_eval", str(ROOT)],
-        capture_output=True, text=True).stdout.strip().splitlines()
-    allowed = ("engine/parity_eval.py", "engine/parity_hook.py",
-               "tests/test_parity_eval.py", "tests/test_parity_hook.py",
-               "tools/pre_parity_snapshot.py", "tests/test_parity_runner.py")
-    stray = [h for h in hits
-             if not any(a in h.replace(str(ROOT) + "/", "") for a in allowed)]
-    check("no production module references parity_eval", not stray, stray)
+
+    # Delegated to tests/blast_radius.py -- the ONE structural contract.
+    # Previously a grep with a locally duplicated allow-list: it needed an edit
+    # per new test file (four during Phase 0.5) and once failed on a COMMENT that
+    # merely named a module. Structural questions now come from AST nodes.
+    import blast_radius as br
+    _, bad = br.audit()
+    check("no production module references parity_eval", not bad,
+          "\n" + br.describe(bad))
     tsrc = (ROOT / "engine" / "tracker.py").read_text()
     check("tracker.py does not import parity_eval", "parity_eval" not in tsrc)
 

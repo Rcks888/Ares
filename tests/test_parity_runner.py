@@ -14,6 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / 'tests'))
 
 from engine import parity_compare as sc          # noqa: E402
 from engine import parity_runner as sr           # noqa: E402
@@ -71,12 +72,22 @@ def fake_tracker(marker=True):
     return m, tmp
 
 
+TOKEN = 1
+# A Phase 0.5 decision-input packet as tracker._LAST_EVAL supplies it.
 DEFAULT_BAR = {"price": 49.57, "rsi": 55.0, "bearish_div": False,
-               "date": "2026-09-26", "price_source": "daily"}
+               "bar_date": "2026-09-26", "price_source": "daily",
+               "cycle_token": TOKEN}
+
+
+def default_packets(*symbols, token=TOKEN):
+    syms = symbols or ("ABM",)
+    return lambda: (token, {s: dict(DEFAULT_BAR, cycle_token=token)
+                            for s in syms})
 
 
 def harness(trades_before, trades_after, stdout="", module_eval=None,
-            marker=True, output=None, params=None, bar=None, bar_fn=None):
+            marker=True, output=None, params=None, bar=None,
+            packets_fn=None):
     """Build a one-shot observe_cycle invocation over in-memory state."""
     mod, _ = fake_tracker(marker)
     state = {"cur": [dict(t) for t in trades_before]}
@@ -90,9 +101,12 @@ def harness(trades_before, trades_after, stdout="", module_eval=None,
         return [dict(t) for t in state["cur"]]
 
     me = module_eval or (lambda t, p, bb: dict(t))
-    bf = bar_fn or (lambda s: dict(bar or DEFAULT_BAR))
+    syms = [t.get("symbol") for t in trades_before if t.get("symbol")]
+    pf = packets_fn or (lambda: (TOKEN, {s: dict(bar or DEFAULT_BAR,
+                                                cycle_token=TOKEN)
+                                         for s in syms}))
     out = output or str(Path(tempfile.mkdtemp()) / "shadow.jsonl")
-    res, summ = sr.observe_cycle(mod, inline_call, load_state, me, bar_fn=bf,
+    res, summ = sr.observe_cycle(mod, inline_call, load_state, me, packets_fn=pf,
                                  params=params or {},
                                  lineage={"production_commit": "01617b7"},
                                  output_path=out)
@@ -179,7 +193,7 @@ def test_warn_called_on_degradation():
     seen = []
     mod, _ = fake_tracker()
     sr.observe_cycle(mod, lambda: "OK", lambda: [st()],
-                     lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
+                     lambda t, p, bb: dict(t), packets_fn=default_packets(),
                      output_path=unwritable_output(),
                      warn=seen.append)
     check("warn invoked on write failure", len(seen) == 1, seen)
@@ -188,7 +202,7 @@ def test_warn_called_on_degradation():
     def bad_warn(msg):
         raise RuntimeError("telegram down")
     res, _ = sr.observe_cycle(mod, lambda: "OK", lambda: [st()],
-                              lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
+                              lambda t, p, bb: dict(t), packets_fn=default_packets(),
                               output_path=unwritable_output(),
                               warn=bad_warn)
     check("a failing warn cannot break the cycle", res == "OK")
@@ -276,7 +290,7 @@ def test_shadow_mutation_is_caught():
     mod, _ = fake_tracker()
     out = str(Path(tempfile.mkdtemp()) / "s.jsonl")
     res, summ = sr.observe_cycle(mod, inline_call, load_state, leaky_eval,
-                                 bar_fn=lambda s: dict(DEFAULT_BAR),
+                                 packets_fn=default_packets(),
                                  output_path=out)
     check("inline result still returned", res == "OK")
     rec = json.loads(Path(out).read_text().strip())
@@ -405,7 +419,7 @@ def test_module_eval_gets_an_isolated_clone():
     mod, _ = fake_tracker()
     out = str(Path(tempfile.mkdtemp()) / "p.jsonl")
     sr.observe_cycle(mod, lambda: "OK", lambda: live["cur"], vandal,
-                     bar_fn=lambda s: dict(DEFAULT_BAR), output_path=out)
+                     packets_fn=default_packets(), output_path=out)
     check("production peak_price untouched", live["cur"][0]["peak_price"] == 50.91,
           live["cur"][0]["peak_price"])
     check("production stop_loss untouched", live["cur"][0]["stop_loss"] == 48.67)
@@ -428,7 +442,7 @@ def test_stdout_is_preserved_for_operators():
 
     with _rs(outer):
         sr.observe_cycle(mod, inline_call, lambda: [st()],
-                         lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
+                         lambda t, p, bb: dict(t), packets_fn=default_packets(),
                          output_path=str(Path(tempfile.mkdtemp()) / "p.jsonl"))
     check("operator output still reaches the real stream",
           "ABM: holding, trail 48.67" in outer.getvalue(),
@@ -448,7 +462,7 @@ def test_stdout_preserved_even_when_marker_present():
 
     with _rs(outer):
         sr.observe_cycle(mod, inline_call, lambda: [st()],
-                         lambda t, p, bb: dict(t), bar_fn=lambda s: dict(DEFAULT_BAR),
+                         lambda t, p, bb: dict(t), packets_fn=default_packets(),
                          output_path=str(Path(tempfile.mkdtemp()) / "p.jsonl"))
     txt = outer.getvalue()
     check("error line preserved for operators", "Error checking ABM" in txt)
@@ -483,19 +497,15 @@ def test_concurrency_assumption_recorded():
 
 # --- dormancy and isolation -------------------------------------------------
 def test_dormancy_and_isolation():
-    hits = subprocess.run(
-        ["grep", "-rn", "--include=*.py", "-e", "parity_runner",
-         "-e", "parity_compare", "-e", "tracker_compat", str(ROOT)],
-        capture_output=True, text=True).stdout.strip().splitlines()
-    allowed = ("engine/tracker_compat.py", "engine/parity_compare.py",
-               "engine/parity_runner.py", "engine/parity_eval.py",
-               "tests/test_tracker_compat.py", "tests/test_parity_eval.py",
-               "engine/parity_hook.py", "tests/test_parity_compare.py",
-               "tests/test_parity_hook.py", "tests/test_parity_runner.py",
-               "tools/pre_parity_snapshot.py")
-    offenders = [h for h in hits if not any(a in h for a in allowed)]
-    check("no production module references the shadow stack", not offenders,
-          "\n        " + "\n        ".join(offenders))
+
+    # Delegated to tests/blast_radius.py -- the ONE structural contract.
+    # Previously a grep with a locally duplicated allow-list: it needed an edit
+    # per new test file (four during Phase 0.5) and once failed on a COMMENT that
+    # merely named a module. Structural questions now come from AST nodes.
+    import blast_radius as br
+    _, bad = br.audit()
+    check("no production module references the shadow stack", not bad,
+          "\n" + br.describe(bad))
     tracker = (ROOT / "engine" / "tracker.py").read_text(errors="replace")
     for n in ("parity_runner", "parity_compare", "tracker_compat",
               "exit_policy"):
@@ -538,11 +548,175 @@ def main():
                test_stdout_preserved_even_when_marker_present,
                test_tee_survives_a_broken_downstream_stream,
                test_concurrency_assumption_recorded,
-               test_dormancy_and_isolation):
+               test_dormancy_and_isolation,
+               # Phase 0.5: packet validity / refusal ladder
+               test_missing_packet_classifies_not_captured,
+               test_stale_token_packet_is_refused_not_used,
+               test_absent_token_refuses_every_symbol,
+               test_packets_fn_failure_is_fail_open,
+               test_valid_packet_is_passed_through_verbatim,
+               test_live_price_source_is_recorded_as_coverage_not_refused,
+               test_no_reconstruction_kwargs_remain,
+               test_runner_makes_no_market_access,
+               test_every_test_is_registered):
         print(f"\n{fn.__name__}")
         fn()
     print(f"\n{'FAILED: ' + ', '.join(FAILURES) if FAILURES else 'ALL PASS'}")
     return 1 if FAILURES else 0
+
+
+def test_every_test_is_registered():
+    """This collector is an explicit tuple, so a new test can silently not run.
+
+    That happened during the Phase 0.5 refactor: eight new tests were added and
+    the suite still reported ALL PASS because none of them were in the tuple.
+    A passing suite that does not execute a test is worse than a failing one, so
+    the omission is now detected structurally.
+    """
+    import ast
+    tree = ast.parse(Path(__file__).read_text())
+    defined = {n.name for n in tree.body
+               if isinstance(n, ast.FunctionDef) and n.name.startswith("test_")}
+    main_fn = next(n for n in tree.body
+                   if isinstance(n, ast.FunctionDef) and n.name == "main")
+    registered = {x.id for n in ast.walk(main_fn)
+                  if isinstance(n, ast.Tuple) for x in n.elts
+                  if isinstance(x, ast.Name)}
+    missing = sorted(defined - registered)
+    check("every test_* function is registered in main()", not missing, missing)
+    check("main() registers nothing that does not exist",
+          not sorted(registered - defined), sorted(registered - defined))
+
+
+def _recs(out):
+    text = Path(out).read_text().strip()
+    return [json.loads(l) for l in text.splitlines()] if text else []
+
+
+# ---- Phase 0.5: packet validity is the refusal gate -----------------------
+def test_missing_packet_classifies_not_captured():
+    res, summ, out = harness([st()], [st()], packets_fn=lambda: (TOKEN, {}))
+    recs = _recs(out)
+    check("inline result preserved when no packet exists", res == "INLINE_RESULT")
+    check("missing packet -> INLINE_INPUT_NOT_CAPTURED",
+          recs[0]["shadow_exception_type"] == "INLINE_INPUT_NOT_CAPTURED",
+          recs[0]["shadow_exception_type"])
+    check("missing packet is never a MATCH",
+          recs[0]["difference_class"] != "MATCH", recs[0]["difference_class"])
+    check("would_change_action stays None, not coerced to False",
+          recs[0]["would_change_action"] is None,
+          recs[0]["would_change_action"])
+    check("the reason names the un-reached capture point",
+          "did not reach the capture point"
+          in (recs[0]["shadow_exception_message"] or ""),
+          recs[0]["shadow_exception_message"])
+
+
+def test_stale_token_packet_is_refused_not_used():
+    """THE stale-record case, enforced at the consuming end."""
+    stale = dict(DEFAULT_BAR, cycle_token=1, price=999.99)
+    evaluated = []
+
+    def spy(t, p, packet):
+        evaluated.append(packet)
+        return dict(t)
+
+    res, summ, out = harness([st()], [st()], module_eval=spy,
+                             packets_fn=lambda: (2, {"ABM": stale}))
+    recs = _recs(out)
+    check("inline result preserved", res == "INLINE_RESULT")
+    check("module_eval NEVER saw the stale packet", not evaluated, evaluated)
+    check("stale token -> INLINE_INPUT_NOT_CAPTURED",
+          recs[0]["shadow_exception_type"] == "INLINE_INPUT_NOT_CAPTURED",
+          recs[0]["shadow_exception_type"])
+    check("the reason reports both tokens",
+          "not the completed invocation's 2"
+          in (recs[0]["shadow_exception_message"] or ""),
+          recs[0]["shadow_exception_message"])
+    check("the stale price never reaches the record",
+          recs[0]["bar_price"] != 999.99, recs[0]["bar_price"])
+
+
+def test_absent_token_refuses_every_symbol():
+    res, summ, out = harness([st()], [st()],
+                             packets_fn=lambda: (None, {"ABM": dict(DEFAULT_BAR)}))
+    recs = _recs(out)
+    check("a None token refuses rather than accepting",
+          recs[0]["shadow_exception_type"] == "INLINE_INPUT_NOT_CAPTURED",
+          recs[0]["shadow_exception_type"])
+
+
+def test_packets_fn_failure_is_fail_open():
+    def boom():
+        raise RuntimeError("store unreadable")
+
+    res, summ, out = harness([st()], [st()], packets_fn=boom)
+    recs = _recs(out)
+    check("inline result preserved when the store read fails",
+          res == "INLINE_RESULT")
+    check("capture_error is recorded in the summary",
+          "store unreadable" in str(summ.get("capture_error")),
+          summ.get("capture_error"))
+    check("symbol classified INLINE_INPUT_NOT_CAPTURED",
+          recs[0]["shadow_exception_type"] == "INLINE_INPUT_NOT_CAPTURED")
+    check("the capture error is surfaced on the record",
+          "store unreadable" in (recs[0]["shadow_exception_message"] or ""),
+          recs[0]["shadow_exception_message"])
+
+
+def test_valid_packet_is_passed_through_verbatim():
+    seen = []
+    pkt = dict(DEFAULT_BAR, price=49.78, price_source="IBKR", rsi=61.4)
+
+    def spy(t, p, packet):
+        seen.append(packet)
+        return dict(t)
+
+    harness([st()], [st()], module_eval=spy,
+            packets_fn=lambda: (TOKEN, {"ABM": pkt}))
+    check("module_eval received the packet", len(seen) == 1, len(seen))
+    if seen:
+        check("price passed through unchanged", seen[0]["price"] == 49.78)
+        check("price_source passed through unchanged",
+              seen[0]["price_source"] == "IBKR")
+        check("rsi passed through unchanged", seen[0]["rsi"] == 61.4)
+
+
+def test_live_price_source_is_recorded_as_coverage_not_refused():
+    res, summ, out = harness(
+        [st()], [st()],
+        packets_fn=lambda: (TOKEN, {"ABM": dict(DEFAULT_BAR,
+                                                price_source="IBKR")}))
+    recs = _recs(out)
+    check("a live packet is evaluated, not refused",
+          recs[0]["shadow_exception_type"] is None,
+          recs[0]["shadow_exception_type"])
+    check("price_source recorded as a coverage dimension",
+          recs[0]["price_source"] == "IBKR", recs[0]["price_source"])
+    check("the withdrawn refusal class is never assigned",
+          recs[0]["difference_class"] != "PRICE_SOURCE_NONDETERMINISTIC",
+          recs[0]["difference_class"])
+
+
+def test_no_reconstruction_kwargs_remain():
+    import inspect
+    sig = inspect.signature(sr.observe_cycle).parameters
+    for gone in ("bar_fn", "bar_recheck", "premise_fn"):
+        check(f"observe_cycle no longer accepts {gone}", gone not in sig,
+              sorted(sig))
+    check("observe_cycle accepts packets_fn", "packets_fn" in sig)
+    src = (ROOT / "engine" / "parity_runner.py").read_text()
+    code = "\n".join(l for l in src.splitlines()
+                     if not l.strip().startswith("#"))
+    for gone in ("BarStale", "PremiseNotHeld", "_recheck_failed"):
+        check(f"{gone} removed from runner code", gone not in code, gone)
+
+
+def test_runner_makes_no_market_access():
+    src = (ROOT / "engine" / "parity_runner.py").read_text()
+    for banned in ("get_live_price", "load_stock", "download_stock",
+                   "add_indicators", "yfinance", "requests"):
+        check(f"runner never references {banned}", banned not in src, banned)
 
 
 if __name__ == "__main__":
