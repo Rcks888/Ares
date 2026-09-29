@@ -68,6 +68,10 @@ def run_block(snapshot_obj, baseline_obj):
         (tools / "parity_baseline.json").write_text(json.dumps(baseline_obj))
     script = d / "block.py"
     script.write_text(BLOCK)
+    # argv[2] must be the REAL snapshot tool: the display block imports the
+    # state contract from it. Pointing at a non-existent copy in the temp dir
+    # made the contract load fail, which silently skipped every state check.
+    (tools / "pre_parity_snapshot.py").write_text(SNAPSHOT.read_text())
     r = subprocess.run([sys.executable, str(script), str(snap),
                         str(tools / "pre_parity_snapshot.py")],
                        capture_output=True, text=True)
@@ -101,6 +105,14 @@ def good_snapshot():
                              "tracker_diff_is_registered_phase05_only"][
                                  "rollback_commit"]},
         "phase3_gate": {}, "baseline_validity": {}, "live_logs": {},
+        "parity_output": {
+            "state": "NOT_DECLARED_ABSENT", "valid": True,
+            "collection_declared": False, "records": 0, "failures": [],
+            "notes": ["Phase 0.5: collection disabled, no evidence file"],
+            "declaration": {"declared": False, "valid": True,
+                            "export_lines": [], "entry_point_line": 8,
+                            "value": None, "failures": []}},
+        "parity_output_tracking": {"ignored": False, "trackable": True},
     }
 
 
@@ -247,6 +259,156 @@ def test_expected_comparison_count_matches_actual_cmp_calls():
     if m:
         check(f"declared {m.group(1)} matches {n} cmp() call sites",
               int(m.group(1)) == n, f"declared={m.group(1)} actual={n}")
+
+
+# ---- display contract ----------------------------------------------------
+def test_display_shows_the_parity_state():
+    """The gate must SHOW the state, not just a derived boolean.
+
+    The verifier's closing prose referred to "the parity_output state above"
+    while printing only parity_output_state_valid, so the checklist items
+    state == ARMED_NOT_STARTED and state == ACTIVE_VALID were unverifiable from
+    a normal run.
+    """
+    s = good_snapshot()
+    rc, out = run_block(s, good_baseline())
+    check("state is printed", "state               = NOT_DECLARED_ABSENT" in out,
+          out[-900:])
+    check("collection_declared is printed", "collection_declared = False" in out)
+    check("records is printed", "records             = 0" in out)
+    check("entry_point_line is printed", "entry_point_line    =" in out)
+    check("declared value is printed", "declared value      =" in out)
+    check("DISPLAY CONTRACT: PASS", "DISPLAY CONTRACT: PASS" in out, out[-500:])
+    check("display contract does not disturb 9/9", "9/9 PASS" in out)
+    check("exit still 0", rc == 0, rc)
+
+
+def test_missing_parity_output_block_fails():
+    """Would previously have rendered as state = None inside a green run."""
+    s = good_snapshot()
+    del s["parity_output"]
+    rc, out = run_block(s, good_baseline())
+    check("absent parity_output exits non-zero", rc != 0, rc)
+    check("names the absent block",
+          "parity_output block absent" in out, out[-600:])
+    check("DISPLAY CONTRACT: FAIL", "DISPLAY CONTRACT: FAIL" in out)
+    check("does not report overall PASS",
+          "FULL VPS VERIFICATION: PASS" not in out)
+
+
+def test_unrecognised_state_fails():
+    s = good_snapshot()
+    s["parity_output"]["state"] = "TOTALLY_NEW_STATE"
+    rc, out = run_block(s, good_baseline())
+    check("unrecognised state exits non-zero", rc != 0, rc)
+    check("names it unrecognised",
+          "is not a recognised state" in out, out[-600:])
+
+
+def test_none_valued_fields_fail_rather_than_print():
+    for field, msg in (("valid", "valid is not a bool"),
+                       ("collection_declared",
+                        "collection_declared is not a bool"),
+                       ("records", "records is not a non-negative integer")):
+        s = good_snapshot()
+        s["parity_output"][field] = None
+        rc, out = run_block(s, good_baseline())
+        check(f"{field}=None exits non-zero", rc != 0, rc)
+        check(f"{field}=None names the contract breach", msg in out, out[-500:])
+
+
+def test_negative_record_count_fails():
+    s = good_snapshot()
+    s["parity_output"]["records"] = -1
+    rc, out = run_block(s, good_baseline())
+    check("negative records exits non-zero", rc != 0, rc)
+
+
+def test_missing_declaration_block_fails():
+    s = good_snapshot()
+    del s["parity_output"]["declaration"]
+    rc, out = run_block(s, good_baseline())
+    check("absent declaration block exits non-zero", rc != 0, rc)
+    check("names the declaration block",
+          "declaration block absent" in out, out[-500:])
+
+
+def test_append_only_required_only_for_active_valid():
+    """State-aware: no file exists before the first cycle."""
+    s = good_snapshot()
+    s["parity_output"].update({"state": "ARMED_NOT_STARTED", "records": 0,
+                               "collection_declared": True})
+    s["parity_output"].pop("append_only", None)
+    rc, out = run_block(s, good_baseline())
+    check("ARMED_NOT_STARTED without append_only is fine", rc == 0,
+          f"rc={rc}\n{out[-600:]}")
+    check("ARMED_NOT_STARTED displayed",
+          "state               = ARMED_NOT_STARTED" in out)
+
+    s2 = good_snapshot()
+    s2["parity_output"].update({"state": "ACTIVE_VALID", "records": 3,
+                                "collection_declared": True})
+    s2["parity_output"].pop("append_only", None)
+    rc2, out2 = run_block(s2, good_baseline())
+    check("ACTIVE_VALID without append_only fails", rc2 != 0, rc2)
+    check("names the required block",
+          "append_only block required" in out2, out2[-500:])
+
+
+def test_append_only_block_is_displayed_when_present():
+    s = good_snapshot()
+    s["parity_output"].update({
+        "state": "ACTIVE_VALID", "records": 3, "collection_declared": True,
+        "append_only": {"prefix_preserved": True, "history_append_only": True,
+                        "committed_records": 2, "working_tree_records": 3,
+                        "new_records": 1}})
+    rc, out = run_block(s, good_baseline())
+    check("append_only line printed", "append_only         =" in out, out[-700:])
+    check("prefix_preserved shown", "prefix_preserved=True" in out)
+    check("new count shown", "new=1" in out)
+    check("ACTIVE_VALID with append_only passes", rc == 0, rc)
+
+
+def test_parity_failures_and_notes_are_surfaced():
+    s = good_snapshot()
+    s["parity_output"]["failures"] = ["record 2 ABM"]
+    s["parity_output"]["state"] = "DECISION_CHANGING_MISMATCH_PRESENT"
+    s["parity_output"]["valid"] = False
+    rc, out = run_block(s, good_baseline())
+    check("parity failure text surfaced", "FAILURE: record 2 ABM" in out,
+          out[-600:])
+
+
+def test_display_states_come_from_the_single_contract():
+    src = (ROOT / "tools" / "vps_phase3_verify.sh").read_text()
+    check("display imports the state contract",
+          "PARITY_OUTPUT_STATES" in src)
+    check("display has no hardcoded state list",
+          '"ARMED_NOT_STARTED",' not in src)
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("pps", SNAPSHOT)
+    pps = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(pps)
+    for st in ("NOT_DECLARED_ABSENT", "ARMED_NOT_STARTED", "ACTIVE_VALID",
+               "UNDECLARED_OUTPUT_PRESENT", "UNPARSEABLE_JSONL", "SCHEMA_DRIFT",
+               "DECISION_CHANGING_MISMATCH_PRESENT", "EVIDENCE_TRUNCATED",
+               "EVIDENCE_REWRITTEN", "LINEAGE_INCOMPLETE"):
+        check(f"contract contains {st}", st in pps.PARITY_OUTPUT_STATES)
+    check("append-only requirement is state-scoped",
+          pps.PARITY_STATES_REQUIRING_APPEND_ONLY == ("ACTIVE_VALID",),
+          pps.PARITY_STATES_REQUIRING_APPEND_ONLY)
+
+
+def test_display_failure_does_not_corrupt_comparison_count():
+    """A display failure must not be reported as a failed comparison."""
+    s = good_snapshot()
+    del s["parity_output"]
+    rc, out = run_block(s, good_baseline())
+    check("still reports 9 executed comparisons",
+          "executed comparisons   : 9" in out, out[-700:])
+    check("still reports 9 successful comparisons",
+          "successful comparisons : 9" in out, out[-700:])
+    check("but overall verification fails", rc != 0, rc)
 
 
 # ---- shell-level wiring -------------------------------------------------

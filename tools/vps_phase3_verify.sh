@@ -119,7 +119,7 @@ echo "snapshot exit=$RC  (0 = all Phase 3 checks pass)"
 [ -s "$OUT_A.err" ] && { echo "--- stderr ---"; head -20 "$OUT_A.err"; }
 
 python3 - "$OUT_A" "$PWD/tools/pre_parity_snapshot.py" <<'PY'
-import json, sys, traceback
+import json, pathlib, sys, traceback
 
 # EXPECTED_COMPARISONS is the completion contract. The run fails unless exactly
 # this many comparisons were executed AND succeeded. Counting them is what makes
@@ -143,6 +143,97 @@ print("--- suites ---")
 for n, t in s.get("test_suites", {}).items():
     print(f"  {n:11} {t['assertions']:3} assertions  passed={t['passed']}")
 print(f"  TOTAL {s.get('assertion_total')}")
+
+# --- phase-aware parity evidence -----------------------------------------
+# Printing fields is not the point; proving they are the expected structured
+# evidence is. A missing parity_output block would otherwise render as
+# "state = None" inside an otherwise green run, which reads as reassurance.
+# Recognised states come from the snapshot tool's own contract, not a local list.
+try:
+    # Read the constants by PARSING, not importing. Importing the snapshot tool
+    # would execute it -- pulling in engine/, running module-level work, and
+    # coupling a display block to the tool's whole dependency tree. Parsing gives
+    # the same single source with no side effects.
+    import ast as _ast
+
+    def _const(tree, name):
+        for node in tree.body:
+            if isinstance(node, _ast.Assign) and any(
+                    getattr(t, "id", None) == name for t in node.targets):
+                return tuple(e.value for e in node.value.elts)
+        raise KeyError(name)
+
+    _tree = _ast.parse(pathlib.Path(sys.argv[2]).read_text())
+    STATES = _const(_tree, "PARITY_OUTPUT_STATES")
+    NEEDS_AO = _const(_tree, "PARITY_STATES_REQUIRING_APPEND_ONLY")
+except Exception as exc:
+    STATES, NEEDS_AO = (), ()
+    CONTRACT_LOAD_ERROR = str(exc)
+else:
+    CONTRACT_LOAD_ERROR = None
+
+display_failures = []
+if CONTRACT_LOAD_ERROR:
+    # Must FAIL, not degrade. Falling back to empty tuples made every
+    # state check `if STATES and ...` a no-op, so an unrecognised state would
+    # have passed silently whenever the contract could not be imported.
+    display_failures.append(
+        f"cannot load the state contract: {CONTRACT_LOAD_ERROR}")
+po = s.get("parity_output")
+print("--- parity evidence (phase-aware) ---")
+if not isinstance(po, dict):
+    display_failures.append("parity_output block absent or not an object")
+else:
+    d = po.get("declaration")
+    ao = po.get("append_only") or {}
+    print(f"  state               = {po.get('state')}")
+    print(f"  valid               = {po.get('valid')}")
+    print(f"  collection_declared = {po.get('collection_declared')}")
+    print(f"  records             = {po.get('records')}")
+    if isinstance(d, dict):
+        print(f"  declaration lines   = "
+              f"{[e.get('line') for e in d.get('export_lines', [])]}")
+        print(f"  entry_point_line    = {d.get('entry_point_line')}")
+        print(f"  declared value      = {d.get('value')!r}")
+    if ao:
+        print(f"  append_only         = "
+              f"prefix_preserved={ao.get('prefix_preserved')} "
+              f"history={ao.get('history_append_only')} "
+              f"committed={ao.get('committed_records')} "
+              f"working={ao.get('working_tree_records')} "
+              f"new={ao.get('new_records')}")
+    for f in po.get("failures", []):
+        print(f"  FAILURE: {f}")
+    for n in po.get("notes", []):
+        print(f"  note: {n}")
+
+    # Structural contract.
+    st = po.get("state")
+    if STATES and st not in STATES:
+        display_failures.append(f"state {st!r} is not a recognised state")
+    if not isinstance(po.get("valid"), bool):
+        display_failures.append("valid is not a bool")
+    if not isinstance(po.get("collection_declared"), bool):
+        display_failures.append("collection_declared is not a bool")
+    recs = po.get("records")
+    if not isinstance(recs, int) or isinstance(recs, bool) or recs < 0:
+        display_failures.append("records is not a non-negative integer")
+    if not isinstance(d, dict):
+        display_failures.append("declaration block absent")
+    elif d.get("entry_point_line") is None and st != "DECLARATION_MALFORMED":
+        display_failures.append("entry_point_line absent outside a malformed "
+                                "declaration")
+    # State-aware: no file exists before the first cycle.
+    if st in NEEDS_AO and not ao:
+        display_failures.append(f"append_only block required for state {st}")
+
+if display_failures:
+    print()
+    for f in display_failures:
+        print(f"  DISPLAY CONTRACT FAILURE: {f}")
+    print("  DISPLAY CONTRACT: FAIL")
+else:
+    print("  DISPLAY CONTRACT: PASS")
 m = s.get("marker_contract", {})
 print("--- marker contract (LOADED module) ---")
 print(f"  valid = {m.get('valid')}  match = {m.get('marker_contract_match')}")
@@ -213,15 +304,25 @@ print(f"\n--- COMPARISON WITH BASELINE ({bpath.name}, "
       f"generated {B.get('generated_at', B.get('generated_utc','?'))} from "
       f"{B.get('generated_from_commit', B.get('generated_on_commit','?'))}) ---")
 bad = []
+cmp_bad = []
 executed = []
 def cmp(label, got, want, fatal=True):
     executed.append(label)
     ok = got == want
     print(f"  {'OK  ' if ok else 'DIFF'} {label}: {got}" + ("" if ok else f"  want {want}"))
     if not ok and fatal:
+        # cmp_bad drives the n/9 accounting; bad drives the exit code. Keeping
+        # them separate stops a display-contract failure from being reported as
+        # a failed cross-host comparison, which would misstate what was checked.
+        cmp_bad.append(label)
         bad.append(label)
 if absent:
     bad.append("baseline fields absent: " + ",".join(absent))
+# Display-contract failures must affect the exit code, but they are not
+# cross-host comparisons: adding them via cmp() would push executed past
+# EXPECTED_COMPARISONS and report an inflated count.
+for f in display_failures:
+    bad.append(f"display contract: {f}")
 # Two tracker hashes with DIFFERENT bases. Compared against their own basis only.
 # tracker_raw_bytes_md5 is git-controlled content and must match exactly.
 # tracker_loaded_source_md5 depends on inspect.getsource, so an interpreter
@@ -248,12 +349,12 @@ for k in ("python", "pandas", "numpy", "pandas_ta"):
 print()
 # Completion accounting. Abundant green output above must not decide the verdict.
 n_exec = len(executed)
-n_ok = n_exec - len(bad)
+n_ok = n_exec - len(cmp_bad)
 print(f"  expected comparisons   : {EXPECTED_COMPARISONS}")
 print(f"  executed comparisons   : {n_exec}")
 print(f"  successful comparisons : {n_ok}")
 complete = (n_exec == EXPECTED_COMPARISONS and n_ok == EXPECTED_COMPARISONS
-            and not bad)
+            and not bad and not display_failures)
 print()
 if bad:
     print("RESULT: DIFFERENCES FOUND -> " + ", ".join(bad))
@@ -271,6 +372,8 @@ if complete:
     sys.exit(0)
 print(f"CROSS-HOST COMPARISON: {n_ok}/{EXPECTED_COMPARISONS}"
       f"{' INCOMPLETE' if n_exec != EXPECTED_COMPARISONS else ' FAIL'}")
+if display_failures:
+    print(f"DISPLAY CONTRACT: FAIL ({len(display_failures)})")
 print("FULL VPS VERIFICATION: FAIL")
 print("EXIT: 1")
 sys.exit(1)

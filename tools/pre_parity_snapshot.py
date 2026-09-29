@@ -77,6 +77,28 @@ RUNTIME_COMMIT_AUTHORS = ("ares-bot@users.noreply.github.com",)
 PARITY_OUTPUT = "logs/tracker_parity_v1.jsonl"
 ACTIVATION_ENTRY_POINT = "daily_report.py"
 
+# The phase-aware state contract. Single source: the display in
+# tools/vps_phase3_verify.sh validates against THIS tuple rather than keeping its
+# own list, so a state added here cannot be silently unrecognised there.
+PARITY_OUTPUT_STATES = (
+    "NOT_DECLARED_ABSENT",
+    "ARMED_NOT_STARTED",
+    "ACTIVE_VALID",
+    "UNDECLARED_OUTPUT_PRESENT",
+    "DECLARATION_MALFORMED",
+    "UNPARSEABLE_JSONL",
+    "SCHEMA_UNDERIVABLE",
+    "SCHEMA_DRIFT",
+    "LINEAGE_INCOMPLETE",
+    "DECISION_CHANGING_MISMATCH_PRESENT",
+    "EVIDENCE_TRUNCATED",
+    "EVIDENCE_REWRITTEN",
+    "DECLARED_BUT_EMPTY",
+)
+# States for which an append_only block is expected. Before the first cycle no
+# file exists, so requiring it unconditionally would fail a legitimate state.
+PARITY_STATES_REQUIRING_APPEND_ONLY = ("ACTIVE_VALID",)
+
 
 def _frozen_record_fields():
     """The record schema, DERIVED from build_record itself.
@@ -355,6 +377,12 @@ def _parity_output_state():
     else:
         out["state"] = "ACTIVE_VALID"
         out["valid"] = True
+    # Self-check: a state not in the contract would render as unrecognised
+    # downstream, so catch it here rather than at the display.
+    if out["state"] not in PARITY_OUTPUT_STATES:
+        out["valid"] = False
+        out["failures"].append(
+            f"state {out['state']!r} is not in PARITY_OUTPUT_STATES")
     return out
 
 
