@@ -197,15 +197,20 @@ def test_schema_underivable_is_a_failure():
     (d / "engine").mkdir()
     (d / "engine" / "parity_compare.py").write_text("def other(): pass\n")
     orig = pps.ROOT
+    # Recorded in a flag rather than the paired check(False)/check(True) raises
+    # idiom. That idiom is sound, but it is indistinguishable by inspection from a
+    # vacuous check(..., True), so it defeated the guard below. One unconditional
+    # assertion on a boolean is equivalent and stays machine-checkable.
+    raised = False
     try:
         pps.ROOT = d
         try:
             pps._frozen_record_fields()
-            check("underivable schema raises", False, "did not raise")
         except Exception:
-            check("underivable schema raises", True)
+            raised = True
     finally:
         pps.ROOT = orig
+    check("underivable schema raises", raised, raised)
 
 
 # ----------------------------------------------------------------- gate states
@@ -478,26 +483,41 @@ def test_parity_output_is_actually_trackable():
 
 
 def test_ordinary_git_add_logs_stages_the_evidence():
-    """The assumption that was wrong. Proven, not assumed."""
-    p = ROOT / pps.PARITY_OUTPUT
-    if p.exists():
-        check("SKIPPED: real evidence file present", True)
-        return
-    try:
+    """The assumption that was wrong. Proven, not assumed.
+
+    Runs against a SCRATCH repo carrying the real .gitignore, for three reasons.
+
+    The earlier version probed the live repository and skipped itself when the
+    production evidence file existed, via `check("SKIPPED: ...", True)`. That
+    assertion always passed while testing nothing -- it inflated the count with a
+    vacuous pass -- and it made the count phase-dependent: 2 assertions before
+    the first cycle, 1 after. That is what moved parity_output 90 -> 89.
+
+    It also mutated the live working tree (write_text, `git add logs/`, `git
+    reset`) during an active migration, where a mistimed reset could unstage real
+    evidence. The subject under test is .gitignore's treatment of the path, which
+    a scratch repo reproduces exactly and without that risk.
+    """
+    d = Path(tempfile.mkdtemp())
+    subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+    (d / ".gitignore").write_text((ROOT / ".gitignore").read_text())
+    (d / "logs").mkdir()
+    # Every allow-listed runtime log, so a negation that accidentally unignores a
+    # sibling is caught rather than assumed absent.
+    for rel in pps.ALLOWED_RUNTIME_LOGS:
+        p = d / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("")
-        subprocess.run(["git", "add", "logs/"], cwd=ROOT, capture_output=True)
-        out = subprocess.run(["git", "status", "--short", "--", pps.PARITY_OUTPUT],
-                             cwd=ROOT, capture_output=True, text=True).stdout
-        check("ordinary `git add logs/` stages it", out.strip().startswith("A"),
-              repr(out))
-        staged = subprocess.run(["git", "diff", "--cached", "--name-only"],
-                                cwd=ROOT, capture_output=True, text=True).stdout
-        others = [f for f in staged.split() if f != pps.PARITY_OUTPUT]
-        check("no other ignored log became trackable", others == [], others)
-    finally:
-        subprocess.run(["git", "reset", "-q", "--", "logs/"], cwd=ROOT,
-                       capture_output=True)
-        p.unlink(missing_ok=True)
+    subprocess.run(["git", "add", "logs/"], cwd=d, capture_output=True)
+    out = subprocess.run(["git", "status", "--short", "--", pps.PARITY_OUTPUT],
+                         cwd=d, capture_output=True, text=True).stdout
+    check("ordinary `git add logs/` stages the evidence",
+          out.strip().startswith("A"), repr(out))
+    staged = subprocess.run(["git", "diff", "--cached", "--name-only"],
+                            cwd=d, capture_output=True, text=True).stdout.split()
+    unregistered = [f for f in staged if f not in pps.ALLOWED_RUNTIME_LOGS]
+    check("no unregistered log became trackable", unregistered == [],
+          unregistered)
 
 
 def test_allowlist_contains_the_evidence_path():
@@ -506,28 +526,47 @@ def test_allowlist_contains_the_evidence_path():
           pps.ALLOWED_RUNTIME_LOGS)
 
 
-def test_declaration_assertions_are_phase_invariant():
-    """The suite count must not depend on whether collection is declared.
+def test_no_assertion_in_this_suite_is_conditionally_executed():
+    """The suite count must not depend on repository or migration phase.
+
+    Originally scoped to the declaration test only. It was then a DIFFERENT test
+    -- the git-add trackability probe -- that carried a conditional
+    `check("SKIPPED", True)` and moved the count 90 -> 89 the moment the first
+    cycle created the evidence file. A guard covering one function could not see
+    it, so it now covers every test in the file.
 
     A phase-dependent count breaks the cross-host suite comparison during a
-    staged rollout, when the laptop and VPS are legitimately in different phases.
-    Enforced structurally: no check() call inside the declaration test may sit
-    under a conditional.
+    staged rollout, when the laptop and VPS are legitimately in different phases,
+    and a conditional check() that asserts True is a vacuous pass inflating the
+    total while testing nothing.
     """
     import ast as _ast
     tree = _ast.parse(Path(__file__).read_text())
-    fn = [n for n in _ast.walk(tree)
-          if isinstance(n, _ast.FunctionDef)
-          and n.name == "test_real_script_declaration_is_well_formed"][0]
-    conditional = []
-    for node in _ast.walk(fn):
-        if isinstance(node, (_ast.If, _ast.For, _ast.While)):
-            for inner in _ast.walk(node):
-                if (isinstance(inner, _ast.Call)
-                        and getattr(inner.func, "id", None) == "check"):
-                    conditional.append(getattr(inner, "lineno", "?"))
-    check("no conditionally-executed check() in the declaration test",
-          conditional == [], conditional)
+    offenders = []
+    for fn in [n for n in _ast.walk(tree) if isinstance(n, _ast.FunctionDef)
+               and n.name.startswith("test_")]:
+        for node in _ast.walk(fn):
+            if isinstance(node, (_ast.If, _ast.For, _ast.While)):
+                for inner in _ast.walk(node):
+                    if (isinstance(inner, _ast.Call)
+                            and getattr(inner.func, "id", None) == "check"):
+                        offenders.append(f"{fn.name}:{inner.lineno}")
+    check("no conditionally-executed check() anywhere in this suite",
+          offenders == [], offenders)
+
+    # A conditional check() is the mechanism; a check(..., True) literal is the
+    # other half -- it cannot fail, so it measures nothing regardless of nesting.
+    literal = []
+    for fn in [n for n in _ast.walk(tree) if isinstance(n, _ast.FunctionDef)
+               and n.name.startswith("test_")]:
+        for inner in _ast.walk(fn):
+            if (isinstance(inner, _ast.Call)
+                    and getattr(inner.func, "id", None) == "check"
+                    and len(inner.args) >= 2
+                    and isinstance(inner.args[1], _ast.Constant)
+                    and inner.args[1].value is True):
+                literal.append(f"{fn.name}:{inner.lineno}")
+    check("no check(..., True) literal that cannot fail", literal == [], literal)
 
 
 def test_baseline_parity_state_is_informational_only():
