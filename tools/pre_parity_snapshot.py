@@ -850,6 +850,21 @@ def main():
             "rounding_fingerprint": snap["runtime"]["rounding_fingerprint"],
             "suite_assertions": {n: t["assertions"] for n, t in tests.items()},
             "assertion_total": snap["assertion_total"],
+            # INFORMATIONAL PROVENANCE, deliberately NOT a compared field.
+            # The state legitimately advances ARMED_NOT_STARTED -> ACTIVE_VALID
+            # at the first cycle and records only grow, so comparing these to a
+            # later run would manufacture a failure on correct behaviour. Recorded
+            # so a baseline can be placed in the activation timeline; validity is
+            # judged by _parity_output_state() against the live repository, never
+            # against these values.
+            "parity_collection_at_generation": {
+                "state": snap["parity_output"]["state"],
+                "collection_declared":
+                    snap["parity_output"]["collection_declared"],
+                "records": snap["parity_output"]["records"],
+                "NOTE": ("informational only; the state advances and records "
+                         "grow, so these are never compared"),
+            },
             # Reconciled, not absorbed. The bridge suite DECREASED 86 -> 66
             # because Phase 4 reconstruction was withdrawn: 10 premise/bar tests
             # were deleted and 5 packet tests added (17 -> 12 functions). Every

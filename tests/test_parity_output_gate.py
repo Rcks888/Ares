@@ -530,6 +530,28 @@ def test_declaration_assertions_are_phase_invariant():
           conditional == [], conditional)
 
 
+def test_baseline_parity_state_is_informational_only():
+    """It must not become a compared field.
+
+    The state advances ARMED_NOT_STARTED -> ACTIVE_VALID at the first cycle and
+    records only grow. Comparing either to a later run would manufacture a
+    failure on correct behaviour -- the same mistake as parity_output_absent.
+    """
+    src = (ROOT / "tools" / "pre_parity_snapshot.py").read_text()
+    check("baseline records the state for provenance",
+          "parity_collection_at_generation" in src)
+    check("recorded with a not-compared note",
+          "never compared" in src)
+    vsrc = (ROOT / "tools" / "vps_phase3_verify.sh").read_text()
+    check("verifier does NOT compare the recorded state",
+          "parity_collection_at_generation" not in vsrc)
+    import re
+    n = len(re.findall(r"^cmp\(", re.search(
+        r"python3 - \"\$OUT_A\".*?<<'PY'\n(.*?)\nPY\n", vsrc, re.S).group(1),
+        re.M))
+    check("comparison count still 9", n == 9, n)
+
+
 def test_gate_key_renamed_and_wired():
     src = (ROOT / "tools" / "pre_parity_snapshot.py").read_text()
     check("parity_output_state_valid is a gate key",
