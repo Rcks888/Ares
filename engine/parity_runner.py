@@ -104,7 +104,7 @@ def append_record(record, output_path=DEFAULT_OUTPUT):
 
 
 def observe_cycle(tracker_module, inline_call, load_state, module_eval,
-                  packets_fn=None, params=None, params_fn=None,
+                  packets_fn=None, results_fn=None, params=None, params_fn=None,
                   lineage=None, cycle_id=None,
                   output_path=None, warn=None):
     """Run one shadow observation cycle around an inline tracker call.
@@ -176,7 +176,7 @@ def observe_cycle(tracker_module, inline_call, load_state, module_eval,
         summary.update(_shadow_pass(tracker_module, load_state, module_eval,
                                     params, lineage or {}, cycle_id, before,
                                     captured, output_path, summary,
-                                    params_fn, packets_fn))
+                                    params_fn, packets_fn, results_fn))
     except Exception as exc:                        # noqa: BLE001
         summary["shadow_system_error"] = f"{type(exc).__name__}: {exc}"
 
@@ -249,7 +249,7 @@ def _capture_reason(packets, symbol, cycle_token):
 
 def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
                  cycle_id, before, captured, output_path, summary,
-                 params_fn=None, packets_fn=None):
+                 params_fn=None, packets_fn=None, results_fn=None):
     out = {}
     contract = sc.verify_marker_contract(tracker_module)
     out["contract_valid"] = contract.get("valid")
@@ -274,6 +274,23 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
             capture_error = f"{type(exc).__name__}: {exc}"
     out["capture_cycle_token"] = cycle_token
     out["capture_error"] = capture_error
+
+    # Decision-RESULT capture, read on the same terms as the packets: after the
+    # inline call, read-only, and validated against the same invocation token.
+    results, results_error = {}, None
+    if results_fn is not None:
+        try:
+            _rtok, results = results_fn()
+            results = dict(results or {})
+            # A results token that disagrees with the packets token means the two
+            # halves of the capture describe different invocations. Discard the
+            # results rather than pair them with the wrong inputs.
+            if _rtok != cycle_token:
+                results, results_error = {}, (
+                    f"results token {_rtok!r} != packets token {cycle_token!r}")
+        except Exception as exc:                    # noqa: BLE001
+            results, results_error = {}, f"{type(exc).__name__}: {exc}"
+    out["results_error"] = results_error
 
     after_inline = copy.deepcopy(load_state())
     hash_before = sc.canonical_hash(after_inline)
@@ -313,15 +330,19 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
         shadow_status = sc.classify_status(pre, shadow_after,
                                            s_exc_t is not None)
 
+        eff_stop, eff_basis = sc.effective_stop_evidence(
+            results, symbol, cycle_token, bar, pre.get("entry_date"),
+            inline_failed)
+
         records.append((symbol, pre, post, inline_status, shadow_status,
                         shadow_after, s_exc_t, s_exc_m, contract, bar,
-                        defect_kind))
+                        defect_kind, eff_stop, eff_basis))
 
     hash_after = sc.canonical_hash(copy.deepcopy(load_state()))
 
     built = []
     for (symbol, pre, post, i_st, s_st, s_after, s_t, s_m, ctr, bar,
-         defect_kind) in records:
+         defect_kind, eff_stop, eff_basis) in records:
         rec = sc.build_record(
             symbol=symbol, entry_date=pre.get("entry_date"),
             timestamp=_now(), lineage=lineage,
@@ -333,7 +354,9 @@ def _shadow_pass(tracker_module, load_state, module_eval, params, lineage,
             shadow_exception_type=s_t, shadow_exception_message=s_m,
             production_state_hash_before=hash_before,
             production_state_hash_after=hash_after,
-            contract=ctr, bar=bar, capture_defect=defect_kind)
+            contract=ctr, bar=bar, capture_defect=defect_kind,
+            inline_effective_stop=eff_stop,
+            inline_effective_stop_basis=eff_basis)
         built.append(rec)
         if append_record(rec, output_path):
             summary["written"] += 1

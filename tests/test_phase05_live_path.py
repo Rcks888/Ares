@@ -44,6 +44,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+from engine import parity_compare as sc  # noqa: E402
 from engine import parity_hook, parity_runner, tracker  # noqa: E402
 
 FAILS = []
@@ -277,6 +278,164 @@ def test_effective_stop_boundary_live():
                   (rec["inline_decision"], rec["shadow_decision"]))
 
 
+def test_sub_half_cent_ratchet_defeats_pre_post_derivation():
+    """THE load-bearing case for capturing instead of reconstructing.
+
+    A ratchet that moves the local by less than half a cent rounds back to the
+    SAME stored value, so the persisted state is identical before and after:
+
+        pre  stored trailing_stop   48.67
+        new  unrounded local        48.674...   <- what the decision uses
+        post stored trailing_stop   round(...) == 48.67
+
+    Every candidate reconstruction is a function of stored state, so all of them
+    return 48.67 and none can see 48.674. The trail-advance discriminator
+    (post != pre) also reports "no ratchet" here, which is precisely how it was
+    defeated. This test asserts BOTH halves: derivation is wrong, capture is
+    right. If it ever passes with derivation, the capture is unnecessary.
+    """
+    pct = 0.10
+    pre_trail = 48.67
+    # The tracker sets peak_price = current_price on a new high, so the ratchet
+    # derives from the PRICE. Choose the price whose ratchet lands a sub-half-cent
+    # above the stored value. Not rounded: rounding the input would destroy the
+    # very precision under test.
+    px = (pre_trail + 0.004) / (1 - pct)
+    expected = px * (1 - pct)            # the exact unrounded local
+    t = trade(stop_loss=40.00, trailing_stop=pre_trail, peak_price=50.00,
+              take_profit=None)
+    res = run_cycle([t], {"ABM": make_df(99.00)}, live={"ABM": px})
+    rec = assert_chain("subcent", res, "ABM", px, "IBKR")
+
+    check("fixture is genuinely sub-half-cent (rounds back to the same value)",
+          round(expected, 2) == pre_trail, (expected, round(expected, 2)))
+    check("fixture ratchet is real (local exceeds the stored value)",
+          expected > pre_trail, (expected, pre_trail))
+    if rec:
+        post = rec["inline_persistent_state"]
+        check("stored state is UNCHANGED across the ratchet",
+              post["trailing_stop"] == pre_trail, post["trailing_stop"])
+        # Derivation attempts, all of which must fail.
+        derived_pre = max(40.00, pre_trail)
+        derived_post = max(post["stop_loss"], post["trailing_stop"])
+        check("pre-state derivation gives the WRONG value",
+              derived_pre != expected, (derived_pre, expected))
+        check("post-state derivation gives the WRONG value",
+              derived_post != expected, (derived_post, expected))
+        check("trail-advance discriminator reports no ratchet (it is defeated)",
+              post["trailing_stop"] == pre_trail)
+        # Capture succeeds where all derivation fails.
+        check("captured inline effective stop is EXACT",
+              rec["inline_effective_stop"] == expected,
+              (rec["inline_effective_stop"], expected))
+        check("captured value carries sub-cent precision",
+              round(rec["inline_effective_stop"], 2)
+              != rec["inline_effective_stop"], rec["inline_effective_stop"])
+        check("basis is captured_inline_local",
+              rec["inline_effective_stop_basis"] == sc.BASIS_CAPTURED,
+              rec["inline_effective_stop_basis"])
+        check("canonical module agrees exactly, no 2dp tolerance",
+              rec["shadow_effective_stop"] == rec["inline_effective_stop"],
+              (rec["shadow_effective_stop"], rec["inline_effective_stop"]))
+        check("no decision change", rec["would_change_action"] is False,
+              rec["would_change_action"])
+
+
+def test_material_ratchet_still_needs_the_captured_local():
+    """A ratchet that DOES move the stored 2dp value still loses precision.
+
+    Complements the sub-half-cent case. There the persisted state hides that a
+    ratchet happened at all; here it reveals it, yet the exact value is still
+    unrecoverable because only round(x, 2) survives. Together they show capture
+    is required on EVERY ratcheting bar, not just fractional-cent ones.
+    """
+    pct = 0.10
+    pre_trail = 48.67
+    px = (pre_trail + 0.014) / (1 - pct)
+    expected = px * (1 - pct)             # ~48.684, the exact local
+    t = trade(stop_loss=40.00, trailing_stop=pre_trail, peak_price=50.00,
+              take_profit=None)
+    res = run_cycle([t], {"ABM": make_df(99.00)}, live={"ABM": px})
+    rec = assert_chain("material", res, "ABM", px, "IBKR")
+
+    check("fixture ratchet IS visible in stored state",
+          round(expected, 2) != pre_trail, (expected, round(expected, 2)))
+    if rec:
+        post = rec["inline_persistent_state"]
+        check("stored trail advanced to the rounded value",
+              post["trailing_stop"] == round(expected, 2),
+              post["trailing_stop"])
+        check("stored value is NOT the value the decision used",
+              post["trailing_stop"] != expected,
+              (post["trailing_stop"], expected))
+        check("post-state derivation is still WRONG",
+              max(post["stop_loss"], post["trailing_stop"]) != expected,
+              (max(post["stop_loss"], post["trailing_stop"]), expected))
+        check("captured inline effective stop is EXACT",
+              rec["inline_effective_stop"] == expected,
+              (rec["inline_effective_stop"], expected))
+        check("basis is captured_inline_local",
+              rec["inline_effective_stop_basis"] == sc.BASIS_CAPTURED)
+        # Compared against the canonical value, never against the rounded trail.
+        check("canonical agrees exactly with the captured local",
+              rec["shadow_effective_stop"] == rec["inline_effective_stop"],
+              (rec["shadow_effective_stop"], rec["inline_effective_stop"]))
+        check("no decision change", rec["would_change_action"] is False)
+
+
+def test_result_store_does_not_leak_across_invocations():
+    """Invocation 2 must never be able to consume invocation 1's result."""
+    t1 = trade(symbol="SOLO", stop_loss=40.00, trailing_stop=48.67,
+               peak_price=50.00, take_profit=None)
+    px = (48.67 + 0.004) / 0.9
+    r1 = run_cycle([t1], {"SOLO": make_df(99.00)}, live={"SOLO": px})
+    rec1 = r1["records"].get("SOLO")
+    check("invocation 1 captured a value", rec1
+          and rec1["inline_effective_stop"] is not None,
+          rec1 and rec1["inline_effective_stop"])
+    first_value = rec1["inline_effective_stop"] if rec1 else None
+    tok1 = r1["token"]
+
+    # Invocation 2: the store is cleared and the token rotates, so invocation 1's
+    # number is physically gone rather than merely superseded.
+    leftover = dict(tracker._LAST_EVAL.get("results") or {})
+    t2 = trade(symbol="SOLO", stop_loss=40.00, trailing_stop=48.67,
+               peak_price=50.00, take_profit=None)
+    r2 = run_cycle([t2], {"SOLO": make_df(99.00)}, live={"SOLO": px})
+    check("token rotated between invocations", r2["token"] != tok1,
+          (tok1, r2["token"]))
+    check("invocation 1 results are not still resident under the new token",
+          all(e.get("cycle_token") != r2["token"]
+              for e in leftover.values()) or not leftover, leftover)
+
+    # A deliberately stale entry must be treated as ABSENT, never consumed.
+    stale = {"SOLO": {"cycle_token": tok1,
+                      "inline_effective_stop": first_value}}
+    val, basis = sc.effective_stop_evidence(
+        stale, "SOLO", r2["token"], {"bar_date": "2026-09-26"},
+        "2026-09-09", False)
+    check("stale result entry yields NO value", val is None, val)
+    check("stale result entry yields NO guessed basis", basis is None, basis)
+    check("the stale value is specifically not consumed",
+          val != first_value or first_value is None, (val, first_value))
+
+
+def test_entry_day_skip_has_no_result_and_an_honest_basis():
+    """The tracker CONTINUEs before computing effective_stop."""
+    t = trade(entry_date="2026-09-26")
+    res = run_cycle([t], {"ABM": make_df(99.00)}, live={"ABM": 50.00},
+                    bar_date="2026-09-26")
+    rec = res["records"].get("ABM")
+    check("entry-day-skip record exists", rec is not None)
+    if rec:
+        check("entry-day: no captured value",
+              rec["inline_effective_stop"] is None,
+              rec["inline_effective_stop"])
+        check("entry-day: basis is the entry-day skip",
+              rec["inline_effective_stop_basis"] == sc.BASIS_ENTRY_DAY,
+              rec["inline_effective_stop_basis"])
+
+
 def test_abm_equality_boundary_attribution_live():
     """stop_loss == trailing_stop. Attribution must reproduce tracker's rule:
 
@@ -301,13 +460,21 @@ def test_abm_equality_boundary_attribution_live():
         if rec:
             check(f"abm {tag}: module reproduces the attribution",
                   rec["shadow_exit_reason"] == want, rec["shadow_exit_reason"])
-            # tracker computes effective_stop as a LOCAL and never stores it, so
-            # inline_effective_stop is None on every record by construction.
-            # Comparing the two fields for equality would fail always and prove
-            # nothing; the module's value is checked against the rule instead.
-            check(f"abm {tag}: inline stores no effective_stop (local only)",
-                  rec["inline_effective_stop"] is None,
+            # Schema v2: the inline effective stop is now CAPTURED from the
+            # tracker's own local, so the two sides are directly comparable.
+            # Under v1 this assertion said "inline_effective_stop is None on
+            # every record by construction" -- true, but it documented the gap
+            # rather than closing it, and it is the reason a decisive stop bar
+            # could not be verified end to end.
+            check(f"abm {tag}: inline effective_stop captured exactly = {eff}",
+                  rec["inline_effective_stop"] == eff,
                   rec["inline_effective_stop"])
+            check(f"abm {tag}: basis is captured_inline_local",
+                  rec["inline_effective_stop_basis"] == sc.BASIS_CAPTURED,
+                  rec["inline_effective_stop_basis"])
+            check(f"abm {tag}: inline and module effective stops agree",
+                  rec["inline_effective_stop"] == rec["shadow_effective_stop"],
+                  (rec["inline_effective_stop"], rec["shadow_effective_stop"]))
             check(f"abm {tag}: module effective_stop == max(sl, ts) = {eff}",
                   rec["shadow_effective_stop"] == eff,
                   (rec["shadow_effective_stop"], eff))

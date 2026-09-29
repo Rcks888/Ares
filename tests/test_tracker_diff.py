@@ -66,18 +66,51 @@ RESULT_BLOCK = (
     '                "cycle_token": _LAST_EVAL["cycle_token"],\n'
     '                "inline_effective_stop": effective_stop,\n'
     '            }\n')
+# Production carries an explanatory comment ahead of the statement. Comments do
+# not reach the AST, so they cannot affect registration -- but they DO matter to
+# the strip/re-add identity below, which is a byte comparison.
+RESULT_COMMENT = (
+    "            # Copy of the value the decision below actually uses. trailing_stop\n"
+    "            # may be an UNROUNDED ratchet while only round(x, 2) is persisted,\n"
+    "            # so a ratchet to 48.674 stores 48.67 and leaves pre == post: no\n"
+    "            # function of stored state can recover what was used. Copied here,\n"
+    "            # never read back by any decision path.\n")
+PROD_BLOCK = RESULT_COMMENT + RESULT_BLOCK
 CLEAR_ANCHOR = '    _LAST_EVAL["packets"].clear()\n'
 CLEAR_BLOCK = '    _LAST_EVAL["results"].clear()\n'
 
 
-def with_results(src=None, block=None, clear=True):
-    """The candidate as 2B will produce it."""
+def strip_results(src=None):
+    """The candidate with 2B's result telemetry removed again.
+
+    Post-2B the real tracker already CONTAINS the block, so the controls mutate
+    from a stripped base. Building the base by removal rather than by string
+    assembly keeps the canonical block textually identical to production.
+    """
     src = CAND if src is None else src
-    out = mutate(EFF_ANCHOR, EFF_ANCHOR + (RESULT_BLOCK if block is None
-                                           else block), src=src)
+    out = src.replace(PROD_BLOCK, "").replace(CLEAR_BLOCK, "")
+    assert '_LAST_EVAL["results"][' not in out, "result block did not strip"
+    return out
+
+
+def with_results(src=None, block=None, clear=True):
+    """The candidate as 2B produces it, optionally with a poisoned block."""
+    base = strip_results(src)
+    out = mutate(EFF_ANCHOR, EFF_ANCHOR + (PROD_BLOCK if block is None
+                                           else block), src=base)
     if clear:
         out = mutate(CLEAR_ANCHOR, CLEAR_ANCHOR + CLEAR_BLOCK, src=out)
     return out
+
+
+def test_reassembled_candidate_is_the_real_tracker():
+    """The base the controls mutate must be production, byte-for-byte."""
+    check("strip + re-add reproduces the real tracker",
+          with_results() == CAND)
+    check("stripped base lacks the result block",
+          '_LAST_EVAL["results"][' not in strip_results())
+    check("production block is the registered canonical form",
+          RESULT_BLOCK in CAND)
 
 
 def test_registered_result_block_passes():
@@ -91,6 +124,29 @@ def test_registered_result_block_passes():
           v["telemetry"]["result_write_count"] == 1)
     check("sibling placement proven",
           v["telemetry"]["result_is_sibling_after_effective_stop"] is True)
+
+
+def test_results_clear_after_publish_is_refused():
+    """The dangerous intermediate state: new token beside OLD result telemetry.
+
+    Dedicated control for the results store, mirroring the packet one. Inverting
+    only the results clear leaves the packets ordering correct, so this proves
+    the results store gets its own stale-evidence protection rather than
+    inheriting the packet check's verdict.
+    """
+    v = gate(mutate(
+        '    _LAST_EVAL["results"].clear()\n'
+        '    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ',
+        '    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ\n'
+        '    _LAST_EVAL["results"].clear()'))
+    check("results cleared AFTER publish -> gate FAILS", v["verdict"] == "FAIL")
+    check("named as a results ordering violation",
+          any("results clear() must precede" in f for f in v["failures"]),
+          v["failures"])
+    check("packets ordering still reported correct",
+          v["telemetry"]["clear_before_publish"] is True)
+    check("AST equality unaffected (ordering is the only fault)",
+          v["normalized_ast_identical"] is True)
 
 
 def test_A_adjacent_decision_mutation_is_caught():
@@ -175,14 +231,13 @@ def test_H_duplicate_result_capture_is_refused():
     check("H: duplicate result_write counted",
           v["telemetry"]["result_write_count"] == 2)
     check("H: gate fails on duplication", v["verdict"] == "FAIL")
-    check("H: names duplication",
-          any("duplicate result_write" in f for f in v["failures"]),
-          v["failures"])
+    check("H: names the result_write count",
+          any("result_write" in f for f in v["failures"]), v["failures"])
 
 
 def test_I_capture_before_computation_is_refused():
     """Moved ABOVE the assignment: the local would be stale or unbound."""
-    moved = mutate(EFF_ANCHOR, RESULT_BLOCK + EFF_ANCHOR, src=CAND)
+    moved = mutate(EFF_ANCHOR, PROD_BLOCK + EFF_ANCHOR, src=strip_results())
     moved = mutate(CLEAR_ANCHOR, CLEAR_ANCHOR + CLEAR_BLOCK, src=moved)
     v = gate(moved)
     check("I: placement above the computation -> not a sibling-after",
@@ -191,6 +246,9 @@ def test_I_capture_before_computation_is_refused():
     check("I: names placement",
           any("immediately following" in f for f in v["failures"]),
           v["failures"])
+    check("I: gate does not report it as a count problem",
+          v["telemetry"]["result_write_count"] == 1,
+          v["telemetry"]["result_write_count"])
 
 
 def test_J_reformatting_only_still_registers():
@@ -215,15 +273,43 @@ def test_result_written_but_never_cleared_is_refused():
           any("never cleared" in f for f in v["failures"]), v["failures"])
 
 
-def test_result_telemetry_not_yet_required():
-    """The real tracker has no result block at 2A'; the gate must still pass."""
-    check("RESULT_TELEMETRY_REQUIRED is False at 2A'",
-          td.RESULT_TELEMETRY_REQUIRED is False)
+def test_result_telemetry_is_required_and_present():
+    """Post-2B the block is mandatory, so its removal must be caught.
+
+    Reclassified from the 2A' form, which asserted the flag was False -- an
+    assertion pinned to a phase rather than to an invariant. The invariant is
+    that the flag and the tracker agree.
+    """
+    check("RESULT_TELEMETRY_REQUIRED is True post-2B",
+          td.RESULT_TELEMETRY_REQUIRED is True)
     v = gate(CAND)
-    check("unmodified tracker still PASSes", v["verdict"] == "PASS",
+    check("real tracker PASSes with the result block", v["verdict"] == "PASS",
           v["failures"])
-    check("no result telemetry present yet",
-          v["result_telemetry_present"] is False)
+    check("result telemetry present in production",
+          v["result_telemetry_present"] is True)
+
+
+def test_removing_the_result_capture_is_caught():
+    """The capture cannot be silently dropped while v2 claims to carry it."""
+    v = gate(strip_results())
+    check("stripped capture -> gate FAILS", v["verdict"] == "FAIL")
+    check("stripped capture -> normalized AST still identical",
+          v["normalized_ast_identical"] is True)
+    check("names the missing result_write",
+          any("result_write: expected 1, got 0" in f for f in v["failures"]),
+          v["failures"])
+
+
+def test_store_initializer_key_drift_is_caught():
+    """The registered initializer is not a free-form dict."""
+    v = gate(mutate('    "results": {},         # symbol -> decision-RESULT',
+                    '    "results": {},\n    "sneak": {},         # x'))
+    check("extra store key -> gate FAILS", v["verdict"] == "FAIL")
+    check("names store drift",
+          any("store initializer drift" in f for f in v["failures"]),
+          v["failures"])
+    check("store keys are exactly the registered three",
+          gate(CAND)["store_keys"] == td.REGISTERED_STORE_KEYS)
 
 
 def gate(cand):
@@ -243,8 +329,13 @@ def test_gate_passes_on_the_real_tracker():
           v["normalized_ast_identical"] is True)
     check("tracker source DOES differ from the tag (gate is not vacuous)",
           v["source_differs"] is True)
-    check("all 7 registered telemetry nodes present",
-          len(v["registered_telemetry_nodes"]) == 7,
+    # Phase-invariant: compare against the registration table rather than a
+    # literal count. The hardcoded 7 broke the moment 2B registered the result
+    # nodes, which is the signature of an assertion pinned to a phase instead of
+    # to an invariant. The invariant is "every registered kind is present".
+    check("every registered telemetry kind is present in the tracker",
+          sorted(v["registered_telemetry_nodes"])
+          == sorted(n for n, _ in td.REGISTERED),
           v["registered_telemetry_nodes"])
     check("reference contains no telemetry",
           v["reference_telemetry_nodes"] == [], v["reference_telemetry_nodes"])
@@ -368,14 +459,22 @@ def test_capture_moved_after_entry_day_skip_is_caught():
 
 # ---- 6. token published before clearing ---------------------------------
 def test_token_published_before_clear_is_caught():
+    # Anchor widened by 2B: the results clear now sits between these two lines,
+    # so the old two-line anchor no longer existed. The break was the control
+    # working as intended -- it refused to run against source it did not match,
+    # rather than silently mutating nothing and passing.
     v = gate(mutate(
         '    _LAST_EVAL["packets"].clear()\n'
+        '    _LAST_EVAL["results"].clear()\n'
         '    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ',
         '    _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ\n'
-        '    _LAST_EVAL["packets"].clear()'))
+        '    _LAST_EVAL["packets"].clear()\n'
+        '    _LAST_EVAL["results"].clear()'))
     check("publish-before-clear: FAIL", v["verdict"] == "FAIL")
     check("reported as an ordering violation",
           reason_present(v, "clear() must precede"), v["failures"])
+    check("BOTH stores' ordering is reported, not just packets",
+          reason_present(v, "results clear() must precede"), v["failures"])
     check("the AST equality check still passes (ordering is the only fault)",
           v["normalized_ast_identical"] is True)
 

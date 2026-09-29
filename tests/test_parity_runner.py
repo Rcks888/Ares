@@ -322,7 +322,17 @@ def test_schema_and_boundaries():
               "production_state_hash_before", "production_state_hash_after",
               "shadow_exception_type", "inline_exception_type"):
         check(f"schema has {f}", f in recs["ABM"])
-    check("schema version 1", recs["ABM"]["record_schema_version"] == 1)
+    # Single-sourced from the builder rather than pinned to a literal, which
+    # broke at the v1 -> v2 bump.
+    check(f"schema version {sc.RECORD_SCHEMA_VERSION}",
+          recs["ABM"]["record_schema_version"] == sc.RECORD_SCHEMA_VERSION,
+          recs["ABM"]["record_schema_version"])
+    # observe_cycle was called WITHOUT results_fn here, so no effective-stop
+    # evidence exists and the basis is honestly absent rather than guessed. The
+    # production bridge always wires it; test_parity_hook asserts that.
+    check("no results_fn -> basis is None, not a fabricated value",
+          recs["ABM"]["inline_effective_stop_basis"] is None,
+          recs["ABM"]["inline_effective_stop_basis"])
     check("cycle_id shared across records",
           recs["ABM"]["cycle_id"] == recs["SDGR"]["cycle_id"])
     ab = recs["ABM"]["abm_equality_boundary"]

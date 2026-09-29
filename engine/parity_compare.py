@@ -54,7 +54,9 @@ import json
 
 from engine.tracker_compat import CONTRACT_VERSION, STORED_2DP
 
-RECORD_SCHEMA_VERSION = 1
+# v2 adds inline_effective_stop (now the exact captured local, not a None
+# placeholder) and inline_effective_stop_basis. v1 records are never rewritten.
+RECORD_SCHEMA_VERSION = 2
 
 # Asserted against engine/tracker.py by tests/test_parity_compare.py.
 MARKER_CONTRACT = '  Error checking {trade[\'symbol\']}: {e}'
@@ -217,6 +219,45 @@ def classify_result(inline_status, shadow_status, inline_after=None,
     return MATCH, []
 
 
+# Schema v2 effective-stop provenance. Every value corresponds to a demonstrated
+# control-flow path in tracker.check_open_trades; there is deliberately no
+# catch-all, so an unexplained absence yields None and fails the validator
+# rather than being labelled with a guess.
+BASIS_CAPTURED = "captured_inline_local"
+BASIS_ENTRY_DAY = "not_computed_entry_day_skip"
+BASIS_INLINE_FAILURE = "not_computed_inline_failure"
+EFFECTIVE_STOP_BASES = (BASIS_CAPTURED, BASIS_ENTRY_DAY, BASIS_INLINE_FAILURE)
+
+
+def effective_stop_evidence(results, symbol, cycle_token, bar, entry_date,
+                            inline_failed):
+    """(inline_effective_stop, basis) for one symbol.
+
+    The tracker writes the result unconditionally, immediately after computing
+    effective_stop, so presence and absence are both informative:
+
+      present, token current   -> the exact unrounded local the decision used
+      absent, entry-day skip   -> the tracker CONTINUEd before computing it
+      absent, inline failed    -> the inline path died before reaching it
+      absent, otherwise        -> unexplained; basis None, validator rejects
+
+    A result carrying a superseded cycle_token is treated as ABSENT, never as a
+    value. That is the same stale-evidence rule the packet path uses: an older
+    invocation's number is not weaker evidence, it is wrong evidence.
+    """
+    entry = (results or {}).get(symbol)
+    if isinstance(entry, dict) and entry.get("cycle_token") == cycle_token \
+            and cycle_token is not None \
+            and "inline_effective_stop" in entry:
+        return entry["inline_effective_stop"], BASIS_CAPTURED
+    if bar is not None and entry_date is not None \
+            and bar.get("bar_date") == entry_date:
+        return None, BASIS_ENTRY_DAY
+    if inline_failed:
+        return None, BASIS_INLINE_FAILURE
+    return None, None
+
+
 def build_record(symbol, entry_date, timestamp, lineage,
                  inline_status, shadow_status,
                  inline_before=None, inline_after=None,
@@ -226,7 +267,9 @@ def build_record(symbol, entry_date, timestamp, lineage,
                  shadow_exception_message=None,
                  production_state_hash_before=None,
                  production_state_hash_after=None,
-                 contract=None, bar=None, capture_defect=None):
+                 contract=None, bar=None, capture_defect=None,
+                 inline_effective_stop=None,
+                 inline_effective_stop_basis=None):
     """Assemble one comparison event. Pure; performs no I/O.
 
     `would_change_action` is True only for a decision-changing mismatch. It is
@@ -287,10 +330,13 @@ def build_record(symbol, entry_date, timestamp, lineage,
         # packet_not_a_mapping, packet_stale, packet_schema_drift, or None when
         # the packet was accepted.
         "capture_defect": capture_defect,
-        # tracker never STORES effective_stop -- it is a local in its exit chain --
-        # so inline_effective_stop is None by construction on every record. Kept
-        # for the module side's value; do not compare the two for equality.
-        "inline_effective_stop": pick(inline_after, "effective_stop"),
+        # Schema v2: the EXACT unrounded local the inline decision used, copied
+        # by the registered tracker result telemetry. Under v1 this was
+        # pick(inline_after, "effective_stop"), which was None on every record
+        # because the tracker never stores it -- the value lives only as a local
+        # and its sub-cent precision is destroyed by round(x, 2) on persist.
+        "inline_effective_stop": inline_effective_stop,
+        "inline_effective_stop_basis": inline_effective_stop_basis,
         "shadow_effective_stop": pick(shadow_after, "effective_stop"),
         "inline_scaled_out": pick(inline_after, "scaled_out"),
         "shadow_scaled_out": pick(shadow_after, "scaled_out"),

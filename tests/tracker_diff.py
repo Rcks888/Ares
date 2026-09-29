@@ -51,14 +51,17 @@ REGISTERED_PACKET_FIELDS = ("cycle_token", "price", "price_source", "rsi",
 # differed. The exact local is therefore copied at its computation point rather
 # than reconstructed.
 REGISTERED_RESULT_FIELDS = ("cycle_token", "inline_effective_stop")
+# Exact top-level shape of the store initializer. Reconciling the 2B node count
+# exposed that is_module_store_decl accepted ANY Dict, so adding "results": {}
+# produced no new node -- and an arbitrary key could have been added to the
+# registered initializer without the count moving. Pinned explicitly.
+REGISTERED_STORE_KEYS = ("cycle_token", "packets", "results")
 # The authoritative local the result block copies.
 EFFECTIVE_STOP_LOCAL = "effective_stop"
-# Flipped to True by 2B, once engine/tracker.py actually contains the block.
-# Until then the nodes are PERMITTED and fully structurally validated when
-# present, but not required -- so this registration commit can land, and be
-# proven against synthetic candidates, without the gate failing on a tracker
-# that does not yet have the code.
-RESULT_TELEMETRY_REQUIRED = False
+# Flipped True by 2B, now that engine/tracker.py contains the block. The nodes
+# are no longer merely permitted: absence is a failure, so the capture cannot be
+# silently removed while the evidence schema still claims to carry it.
+RESULT_TELEMETRY_REQUIRED = True
 # Inputs that must all resolve BEFORE the packet is captured.
 DECISION_INPUTS = ("current_price", "price_source", "current_rsi", "today",
                    "latest")
@@ -266,6 +269,14 @@ def telemetry_report(src):
            "store_reads_outside_capture": [], "persisted": [],
            "telemetry_influences_logic": [], "parity_references": []}
 
+    # exact store initializer shape
+    rep["store_keys"] = None
+    sd = [n for k, n in removed if k == "module_store_decl"]
+    if len(sd) == 1:
+        ks = [k.value for k in sd[0].value.keys if isinstance(k, ast.Constant)]
+        if len(ks) == len(sd[0].value.keys):
+            rep["store_keys"] = tuple(ks)
+
     # exact packet field set
     pw = [n for k, n in removed if k == "packet_write"]
     if len(pw) == 1:
@@ -464,6 +475,12 @@ def evaluate(ref_src=None, cand_src=None):
         if got != want:
             v["failures"].append(f"registered node {k}: expected {want}, got {got}")
 
+    v["store_keys"] = rep.get("store_keys")
+    if rep.get("store_keys") != REGISTERED_STORE_KEYS:
+        v["failures"].append(
+            f"store initializer drift: got {rep.get('store_keys')}, "
+            f"expected {REGISTERED_STORE_KEYS}")
+
     # --- registered decision-result telemetry ----------------------------
     n_rw = rep.get("result_write_count", 0)
     n_rc = rep.get("results_clear_count", 0)
@@ -561,8 +578,9 @@ def summary(v):
         f"tracker source differs from rollback tag  : "
         f"{'YES' if v['source_differs'] else 'NO'}",
         f"registered telemetry nodes found          : "
-        f"{len(v.get('registered_telemetry_nodes', []))}/7  "
-        f"{mark(len(v.get('registered_telemetry_nodes', [])) == 7)}",
+        f"{len(v.get('registered_telemetry_nodes', []))}/{len(REGISTERED)}  "
+        f"{mark(sorted(v.get('registered_telemetry_nodes', []))
+               == sorted(n for n, _ in REGISTERED))}",
         f"packet schema                             : "
         f"{mark(v.get('packet_fields') == REGISTERED_PACKET_FIELDS)}",
         f"clear-before-publish ordering             : "

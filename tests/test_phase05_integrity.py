@@ -28,6 +28,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+# Registered telemetry shape is single-sourced from the tracker-diff contract, so
+# a registration change cannot leave these suites asserting a stale shape.
+import tracker_diff as td  # noqa: E402
 
 from engine import parity_runner as pr  # noqa: E402
 from engine import parity_compare as pc  # noqa: E402
@@ -455,8 +460,29 @@ def test_registered_schema_is_the_single_source_of_truth():
                                        if isinstance(x, ast.Name)}
                       for tgt in n.targets)
               and isinstance(n.value, ast.Dict)]
-    check("exactly one packet-writing assignment", len(writes) == 1, len(writes))
-    if writes:
+    def for_store(store):
+        return [n for n in writes for tg in n.targets
+                if isinstance(tg, ast.Subscript)
+                and isinstance(tg.value, ast.Subscript)
+                and isinstance(tg.value.slice, ast.Constant)
+                and tg.value.slice.value == store]
+
+    packets = for_store("packets")
+    results = for_store("results")
+    check("exactly one packet-writing assignment", len(packets) == 1,
+          len(packets))
+    check("exactly one result-writing assignment", len(results) == 1,
+          len(results))
+    check("every dict write targets a registered sub-store",
+          len(packets) + len(results) == len(writes), len(writes))
+    if results:
+        rkeys = {k.value for k in results[0].value.keys
+                 if isinstance(k, ast.Constant)}
+        check("tracker writes exactly the registered result field set",
+              rkeys == set(td.REGISTERED_RESULT_FIELDS),
+              sorted(rkeys ^ set(td.REGISTERED_RESULT_FIELDS)))
+    if packets:
+        writes = packets
         keys = {k.value for k in writes[0].value.keys
                 if isinstance(k, ast.Constant)}
         check("tracker writes exactly the registered field set",

@@ -14,6 +14,7 @@ SDGR valuable shadow subjects.
 import ast
 import hashlib
 import json
+import math
 import platform
 import re
 import subprocess
@@ -132,8 +133,89 @@ V1_RECORD_FIELDS = frozenset({
     "tracker_source_hash", "would_change_action",
 })
 
-RECORD_FIELDS_BY_VERSION = {1: V1_RECORD_FIELDS}
+# v2 = v1 plus the effective-stop evidence. V1 is now frozen forever and is
+# NEVER re-derived from the builder: the four records written before this field
+# existed must keep being judged against the schema they were written under.
+V2_RECORD_FIELDS = frozenset(V1_RECORD_FIELDS | {
+    "inline_effective_stop_basis",
+})
+
+RECORD_FIELDS_BY_VERSION = {1: V1_RECORD_FIELDS, 2: V2_RECORD_FIELDS}
 CURRENT_RECORD_SCHEMA = max(RECORD_FIELDS_BY_VERSION)
+
+# Permitted values of inline_effective_stop_basis in v2. Each maps to a
+# demonstrated control-flow path in tracker.check_open_trades; there is no
+# catch-all, so an unexplained absence carries basis None and is REJECTED rather
+# than silently labelled.
+V2_EFFECTIVE_STOP_BASES = frozenset({
+    "captured_inline_local",
+    "not_computed_entry_day_skip",
+    "not_computed_inline_failure",
+})
+
+
+def _is_ancestor_or_same(candidate, base):
+    """Is `candidate` the commit `base`, or a descendant of it?
+
+    Ancestry, not lexical comparison: SHAs have no meaningful ordering, so a
+    string >= test would be arbitrary. Returns None when the question cannot be
+    answered -- an unknown or ambiguous ref must not be reported as either
+    satisfied or violated.
+    """
+    if not candidate or not base:
+        return None
+    try:
+        full_c = _git("rev-parse", "--verify", f"{candidate}^{{commit}}").strip()
+        full_b = _git("rev-parse", "--verify", f"{base}^{{commit}}").strip()
+    except Exception:
+        return None
+    if not full_c or not full_b:
+        return None
+    if full_c == full_b:
+        return True
+    r = subprocess.run(["git", "-C", str(ROOT), "merge-base",
+                        "--is-ancestor", full_b, full_c],
+                       capture_output=True, text=True)
+    if r.returncode not in (0, 1):
+        return None
+    return r.returncode == 0
+
+
+def schema_activation_consistency(records, activation_commit):
+    """Cross-check each record's schema version against the code that wrote it.
+
+    A record's OWN record_schema_version governs field validation; this is a
+    separate consistency question: did a v1 record get written by post-activation
+    code, or a v2 record by pre-activation code? Either means the declared schema
+    and the executing code disagree.
+
+    Returns (failures, unresolved). When the activation commit is unknown the
+    check is reported as UNRESOLVED rather than passing -- a check that cannot
+    run has not succeeded.
+    """
+    failures, unresolved = [], []
+    if not activation_commit:
+        return failures, ["schema-v2 activation commit not recorded"]
+    for n, r in enumerate(records, 1):
+        pc = r.get("production_commit")
+        ver = r.get("record_schema_version")
+        after = _is_ancestor_or_same(pc, activation_commit)
+        if after is None:
+            # Short SHAs resolve against repository history; an ambiguous or
+            # missing ref is unresolved, never assumed.
+            unresolved.append(
+                f"record {n} production_commit {pc!r} not resolvable against "
+                f"activation {activation_commit[:7]}")
+            continue
+        if ver == 1 and after:
+            failures.append(
+                f"record {n} declares schema 1 but was written at or after the "
+                f"v2 activation commit ({pc})")
+        elif ver is not None and ver >= 2 and not after:
+            failures.append(
+                f"record {n} declares schema {ver} but was written before the "
+                f"v2 activation commit ({pc})")
+    return failures, unresolved
 
 
 def frozen_record_fields(version):
@@ -258,6 +340,28 @@ def _collection_declared():
             "ARES_PARITY is unset before the invocation after being assigned; "
             "the declaration has no effect")
     return out
+
+
+def _git(*args):
+    """git stdout, or '' on failure. Never raises for a missing ref."""
+    r = subprocess.run(["git", "-C", str(ROOT)] + list(args),
+                       capture_output=True, text=True)
+    return r.stdout if r.returncode == 0 else ""
+
+
+def _schema_v2_activation():
+    """The commit that activated schema v2, as recorded in the baseline.
+
+    Read from the baseline rather than hardcoded, because the activating commit's
+    own SHA does not exist until it has been made. A placeholder in the
+    implementation would have to be amended afterwards, rewriting a commit whose
+    whole purpose is to be the stable anchor.
+    """
+    try:
+        with open(ROOT / "tools" / "parity_baseline.json") as fh:
+            return json.load(fh).get("schema_v2_activation_commit")
+    except Exception:
+        return None
 
 
 def _git_show(rev, path):
@@ -404,10 +508,66 @@ def _parity_output_state():
             incomplete.append(
                 f"record {n} lineage incomplete: "
                 f"{[k for k in lineage if r.get(k) in (None, '')]}")
+        # v2 effective-stop evidence. Checked per record against its OWN
+        # version, so v1 records are not retroactively required to carry it.
+        ver = r.get("record_schema_version")
+        if ver is not None and ver >= 2:
+            basis = r.get("inline_effective_stop_basis")
+            stop = r.get("inline_effective_stop")
+            if "inline_effective_stop_basis" not in r:
+                drift.append(f"record {n} missing inline_effective_stop_basis")
+            elif basis not in V2_EFFECTIVE_STOP_BASES:
+                drift.append(
+                    f"record {n} unregistered effective-stop basis {basis!r}")
+            elif basis == "captured_inline_local":
+                # A captured basis asserts a value was copied. None here would
+                # mean the record claims evidence it does not carry.
+                #
+                # bool is EXCLUDED explicitly: it is a subclass of int, so
+                # isinstance(True, (int, float)) is True and a boolean would have
+                # been accepted as a price. Non-finite floats are excluded too --
+                # NaN compares unequal to itself, so a NaN effective stop would
+                # make every equality comparison in the parity record silently
+                # false rather than flagged.
+                if isinstance(stop, bool) or not isinstance(stop, (int, float)):
+                    drift.append(
+                        f"record {n} basis {basis} but inline_effective_stop "
+                        f"is {stop!r}")
+                elif not math.isfinite(stop):
+                    drift.append(
+                        f"record {n} non-finite inline_effective_stop {stop!r}")
+            elif stop is not None:
+                # A not_computed basis asserts the tracker never produced a
+                # value; a number alongside it is self-contradictory.
+                drift.append(
+                    f"record {n} basis {basis} but carries a value {stop!r}")
         ident = (r.get("cycle_id"), r.get("symbol"))
         if ident in seen:
             drift.append(f"record {n} duplicate cycle/symbol identity {ident}")
         seen.add(ident)
+
+    # Commit-aware consistency: the record's own version governs field
+    # validation; this asks whether that version agrees with the code that wrote
+    # it. Kept separate from field validation so one cannot mask the other.
+    activation = _schema_v2_activation()
+    act_fail, act_unresolved = schema_activation_consistency(recs, activation)
+    has_v2 = any((r.get("record_schema_version") or 0) >= 2 for r in recs)
+    out["schema_activation"] = {
+        "activation_commit": activation,
+        "failures": act_fail,
+        "unresolved": act_unresolved,
+        # Before any v2 record exists the anchor is legitimately unrecorded, so
+        # an absent activation commit is informational. Once a v2 record is
+        # present an unresolvable anchor is a real hole and fails closed: the
+        # check would otherwise be reported green while never having run.
+        "enforced": bool(has_v2),
+    }
+    # Only genuine version/code CONTRADICTIONS are record drift. An unresolvable
+    # or unrecorded anchor is not a property of any record, so folding it into
+    # drift made a missing baseline field masquerade as record corruption and
+    # displaced the more specific LINEAGE_INCOMPLETE state. It is surfaced as its
+    # own gate instead, which still fails closed without mislabelling records.
+    drift.extend(act_fail)
 
     hist = _append_only_history()
     out["append_only"] = hist
@@ -826,6 +986,12 @@ def main():
         # not started" and would therefore have failed permanently from the first
         # write onward. Now phase-aware: see _parity_output_state().
         "parity_output_state_valid": snap["parity_output"]["valid"],
+        # Separate gate, not record drift: once any v2 record exists the
+        # activation anchor must be resolvable, or the commit-awareness check has
+        # silently not run. False only when it is both required and unavailable.
+        "schema_v2_activation_resolvable": not (
+            snap["parity_output"].get("schema_activation", {}).get("enforced")
+            and snap["parity_output"]["schema_activation"].get("unresolved")),
         "parity_output_trackable": snap["parity_output_tracking"]["trackable"],
         # stdout capture is only safe while evaluation is sequential.
         "single_threaded_verified": not _has_concurrency(),

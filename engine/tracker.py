@@ -12,6 +12,7 @@ from engine import sample
 _LAST_EVAL = {
     "cycle_token": None,   # identity of the CURRENT invocation
     "packets": {},         # symbol -> decision-input packet for that invocation
+    "results": {},         # symbol -> decision-RESULT copy for that invocation
 }
 _EVAL_CYCLE_SEQ = 0        # monotonic in-process counter; not persisted
 
@@ -828,6 +829,7 @@ def check_open_trades():
     global _EVAL_CYCLE_SEQ
     _EVAL_CYCLE_SEQ += 1
     _LAST_EVAL["packets"].clear()
+    _LAST_EVAL["results"].clear()
     _LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ
 
     for trade in trades:
@@ -881,6 +883,15 @@ def check_open_trades():
                 updated = True
 
             effective_stop = max(trade['stop_loss'], trailing_stop)
+            # Copy of the value the decision below actually uses. trailing_stop
+            # may be an UNROUNDED ratchet while only round(x, 2) is persisted,
+            # so a ratchet to 48.674 stores 48.67 and leaves pre == post: no
+            # function of stored state can recover what was used. Copied here,
+            # never read back by any decision path.
+            _LAST_EVAL["results"][trade['symbol']] = {
+                "cycle_token": _LAST_EVAL["cycle_token"],
+                "inline_effective_stop": effective_stop,
+            }
 
             # Scale-out: sell 50% at TP, let rest ride
             if scale_out_enabled and not trade.get('scaled_out', False):

@@ -222,7 +222,13 @@ def test_unknown_schema_version_fails_closed():
 
 def test_v1_record_with_a_v2_only_field_is_drift():
     """Forward-dated fields must not pass under a v1 declaration."""
-    r = gate_with(ON, [good_record(inline_effective_stop_basis="x")], git=True)
+    # Must declare v1 EXPLICITLY. This originally relied on good_record
+    # defaulting to v1, so once v2 landed the fixture declared v2 and the basis
+    # was a legitimate field -- the test would then have been passing for the
+    # wrong reason, tripping the basis VALUE check instead of the extra-field
+    # check it exists to prove.
+    r = gate_with(ON, [good_record(record_schema_version=1,
+                                   inline_effective_stop_basis="x")], git=True)
     check("v2-only field under v1 -> SCHEMA_DRIFT",
           r["state"] == "SCHEMA_DRIFT", r["state"])
     check("names the unregistered field",
@@ -230,9 +236,113 @@ def test_v1_record_with_a_v2_only_field_is_drift():
           r["failures"])
 
 
+def test_v2_basis_value_matrix():
+    """Every allowed pairing accepted, every contradiction rejected."""
+    # Written out rather than looped: this suite forbids conditionally-executed
+    # check() calls so assertion counts stay phase-invariant, and a for body is
+    # conditional by that rule. The guard caught this exact construction.
+    def drifts(basis, val):
+        r = gate_with(ON, [good_record(inline_effective_stop_basis=basis,
+                                       inline_effective_stop=val)], git=True)
+        return r["state"] == "SCHEMA_DRIFT", (r["state"], r["failures"])
+
+    CAP, ED = "captured_inline_local", "not_computed_entry_day_skip"
+    IF_ = "not_computed_inline_failure"
+
+    bad, got = drifts(CAP, 48.674)
+    check("accepted: captured basis with an exact value", not bad, got)
+    bad, got = drifts(CAP, 48)
+    check("accepted: captured basis with an int price", not bad, got)
+    bad, got = drifts(ED, None)
+    check("accepted: entry-day basis with no value", not bad, got)
+    bad, got = drifts(IF_, None)
+    check("accepted: inline-failure basis with no value", not bad, got)
+
+    bad, got = drifts(ED, 48.674)
+    check("rejected: value alongside entry-day basis", bad, got)
+    bad, got = drifts(IF_, 48.674)
+    check("rejected: value alongside inline-failure basis", bad, got)
+    bad, got = drifts(CAP, None)
+    check("rejected: captured basis claiming evidence it lacks", bad, got)
+    bad, got = drifts("unknown_basis", None)
+    check("rejected: unknown basis with no value", bad, got)
+    bad, got = drifts("unknown_basis", 48.674)
+    check("rejected: unknown basis with a value", bad, got)
+    bad, got = drifts(CAP, True)
+    check("rejected: boolean as a price", bad, got)
+    bad, got = drifts(CAP, float("nan"))
+    check("rejected: NaN price", bad, got)
+    bad, got = drifts(CAP, float("inf"))
+    check("rejected: infinite price", bad, got)
+    bad, got = drifts(CAP, "48.674")
+    check("rejected: string price", bad, got)
+
+    # bool deserves its own explicit control: it is a subclass of int, so a
+    # naive isinstance(v, (int, float)) accepts True as a price.
+    r = gate_with(ON, [good_record(inline_effective_stop=True)], git=True)
+    check("bool is rejected despite being an int subclass",
+          r["state"] == "SCHEMA_DRIFT", r["state"])
+    check("bool rejection names the field",
+          any("inline_effective_stop" in f for f in r["failures"]),
+          r["failures"])
+
+
+def test_v2_basis_set_is_frozen():
+    """A fourth basis must fail until registered through a reviewed case."""
+    check("exactly three registered bases",
+          len(pps.V2_EFFECTIVE_STOP_BASES) == 3,
+          sorted(pps.V2_EFFECTIVE_STOP_BASES))
+    check("validator and producer agree on the basis set",
+          pps.V2_EFFECTIVE_STOP_BASES == set(sc.EFFECTIVE_STOP_BASES),
+          sorted(pps.V2_EFFECTIVE_STOP_BASES ^ set(sc.EFFECTIVE_STOP_BASES)))
+    r = gate_with(ON, [good_record(
+        inline_effective_stop_basis="not_computed_some_new_reason",
+        inline_effective_stop=None)], git=True)
+    check("a plausible-looking fourth basis is refused",
+          r["state"] == "SCHEMA_DRIFT", r["state"])
+
+
+def test_missing_basis_field_is_drift():
+    r = good_record()
+    r.pop("inline_effective_stop_basis")
+    out = gate_with(ON, [r], git=True)
+    check("v2 record without the basis field -> SCHEMA_DRIFT",
+          out["state"] == "SCHEMA_DRIFT", out["state"])
+    check("named as missing",
+          any("inline_effective_stop_basis" in f for f in out["failures"]),
+          out["failures"])
+
+
+def test_schema_activation_is_ancestry_based():
+    """Lexical SHA comparison would be arbitrary; ancestry is the question."""
+    head = pps._git("rev-parse", "--short", "HEAD").strip()
+    check("a commit is its own activation basis",
+          pps._is_ancestor_or_same(head, head) is True)
+    check("unknown ref is UNRESOLVED, not False",
+          pps._is_ancestor_or_same("zzzzzzz", head) is None)
+    check("missing production_commit is UNRESOLVED",
+          pps._is_ancestor_or_same(None, head) is None)
+    f, u = pps.schema_activation_consistency(
+        [{"production_commit": head, "record_schema_version": 1}], head)
+    check("v1 declared at/after activation is inconsistent", bool(f), f)
+    f, u = pps.schema_activation_consistency(
+        [{"production_commit": "zzzzzzz", "record_schema_version": 2}], head)
+    check("unresolvable anchor is reported, not passed", bool(u), u)
+    check("unresolvable anchor is not silently a failure either", f == [], f)
+    f, u = pps.schema_activation_consistency([], None)
+    check("no activation recorded -> reported unresolved", bool(u), u)
+
+
 def test_schema_is_derived_not_hardcoded():
     f = pps._builder_record_fields()
-    check("45 frozen fields derived", len(f) == 45, len(f))
+    # Compared against the CURRENT registered version, not a literal count. The
+    # hardcoded 45 was correct for v1 and wrong at v2; the invariant is that the
+    # builder and the newest registered schema agree exactly.
+    check("builder matches the current registered schema",
+          f == pps.frozen_record_fields(pps.CURRENT_RECORD_SCHEMA),
+          sorted(f ^ pps.frozen_record_fields(pps.CURRENT_RECORD_SCHEMA)))
+    check("v1 remains frozen at 45 fields and is NOT re-derived",
+          len(pps.V1_RECORD_FIELDS) == 45, len(pps.V1_RECORD_FIELDS))
     check("difference_class is in the derived set", "difference_class" in f)
     check("'verdict' is NOT a real field", "verdict" not in f)
     check("'result_class' is NOT a real field", "result_class" not in f)
@@ -267,8 +377,13 @@ def test_schema_underivable_is_a_failure():
 
 # ----------------------------------------------------------------- gate states
 def good_record(**over):
-    r = {k: "x" for k in pps.frozen_record_fields(1)}
+    # Fields come from the version the fixture DECLARES. Building from v1 while
+    # declaring the current version produced a record that was missing v2's
+    # basis field -- the validator was right and the fixture was wrong.
+    r = {k: "x" for k in pps.frozen_record_fields(sc.RECORD_SCHEMA_VERSION)}
     r.update({"record_schema_version": sc.RECORD_SCHEMA_VERSION,
+              "inline_effective_stop": 48.67,
+              "inline_effective_stop_basis": sc.BASIS_CAPTURED,
               "difference_class": sc.MATCH, "symbol": "ABM",
               "cycle_id": "c1", "timestamp": "2026-09-29T13:30:00Z",
               "production_commit": "abc1234",
@@ -342,7 +457,8 @@ def test_schema_valid_mismatch_record_is_rejected():
     bad = good_record(symbol="ABM",
                       difference_class=sc.DECISION_CHANGING_MISMATCH)
     check("mismatch record is schema-complete",
-          set(bad) == pps.frozen_record_fields(1))
+          set(bad) == pps.frozen_record_fields(sc.RECORD_SCHEMA_VERSION),
+          sorted(set(bad) ^ pps.frozen_record_fields(sc.RECORD_SCHEMA_VERSION)))
     r = gate_with(ON, [good_record(symbol="SDGR"), bad], git=True)
     check("schema-valid mismatch -> DECISION_CHANGING_MISMATCH_PRESENT",
           r["state"] == "DECISION_CHANGING_MISMATCH_PRESENT", r["state"])

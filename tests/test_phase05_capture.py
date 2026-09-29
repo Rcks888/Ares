@@ -16,6 +16,11 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+# Registered telemetry shape is single-sourced from the tracker-diff contract, so
+# a registration change cannot leave these suites asserting a stale shape.
+import tracker_diff as td  # noqa: E402
 
 from engine import tracker  # noqa: E402
 
@@ -121,7 +126,7 @@ def token():
 # ------------------------------------------------- 1. structural invariants --
 def test_store_shape_and_single_write_site():
     check("_LAST_EVAL exists with the registered shape",
-          set(tracker._LAST_EVAL) == {"cycle_token", "packets"},
+          set(tracker._LAST_EVAL) == set(td.REGISTERED_STORE_KEYS),
           sorted(tracker._LAST_EVAL))
     check("_EVAL_CYCLE_SEQ exists and is an int",
           isinstance(tracker._EVAL_CYCLE_SEQ, int))
@@ -131,7 +136,22 @@ def test_store_shape_and_single_write_site():
               and isinstance(tg.value, ast.Subscript)
               and isinstance(tg.value.value, ast.Name)
               and tg.value.value.id == "_LAST_EVAL"]
-    check("exactly one packet write site in tracker.py", len(writes) == 1,
+
+    def sub_writes(store):
+        return [n for n in writes for tg in n.targets
+                if isinstance(tg.value.slice, ast.Constant)
+                and tg.value.slice.value == store]
+
+    # Counted PER STORE. The original predicate matched any _LAST_EVAL[x][y]
+    # assignment, so 2B's result store made it read 2 and the assertion could
+    # only have been "fixed" by loosening it to 2 -- which would then accept a
+    # third, unregistered sub-store silently.
+    check("exactly one packet write site in tracker.py",
+          len(sub_writes("packets")) == 1, len(sub_writes("packets")))
+    check("exactly one result write site in tracker.py",
+          len(sub_writes("results")) == 1, len(sub_writes("results")))
+    check("no write site targets an unregistered sub-store",
+          len(sub_writes("packets")) + len(sub_writes("results")) == len(writes),
           len(writes))
 
 
@@ -426,8 +446,22 @@ def test_telemetry_footprint_is_exactly_four_statements():
              and (names(n) & {"_LAST_EVAL", "_EVAL_CYCLE_SEQ"})
              and not isinstance(n, (ast.For, ast.If, ast.Try, ast.While,
                                     ast.With, ast.FunctionDef))]
-    check("telemetry is exactly 4 statements", len(stmts) == 4,
-          [(type(s).__name__, s.lineno) for s in stmts])
+    # Derived from the registration table, not pinned to a count. The literal 4
+    # was correct for Phase 0.5 and wrong the moment 2B registered two more
+    # statements; repinning it to 6 would just defer the same breakage. The
+    # invariant is that EVERY telemetry statement in the function is a
+    # registered node, and that every in-function registered kind appears once.
+    in_fn_kinds = sorted(set(n for n, _ in td.REGISTERED)
+                         - {"module_store_decl", "module_seq_decl",
+                            "global_decl"})
+    kinds = [td.classify(s) for s in stmts]
+    check("every telemetry statement is a registered node",
+          all(k is not None for k in kinds),
+          [(type(s).__name__, s.lineno) for s, k in zip(stmts, kinds)
+           if k is None])
+    check("telemetry statements are exactly the in-function registered kinds",
+          sorted(k for k in kinds if k) == in_fn_kinds,
+          sorted(k for k in kinds if k))
 
     calls = []
     for s in stmts:

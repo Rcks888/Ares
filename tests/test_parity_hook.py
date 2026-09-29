@@ -21,6 +21,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "tests"))
+
+# Registered telemetry shape is single-sourced from the tracker-diff contract, so
+# a registration change cannot leave these suites asserting a stale shape.
+import tracker_diff as td  # noqa: E402
 
 FAILS = []
 COUNT = 0
@@ -284,7 +289,7 @@ def test_last_eval_contract():
     from engine import tracker
     check("tracker._LAST_EVAL exists", hasattr(tracker, "_LAST_EVAL"))
     check("_LAST_EVAL has the registered shape",
-          set(tracker._LAST_EVAL) == {"cycle_token", "packets"},
+          set(tracker._LAST_EVAL) == set(td.REGISTERED_STORE_KEYS),
           sorted(tracker._LAST_EVAL))
     check("tracker._EVAL_CYCLE_SEQ exists",
           isinstance(getattr(tracker, "_EVAL_CYCLE_SEQ", None), int))

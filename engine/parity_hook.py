@@ -52,6 +52,18 @@ def enabled():
     return os.environ.get(ENABLE_ENV) == "1"
 
 
+def _results():
+    """Read the completed invocation's decision-RESULT capture.
+
+    Symmetric with _packets and read on the same terms: AFTER the inline call,
+    read-only, never cleared or reordered by the bridge. A separate accessor
+    rather than a widened _packets tuple, so the Phase 0.5 packet contract and
+    its tests keep their exact shape.
+    """
+    store = getattr(tracker, "_LAST_EVAL", None) or {}
+    return store.get("cycle_token"), dict(store.get("results") or {})
+
+
 def _packets():
     """Read the completed invocation's decision-input capture.
 
@@ -120,8 +132,8 @@ def observed_check_open_trades():
     # outside the fail-open boundary.
     result, summary = parity_runner.observe_cycle(
         tracker, tracker.check_open_trades, tracker.load_trades,
-        parity_eval.evaluate, packets_fn=_packets, params_fn=_params,
-        lineage=_lineage())
+        parity_eval.evaluate, packets_fn=_packets, results_fn=_results,
+        params_fn=_params, lineage=_lineage())
     att, wrt = summary.get("attempted", 0), summary.get("written", 0)
     if att != wrt or summary.get("shadow_system_error") or summary.get("capture_error"):
         print(f"  [parity] attempted={att} written={wrt} "
