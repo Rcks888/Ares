@@ -44,6 +44,21 @@ SEQ = "_EVAL_CYCLE_SEQ"
 CAPTURE_FN = "check_open_trades"
 REGISTERED_PACKET_FIELDS = ("cycle_token", "price", "price_source", "rsi",
                             "bearish_div", "bar_date")
+# Decision-RESULT telemetry (schema v2 work). The inline effective stop is
+# computed from an UNROUNDED local that is never persisted, so no function of
+# stored pre/post state can recover it: a ratchet to 48.674 rounds back to the
+# stored 48.67, leaving pre == post while the value the decision actually used
+# differed. The exact local is therefore copied at its computation point rather
+# than reconstructed.
+REGISTERED_RESULT_FIELDS = ("cycle_token", "inline_effective_stop")
+# The authoritative local the result block copies.
+EFFECTIVE_STOP_LOCAL = "effective_stop"
+# Flipped to True by 2B, once engine/tracker.py actually contains the block.
+# Until then the nodes are PERMITTED and fully structurally validated when
+# present, but not required -- so this registration commit can land, and be
+# proven against synthetic candidates, without the gate failing on a tracker
+# that does not yet have the code.
+RESULT_TELEMETRY_REQUIRED = False
 # Inputs that must all resolve BEFORE the packet is captured.
 DECISION_INPUTS = ("current_price", "price_source", "current_rsi", "today",
                    "latest")
@@ -126,6 +141,52 @@ def is_packet_clear(n):
             and not n.value.args and not n.value.keywords)
 
 
+def is_results_clear(n):
+    """_LAST_EVAL["results"].clear() with no arguments."""
+    if not (isinstance(n, ast.Expr) and isinstance(n.value, ast.Call)):
+        return False
+    f = n.value.func
+    return (isinstance(f, ast.Attribute) and f.attr == "clear"
+            and _is_store_sub(f.value, "results")
+            and not n.value.args and not n.value.keywords)
+
+
+def is_result_write(n):
+    """_LAST_EVAL["results"][sym] = {"cycle_token": ..., "inline_...": ...}
+
+    Deliberately a BARE Assign with no surrounding conditional. A separate
+    results store needs no validity guard, and admitting a conditional into the
+    registered region would create somewhere for a decision branch to hide
+    inside the part the normalizer discards.
+
+    Value expressions are restricted to the store's own token and the
+    authoritative local. Any other expression -- a call, a trade read, an
+    arithmetic rederivation -- fails registration, so this block cannot quietly
+    become a second computation of the value it exists to copy.
+    """
+    if not (isinstance(n, ast.Assign) and len(n.targets) == 1):
+        return False
+    t = n.targets[0]
+    if not (isinstance(t, ast.Subscript) and _is_store_sub(t.value, "results")):
+        return False
+    if not isinstance(n.value, ast.Dict):
+        return False
+    keys = [k.value for k in n.value.keys if isinstance(k, ast.Constant)]
+    if len(keys) != len(n.value.keys):
+        return False
+    if tuple(keys) != REGISTERED_RESULT_FIELDS:
+        return False
+    for key, val in zip(keys, n.value.values):
+        if key == "cycle_token":
+            if not _is_store_sub(val, "cycle_token"):
+                return False
+        elif key == "inline_effective_stop":
+            if not (isinstance(val, ast.Name)
+                    and val.id == EFFECTIVE_STOP_LOCAL):
+                return False
+    return True
+
+
 def is_token_publish(n):
     """_LAST_EVAL["cycle_token"] = _EVAL_CYCLE_SEQ"""
     return (isinstance(n, ast.Assign) and len(n.targets) == 1
@@ -150,6 +211,8 @@ REGISTERED = (
     ("packet_clear", is_packet_clear),
     ("token_publish", is_token_publish),
     ("packet_write", is_packet_write),
+    ("results_clear", is_results_clear),
+    ("result_write", is_result_write),
 )
 
 
@@ -269,6 +332,39 @@ def telemetry_report(src):
         after = [l for l in branch_lns if l > write_ln]
         rep["capture_before_first_decision_branch"] = bool(after)
 
+    # --- decision-result telemetry placement -----------------------------
+    # "After the effective_stop assignment" is too weak: anywhere later in the
+    # function satisfies it, including after the exit decision has already been
+    # taken, where the local may no longer be the value that decision used.
+    # Required instead: the result write is the IMMEDIATELY FOLLOWING SIBLING of
+    # the assignment, in the same statement list. That also rejects moving the
+    # capture above the computation, which would copy a stale or unbound local.
+    rep["result_is_sibling_after_effective_stop"] = None
+    rep["result_write_count"] = rep["counts"].get("result_write", 0)
+    rep["results_clear_count"] = rep["counts"].get("results_clear", 0)
+    if rep["result_write_count"]:
+        found = False
+        for holder in ast.walk(fn):
+            body = getattr(holder, "body", None)
+            if not isinstance(body, list):
+                continue
+            for i, st in enumerate(body[:-1]):
+                if (isinstance(st, ast.Assign) and len(st.targets) == 1
+                        and isinstance(st.targets[0], ast.Name)
+                        and st.targets[0].id == EFFECTIVE_STOP_LOCAL
+                        and is_result_write(body[i + 1])):
+                    found = True
+        rep["result_is_sibling_after_effective_stop"] = found
+
+    # clear() must precede the token publication for results too, on the same
+    # reasoning as packets: publishing first leaves a new token beside
+    # prior-invocation results, which a token-validating reader would accept.
+    rep["results_clear_before_publish"] = None
+    if rep["results_clear_count"] and pub_ln:
+        rc_ln = line_of(is_results_clear)
+        if rc_ln:
+            rep["results_clear_before_publish"] = rc_ln < pub_ln
+
     # _LAST_EVAL must never be READ by decision logic, never persisted
     for n in ast.walk(tree):
         if isinstance(n, ast.Name) and n.id == STORE and isinstance(n.ctx,
@@ -367,6 +463,36 @@ def evaluate(ref_src=None, cand_src=None):
         got = rep["counts"].get(k, 0)
         if got != want:
             v["failures"].append(f"registered node {k}: expected {want}, got {got}")
+
+    # --- registered decision-result telemetry ----------------------------
+    n_rw = rep.get("result_write_count", 0)
+    n_rc = rep.get("results_clear_count", 0)
+    v["result_telemetry_required"] = RESULT_TELEMETRY_REQUIRED
+    v["result_telemetry_present"] = bool(n_rw)
+    want = 1 if RESULT_TELEMETRY_REQUIRED else None
+    if want is not None:
+        if n_rw != want:
+            v["failures"].append(
+                f"registered node result_write: expected {want}, got {n_rw}")
+        if n_rc != want:
+            v["failures"].append(
+                f"registered node results_clear: expected {want}, got {n_rc}")
+    else:
+        if n_rw > 1:
+            v["failures"].append(f"duplicate result_write nodes: {n_rw}")
+        if n_rc > 1:
+            v["failures"].append(f"duplicate results_clear nodes: {n_rc}")
+    if n_rw and not n_rc:
+        v["failures"].append(
+            "result telemetry written but never cleared: prior-invocation "
+            "results would survive into the next cycle")
+    if n_rw and rep.get("result_is_sibling_after_effective_stop") is not True:
+        v["failures"].append(
+            "result capture must be the statement immediately following the "
+            f"{EFFECTIVE_STOP_LOCAL} assignment")
+    if n_rc and rep.get("results_clear_before_publish") is not True:
+        v["failures"].append(
+            "results clear() must precede cycle_token publication")
 
     v["packet_fields"] = rep["packet_fields"]
     if rep["packet_fields"] != REGISTERED_PACKET_FIELDS:

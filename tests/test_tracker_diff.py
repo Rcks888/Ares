@@ -52,6 +52,180 @@ def mutate(old, new, src=None, count=1):
     return src.replace(old, new, count)
 
 
+# --------------------------------------------------------------------------
+# Decision-RESULT telemetry registration (2A'), proven on SYNTHETIC candidates.
+#
+# The registration lands before engine/tracker.py contains the block, so these
+# controls build the candidate themselves. That is deliberate: the proof that the
+# widened normalizer cannot be used as a hiding place must not depend on the
+# production file already having been edited.
+# --------------------------------------------------------------------------
+EFF_ANCHOR = "            effective_stop = max(trade['stop_loss'], trailing_stop)\n"
+RESULT_BLOCK = (
+    '            _LAST_EVAL["results"][trade[\'symbol\']] = {\n'
+    '                "cycle_token": _LAST_EVAL["cycle_token"],\n'
+    '                "inline_effective_stop": effective_stop,\n'
+    '            }\n')
+CLEAR_ANCHOR = '    _LAST_EVAL["packets"].clear()\n'
+CLEAR_BLOCK = '    _LAST_EVAL["results"].clear()\n'
+
+
+def with_results(src=None, block=None, clear=True):
+    """The candidate as 2B will produce it."""
+    src = CAND if src is None else src
+    out = mutate(EFF_ANCHOR, EFF_ANCHOR + (RESULT_BLOCK if block is None
+                                           else block), src=src)
+    if clear:
+        out = mutate(CLEAR_ANCHOR, CLEAR_ANCHOR + CLEAR_BLOCK, src=out)
+    return out
+
+
+def test_registered_result_block_passes():
+    v = gate(with_results())
+    check("canonical result block registers", v["verdict"] == "PASS",
+          v["failures"])
+    check("result telemetry detected", v["result_telemetry_present"] is True)
+    check("normalized AST still identical to rollback",
+          v["normalized_ast_identical"] is True, v.get("ast_divergence"))
+    check("result node counted once",
+          v["telemetry"]["result_write_count"] == 1)
+    check("sibling placement proven",
+          v["telemetry"]["result_is_sibling_after_effective_stop"] is True)
+
+
+def test_A_adjacent_decision_mutation_is_caught():
+    """Adjacent production logic must NOT be swallowed by the wider normalizer."""
+    poisoned = RESULT_BLOCK + '            trade["trailing_stop"] = effective_stop\n'
+    v = gate(with_results(block=poisoned))
+    check("A: adjacent decision write -> normalized AST DIFFERS",
+          v["normalized_ast_identical"] is False)
+    check("A: gate fails", v["verdict"] == "FAIL")
+    check("A: result block itself still registers",
+          v["telemetry"]["result_write_count"] == 1)
+
+
+def test_B_decision_mutation_inside_the_block_is_refused():
+    """A decision write inside the dict cannot ride along."""
+    bad = (
+        '            _LAST_EVAL["results"][trade[\'symbol\']] = {\n'
+        '                "cycle_token": _LAST_EVAL["cycle_token"],\n'
+        '                "inline_effective_stop": effective_stop,\n'
+        '                "sneak": trade.setdefault("stop_loss", effective_stop),\n'
+        '            }\n')
+    v = gate(with_results(block=bad))
+    check("B: extra key -> not registered",
+          v["telemetry"]["result_write_count"] == 0)
+    check("B: unregistered statement diverges the AST",
+          v["normalized_ast_identical"] is False)
+    check("B: gate fails", v["verdict"] == "FAIL")
+
+
+def test_C_persistence_inside_the_block_is_refused():
+    bad = RESULT_BLOCK.replace(
+        '                "inline_effective_stop": effective_stop,\n',
+        '                "inline_effective_stop": save_trades(effective_stop),\n')
+    v = gate(with_results(block=bad))
+    check("C: call in the value -> not registered",
+          v["telemetry"]["result_write_count"] == 0)
+    check("C: gate fails", v["verdict"] == "FAIL")
+
+
+def test_D_data_access_inside_the_block_is_refused():
+    bad = RESULT_BLOCK.replace(
+        '                "inline_effective_stop": effective_stop,\n',
+        '                "inline_effective_stop": load_stock(trade[\'symbol\']),\n')
+    v = gate(with_results(block=bad))
+    check("D: data acquisition in the value -> not registered",
+          v["telemetry"]["result_write_count"] == 0)
+    check("D: gate fails", v["verdict"] == "FAIL")
+
+
+def test_E_conditional_affecting_decision_state_is_refused():
+    bad = (RESULT_BLOCK
+           + '            if effective_stop > trade["stop_loss"]:\n'
+             '                trade["exit_reason"] = "trailing_stop"\n')
+    v = gate(with_results(block=bad))
+    check("E: added decision branch -> AST DIFFERS",
+          v["normalized_ast_identical"] is False)
+    check("E: gate fails", v["verdict"] == "FAIL")
+
+
+def test_F_extra_result_field_is_refused():
+    bad = RESULT_BLOCK.replace(
+        '            }\n',
+        '                "unexpected_field": 1,\n            }\n')
+    v = gate(with_results(block=bad))
+    check("F: extra result field -> not registered",
+          v["telemetry"]["result_write_count"] == 0)
+    check("F: gate fails", v["verdict"] == "FAIL")
+
+
+def test_G_missing_effective_stop_result_is_refused():
+    bad = ('            _LAST_EVAL["results"][trade[\'symbol\']] = {\n'
+           '                "cycle_token": _LAST_EVAL["cycle_token"],\n'
+           '            }\n')
+    v = gate(with_results(block=bad))
+    check("G: incomplete result fields -> not registered",
+          v["telemetry"]["result_write_count"] == 0)
+    check("G: gate fails", v["verdict"] == "FAIL")
+
+
+def test_H_duplicate_result_capture_is_refused():
+    v = gate(with_results(block=RESULT_BLOCK + RESULT_BLOCK))
+    check("H: duplicate result_write counted",
+          v["telemetry"]["result_write_count"] == 2)
+    check("H: gate fails on duplication", v["verdict"] == "FAIL")
+    check("H: names duplication",
+          any("duplicate result_write" in f for f in v["failures"]),
+          v["failures"])
+
+
+def test_I_capture_before_computation_is_refused():
+    """Moved ABOVE the assignment: the local would be stale or unbound."""
+    moved = mutate(EFF_ANCHOR, RESULT_BLOCK + EFF_ANCHOR, src=CAND)
+    moved = mutate(CLEAR_ANCHOR, CLEAR_ANCHOR + CLEAR_BLOCK, src=moved)
+    v = gate(moved)
+    check("I: placement above the computation -> not a sibling-after",
+          v["telemetry"]["result_is_sibling_after_effective_stop"] is False)
+    check("I: gate fails", v["verdict"] == "FAIL")
+    check("I: names placement",
+          any("immediately following" in f for f in v["failures"]),
+          v["failures"])
+
+
+def test_J_reformatting_only_still_registers():
+    """Formatting must not require re-registration; the diff still shows it."""
+    reflowed = (
+        '            _LAST_EVAL["results"][trade[\'symbol\']] = {"cycle_token":'
+        ' _LAST_EVAL["cycle_token"], "inline_effective_stop": effective_stop}\n')
+    v = gate(with_results(block=reflowed))
+    check("J: single-line form still registers", v["verdict"] == "PASS",
+          v["failures"])
+    check("J: normalized AST identical", v["normalized_ast_identical"] is True)
+    check("J: raw md5 differs from the multi-line form",
+          td.md5(with_results(block=reflowed)) != td.md5(with_results()))
+    check("J: change remains visible in the unified diff",
+          "inline_effective_stop" in v["diff"])
+
+
+def test_result_written_but_never_cleared_is_refused():
+    v = gate(with_results(clear=False))
+    check("written-not-cleared -> gate fails", v["verdict"] == "FAIL")
+    check("names cross-cycle survival",
+          any("never cleared" in f for f in v["failures"]), v["failures"])
+
+
+def test_result_telemetry_not_yet_required():
+    """The real tracker has no result block at 2A'; the gate must still pass."""
+    check("RESULT_TELEMETRY_REQUIRED is False at 2A'",
+          td.RESULT_TELEMETRY_REQUIRED is False)
+    v = gate(CAND)
+    check("unmodified tracker still PASSes", v["verdict"] == "PASS",
+          v["failures"])
+    check("no result telemetry present yet",
+          v["result_telemetry_present"] is False)
+
+
 def gate(cand):
     return td.evaluate(ref_src=REF, cand_src=cand)
 
