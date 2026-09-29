@@ -1,7 +1,7 @@
 {
   "baseline_schema_version": 1,
-  "generated_at": "2026-09-29T03:05:10.144000+00:00",
-  "generated_from_commit": "abda34d",
+  "generated_at": "2026-09-29T03:21:11.632034+00:00",
+  "generated_from_commit": "21843d2",
   "tracker_raw_bytes_md5": "c0e9e9bc1d6ba09aeb2c0be9409ad4fb",
   "tracker_normalized_text_md5": "465fe06ff6533e9d4e30f07c22d16f15",
   "tracker_loaded_source_md5": "12bd27d3582dc60f5dd3110b9692d458",
@@ -34,10 +34,10 @@
     "blast_radius": 26,
     "output_path": 32,
     "tracker_diff": 51,
-    "vps_verify": 42,
+    "vps_verify": 90,
     "parity_output": 82
   },
-  "assertion_total": 1469,
+  "assertion_total": 1517,
   "suite_count_changes_since_previous_baseline": {
     "wiring": {
       "was": 95,
