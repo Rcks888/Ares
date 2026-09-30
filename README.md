@@ -446,6 +446,68 @@ evidence behind each.
 - Basic stop-loss (7%)
 - yfinance only
 
+## Tracker migration — a SEPARATE phase numbering
+
+> **Terminology warning.** Two independent phase schemes exist in this repository
+> and they collide on the numbers 4 and 5.
+>
+> | Number | In this README (programme roadmap) | In the migration docs |
+> |--------|-----------------------------------|----------------------|
+> | Phase 4 | AI/ML signal validation | **parity observation** — shadow the exit policy, compare, write nothing |
+> | Phase 5 | live execution with real capital | **tracker swap** — make `engine/exit_policy.py` the decision authority |
+>
+> "Phase 5 remains prohibited" in `PHASE4_ACTIVATION.md` and
+> `TRACKER_MIGRATION_PLAN*.md` refers to the **tracker swap**, not to live
+> capital. Both are blocked, for unrelated reasons. Do not read one as evidence
+> about the other.
+
+The migration replaces the inline exit logic in `engine/tracker.py` with the
+module-level `engine/exit_policy.py`, and refuses to do so until the two are
+proven to decide identically on live data.
+
+**Current state (Sep 30, 2026):** migration Phase 4 active — collecting.
+Migration Phase 5 prohibited. The inline tracker remains the sole decision
+authority; the parity path never writes production state.
+
+| Control | Where |
+|---------|-------|
+| Enable collection | `export ARES_PARITY=1` in `run_ares.sh`, **above** the `daily_report.py` line (`.env` is sourced later and would not reach the process) |
+| Disable | comment out that one line |
+| Evidence | `logs/tracker_parity_v1.jsonl` — append-only, never rewritten |
+| Liveness | `logs/parity_heartbeat_v1.jsonl` — one record per observed cycle, including failures |
+| Verify | `python3 tools/pre_parity_snapshot.py` (exit 0 = all gates pass) |
+| Full VPS check | `bash tools/vps_phase3_verify.sh --pre-pull-commit <prev HEAD>` |
+
+### Host provisioning requirement
+
+The verifier distinguishes the live host from a development checkout using a
+marker file that is **deliberately not in git**:
+
+```sh
+printf '%s\n' 'ARES_LIVE_HOST_V1' > /root/ares/.ares_live_host
+chmod 600 /root/ares/.ares_live_host
+```
+
+Without it a host reports `host_context = archive` and its freshness result is
+labelled `archived_collection_recent` — the last VPS activity that reached git,
+**not** a claim about any live collector. A new production host must have the
+marker provisioned manually. This replaced an inference that read "live" on any
+checkout which had pulled the bot's log commits, including the laptop.
+
+### Readiness vs authorization
+
+These are separate results and are reported separately:
+
+- `deployment_integrity_valid` — baselines, hashes, suites, append-only evidence.
+  Remains the exit-code authority **so that a stalled collector never blocks
+  deploying its own repair**.
+- `parity_collection_recent` — schedule-aware freshness (weekday 13:30 and 21:00
+  UTC, 90-minute grace). Blocks Phase 4 readiness and Phase 5, not deployment.
+- `phase5_gates_satisfied` — a fixed registry in which an absent or unevaluated
+  gate is itself a blocker.
+- `phase5_authorization` — an explicit human decision, permanently `PROHIBITED`
+  until granted. An all-green gate set does not grant it.
+
 ## 5-Phase Roadmap
 
 | Phase | Description | Status |

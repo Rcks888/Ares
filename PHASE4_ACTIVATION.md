@@ -285,3 +285,94 @@ Keep the inline result. Comment out `export ARES_PARITY=1`. Preserve the parity
 file and `/tmp/ares_phase4_cycle1.txt`. Classify the problem. Do not delete or
 rewrite evidence. Do not replay the trading cycle — a parity-system failure is
 not a reason to re-run inline. Phase 5 remains prohibited.
+
+---
+
+# Post-activation record — Sep 29–30, 2026
+
+Everything above is the plan as written *before* activation. This section records
+what actually happened and is appended rather than merged, so the plan and the
+outcome stay separable.
+
+## Activation timeline
+
+| UTC | Event |
+|-----|-------|
+| 2026-09-29 03:30 | declaration commit `64f6b9c` authored |
+| 2026-09-29 ~05:31 | manual cycle runs the **external** launcher — no `ARES_PARITY`, **SDGR exits unobserved** |
+| 2026-09-29 05:35 | repo `run_ares.sh` lands on the VPS working tree |
+| 2026-09-29 05:52:22 | **first parity record** — activation effective |
+| 2026-09-29 09:31 | crontab repointed to `/root/ares/Ares/run_ares.sh` |
+| 2026-09-29 13:30 | first *automated* cycle |
+| 2026-09-29 21:00 | **ABM exits, captured, MATCH** |
+
+`activation_effective_at` is recorded as `2026-09-29T05:52:22.528410+00:00` with
+source `first_parity_record` and confidence `upper_bound`. It is an upper bound by
+construction: collection was certainly active by then and may have become
+effective slightly earlier. The commit timestamp is deliberately **not** used —
+authoring a declaration is not deploying it, and the 8-hour gap above is exactly
+why.
+
+## The closing requirement above was only half met
+
+The plan's final instruction was:
+
+> Keep ABM and SDGR under inline Policy A until natural closure and require their
+> final exit bars in the evidence.
+
+Both closed naturally. Only one produced the required evidence.
+
+| Symbol | Natural closure | Final exit bar in evidence | Resolution |
+|--------|----------------|----------------------------|------------|
+| ABM | 2026-09-29 `stop_loss` | **yes** — cycle `d800900e`, MATCH | `satisfied` |
+| SDGR | 2026-09-28 `trailing_stop` | **no** — exited ~17 min pre-activation | `unobtainable`, retired |
+
+SDGR's requirement is retired with documented cause. Retirement changes only the
+*disposition*; `coverage_state` remains `unobtainable` permanently, so the missing
+evidence is never restated as success. The accounting keeps the denominator
+visible:
+
+```
+obligations 2 | satisfied 1 | pending 0 | retired_unobtainable 1 | unresolved 0
+empirically_complete      False     <- evidence is genuinely missing
+administratively_resolved True      <- nothing blocks
+```
+
+Those two flags must never collapse into one number.
+
+## Change sets added after activation
+
+| Item | Commits | Effect |
+|------|---------|--------|
+| 2A | `b4ceb41`, `f809cef` | version-aware evidence schema; v1's 45 fields frozen as a literal so the original records are judged against their own schema |
+| 2A′ | `9f9ccb3`, `8513ed0` | decision-result telemetry registered in the tracker-diff proof as exact AST subtree contracts |
+| 2B | `8a43064`, `393acea` | **capture the exact unrounded inline `effective_stop`** instead of reconstructing it from rounded state |
+| 2C | `99c6b08` | baseline for schema v2 |
+| 1 | `d335471`, `90b6b71` | collection heartbeat, schedule-aware freshness, host-role marker, activation provenance |
+| display | `5f94c8f`, `08619fc` | collection health surfaced in the verifier report |
+| gates | `50a42a7`, `cb9d92b` | Phase 5 gate registry and coverage dispositions |
+
+`engine/tracker.py` changed exactly once in this sequence (Item 2B, +11 lines,
+three registered statements) and its hash has been `3c23d191…` ever since.
+
+## Operational contracts now enforced
+
+- **Collection schedule** — weekday cycles at 13:30 and 21:00 UTC plus a
+  90-minute grace, checked against the live crontab. A fixed 36h or 48h staleness
+  rule was rejected: the Friday 21:00 → Monday 13:30 gap is 64.5h and would
+  false-alarm every weekend.
+- **Host role** — read from `/root/ares/.ares_live_host` containing
+  `ARES_LIVE_HOST_V1`, not inferred. The previous inference read "live" on any
+  checkout that had pulled the bot's log commits, including the laptop.
+  The marker is **operational configuration and is not committed**; a new
+  production host must have it provisioned manually.
+- **Gate split** — `deployment_integrity_valid` remains the exit-code authority
+  so a stale collector never blocks deploying its own repair, while
+  `parity_collection_recent` blocks Phase 4 readiness and Phase 5.
+- **Phase 5** — gated by a fixed registry where an absent or unevaluated gate is
+  itself a blocker. `minimum_closed_sample` is deliberately unregistered and
+  reports `UNEVALUATED`; choosing a threshold with the closed count already
+  visible would be fitting the bar to the data. Operator authorization is a
+  separate human decision and is absent.
+
+Phase 5 remains **prohibited**.

@@ -1789,6 +1789,185 @@ cache 477 symbols. All green.
 
 ---
 
+### Sep 28, 2026 (Monday)
+
+A quiet session that matters only in hindsight: it is the last day both pre-clean
+positions were open, and SDGR's fatal bar was printed on it. Logged from cron
+commits `b4b468e`…`3301875`, pulled Sep 29.
+
+##### Collection record
+
+| Event | Detail |
+|-------|--------|
+| Closes | **none** — 5/5 held all session |
+| SECZ ratchet | TS **$14.63 → $14.94** between 13:32 and 21:01 UTC as peak ran +10.8% → +13.1% |
+| Scan | 103 screened, **1 signal** — BCE `mean_reversion` `conf2` range |
+| Queue | TWST `conf3`, AMP `conf3`, ADT `conf2`, BCE `conf2` — 4 waiting, no free slot |
+| Clean sample | 1 closed (NEOG), 3 in flight (TMO, WBD, SECZ) |
+| Pre-clean | 4 closed, realised −$5.34, W/L 2/2 — **ABM and SDGR both still open** |
+| All combined | 5 closed, realised −$12.41, W 2/5 |
+
+**Open positions at 21:01 UTC (05:01 AM MYT Sep 29):**
+
+| Symbol | Phase | Day | Entry | Last | Peak | SL | TS | Trail state |
+|--------|-------|-----|-------|------|------|----|----|-------------|
+| ABM | pre-clean | 19 | $50.65 | $49.11 (−3.0%) | $50.91 (+0.5%) | $48.67 | $48.67 | **never ratcheted — TS pinned to SL** |
+| SDGR | pre-clean | 10 | $29.35 | $29.78 (+1.5%) | $31.37 (+6.9%) | $25.06 | $28.23 | active, below entry |
+| TMO | clean_v3 | 7 | $654.54 | $675.45 (+3.2%) | $681.77 (+4.2%) | $634.25 | $634.25 | never ratcheted |
+| WBD | clean_v3 | 6 | $30.87 | $30.86 (−0.0%) | $30.87 (0.0%) | $29.31 | $29.31 | never ratcheted |
+| SECZ | clean_v3 | 3 | $14.68 | $16.16 (+10.1%) | $16.81 (+14.5%) | $12.07 | $15.13 | active, below entry |
+
+##### The bar that closed SDGR was printed today
+
+SDGR's session close was **$28.20** against a trail of **$28.23** — three cents
+through, from `peak 31.37 × 0.90 = 28.233`. The exit was therefore already
+determined by the time this session ended, but the tracker only *acts* on the
+following cycle, so the position still reads open in the 21:01 UTC dashboard above.
+
+That one-cycle lag is ordinary and not a defect. It becomes the central fact of
+Sep 29 because parity collection was activated **inside that lag**.
+
+##### ABM's equality condition was structural, not coincidental
+
+ABM closed the day 19 sessions in with a peak of **+0.5%**. The trail is
+`max(stop_loss, peak × 0.90)`, and `50.91 × 0.90 = 45.82`, far below the initial
+stop of `$48.67`. The trail therefore never left the stop, and
+`trailing_stop == stop_loss` exactly.
+
+This is the signature of a position that never moved in the operator's favour, and
+it is the precise input that makes the inline tie-break observable:
+
+```python
+reason = 'trailing_stop' if trailing_stop > trade['stop_loss'] else 'stop_loss'
+```
+
+`48.67 > 48.67` is false, so an exit here must be labelled `stop_loss`. Worth
+recording a day early, because tomorrow it stops being a hypothetical.
+
+---
+
+### Sep 29, 2026 (Tuesday)
+
+The densest day of the migration so far, and the only one on which both pre-clean
+positions closed. Parity collection went live, and in the 17 minutes between
+SDGR's exit and the first parity record, one registered evidence requirement was
+lost permanently while the other was captured cleanly 15 hours later.
+
+Logged from cron commits `615d173`…`5fa3eb2`, plus two manual cycles.
+
+##### Cycle-by-cycle, because the ordering is the point
+
+| UTC | Invocation | Parity | Outcome |
+|-----|-----------|--------|---------|
+| ~05:31 | manual (`run_ares.sh`) | **OFF** | **SDGR closed** `trailing_stop` — evidence not collected |
+| 05:35 | — | — | repo `run_ares.sh` lands on disk (declaration deployed) |
+| 05:52 | manual | **ON** | **first 4 parity records ever** (ABM, TMO, WBD, SECZ) |
+| 08:00 | manual | ON | 4 records, commit `99c6b08` |
+| 13:30 | **cron** | ON | first *automated* cycle — 5 records, **AMP entered** |
+| 21:00 | **cron** | ON | 5 records — **ABM closed** `stop_loss`, **exit captured** |
+
+The 05:31 run used the *external* `/root/ares/run_ares.sh`, which had no
+`ARES_PARITY=1`. Cron was repointed to the repository launcher at 09:31 UTC, which
+is why the 13:30 and 21:00 cycles collected automatically.
+
+##### Two closes, seventeen minutes apart in consequence
+
+| | SDGR | ABM |
+|---|---|---|
+| Entry | 2026-09-18 @ $29.35 | 2026-09-09 @ $50.65 |
+| Exit | 2026-09-28 @ **$28.20** | 2026-09-29 @ **$48.62** |
+| Peak | $31.37 (+6.9%) | $50.91 (+0.5%) |
+| SL / TS | $25.06 / **$28.23** | $48.67 / **$48.67** |
+| Reason | `trailing_stop` (trail active) | `stop_loss` (**equality**) |
+| Gross / net | −$5.83 / **−$7.83** | −$5.96 / **−$7.96** |
+| % | −3.91% | −4.01% |
+| Parity evidence | **none — permanently unobtainable** | **captured, MATCH** |
+
+ABM's exit record is the single most valuable row in the evidence file:
+
+```
+cycle d800900e  2026-09-29T21:00:55Z  commit 33d8106
+  inline_decision   close:stop_loss      shadow_decision   close:stop_loss
+  inline_stop 48.67 captured_inline_local   shadow_stop 48.67
+  difference_class MATCH   differing_fields []   would_change_action False
+  parity_action exit      state_hash before == after (observation wrote nothing)
+  bar_date 2026-09-29   bar_price 48.62   price_source IBKR
+```
+
+It settles three things that had been arguments rather than evidence: the
+equality tie-break resolves to `stop_loss` in both implementations; a position
+evaluated on its closing cycle **does** produce a packet, so exits are
+observable; and the staleness worry was unfounded — ABM's bar was same-day and
+IBKR-sourced, and `48.62 < 48.67` is a real stop.
+
+Had the exact-capture change not landed the day before, `inline_effective_stop`
+would have been reconstructed from rounded persisted state on the one exit that
+mattered.
+
+##### AMP entered under observation from inception
+
+AMP filled on the 13:30 UTC cycle at **$492.08** (0.30 sh), SL $472.99, TP
+$541.29, taking the slot **SDGR** vacated that morning — ABM's slot did not free
+until 21:00 UTC, eight hours later. It was top of a 4-deep queue (AMP, TWST, BCE,
+ADT) and left three behind it.
+
+AMP is the first position whose entire lifecycle will be observed under parity
+from inception, which makes it the first live opportunity to see an entry-day
+cycle recorded: no `effective_stop` is computed on entry day, so its basis should
+read `not_computed_entry_day_skip` rather than `captured_inline_local`.
+
+##### Equity, reconciled
+
+Realised now −$28.20 across 7 closes, which reconciles exactly:
+
+| Cohort | Trades | Net realised |
+|--------|--------|--------------|
+| Pre-clean | HAFN +3.76, DYN +6.77, PINS −10.86, ECO −5.01, SDGR −7.83, ABM −7.96 | **−$21.13** (W/L 2/4) |
+| clean_v3 | NEOG −7.07 | **−$7.07** (W/L 0/1) |
+| | | **−$28.20** ✓ |
+
+| Component | Value |
+|-----------|-------|
+| Starting capital | $1,000.00 |
+| Realised (net of commission) | −$28.20 |
+| Stock at cost (4 × $149) | $596.00 |
+| Entry commissions on open positions | $4.00 |
+| Cash on hand | **$371.80** |
+| Market value of open positions¹ | $608.19 |
+| Unrealised, net of entry commissions | **+$8.19** |
+| **Equity** | **≈$979.99** |
+
+¹ marked at the 17:30 UTC monitor prices (TMO $674.27, WBD $30.86, SECZ $15.30,
+AMP $495.88), not a session close — treat as indicative.
+
+##### Defect 3 has doubled, and the free slot now breaches the reserve
+
+Sizing still reads a constant `starting_capital` of $1,000 rather than equity, so
+the 25% reserve remains nominal. The shortfall is the realised loss by
+construction, and it has grown from **−$12.41** to **−$28.20**.
+
+With four slots filled, cash is $371.80 against a $250 target — comfortable. But
+filling the fifth slot costs $150, leaving **$221.80**, which is **below the $250
+reserve** for the first time. Previously the breach was ~$100 of further losses
+away; it is now one entry away. Still not acting, per V3 rules, but this is the
+first session where the reserve rule and the sizing rule actually conflict.
+
+##### Both pre-clean positions are now closed
+
+Phase 2 clearance is therefore satisfied on its own merits: no pre-migration
+position remains under the legacy tracker. That is a *different* question from
+whether their evidence was collected, and the two answers now diverge —
+
+| Symbol | Phase 2 clearance | Required parity coverage |
+|--------|------------------|--------------------------|
+| ABM | cleared (closed) | **satisfied** — exit captured, MATCH |
+| SDGR | cleared (closed) | **unobtainable** — retired with documented cause |
+
+Keeping those separate is the whole reason the coverage gate was rebuilt; a
+`still_open` test would have reported both identically.
+
+---
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
