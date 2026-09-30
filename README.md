@@ -61,9 +61,9 @@ All four, simultaneously:
 - At intended size and frequency, cost drag leaves room for the above
 - `clean_v3` shows no operational contradiction (a process gate, not proof of edge)
 
-If the bar is never cleared, indefinite paper trading plus an index core is the
-rational shape. See `ROADMAP.md` for the full evidence trail and the
-pre-registered V4 Block A design.
+If the bar is never cleared, indefinite paper trading is the rational shape. See
+`ROADMAP.md` for the full evidence trail and the pre-registered V4 Block A
+design.
 
 ## How It Works
 
@@ -526,7 +526,7 @@ These are separate results and are reported separately:
 | Sep 19, 2026 | `clean_v3` sample opens — trade counting starts here, not from the first trade ever |
 | Sep 2026 - May 2027 | Paper trading observation (~9 months, 40-60 clean trades) |
 | June 2027 | **Review gate** — the evidence bar above is assessed, not assumed cleared. Not a deploy trigger. |
-| Indefinite | Paper trading continues for as long as the bar is unmet. ESPP funds an index core instead. |
+| Indefinite | Paper trading continues for as long as the bar is unmet. This is the default outcome, not a failure state. |
 
 ## Author
 

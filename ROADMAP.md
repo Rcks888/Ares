@@ -1020,7 +1020,7 @@ reuse the parameter set, and do not assume the strategy family is validated.
 
 | Layer | Role |
 |---|---|
-| **Core wealth** | Index and ESPP discipline — the real edge, on savings rate |
+| **Core wealth** | Broad-market discipline — the real edge is the savings rate, not this system |
 | **Ares** | Paper research platform and integrity lab. Live only if the structural economics change |
 | **Optional satellite** | A small live sleeve later, **only** if a configuration clears cost and benchmark bars in V6-class tests — never *"because June 2027"* |
 | **Hermes** | Optional side learning, not the mainline |
@@ -1175,8 +1175,8 @@ cleared, never a date reached. **All four must hold:**
 4. `clean_v3` or a later phase shows no operational contradiction — a **process**
    gate, not edge proof.
 
-**If the bar is never cleared, indefinite paper plus an index and ESPP core is the
-rational shape. That is a completed insight, not a failed project.**
+**If the bar is never cleared, indefinite paper trading is the rational shape.
+That is a completed insight, not a failed project.**
 
 ## Side items — both suspicions confirmed
 

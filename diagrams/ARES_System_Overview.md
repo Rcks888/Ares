@@ -125,7 +125,7 @@ flowchart LR
   RUNB -->|"alpha \-16.06%<br/>FAIL"| PREREG
   PREREG --> VERDICT{"edge<br/>established?"}
   VERDICT -->|no| BAR
-  BAR -->|"not cleared"| PAPER(["paper only<br/>index core"])
+  BAR -->|"not cleared"| PAPER(["paper only<br/>indefinitely"])
 
   TRK --> SMP
   SMP -->|"clean_v3<br/>0 closed, 3 in flight"| OBS["process observation<br/>NOT edge proof"]
