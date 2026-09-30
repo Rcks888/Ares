@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "symbol": "BCE",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 2,
+    "date": "2026-09-30",
+    "price": 20.38,
+    "rsi": 29.5,
+    "vol_ratio": 0.87,
+    "stdev_20": 0.0089,
+    "strength": "unknown",
+    "screens": [
+      "oversold_bounce"
+    ],
+    "from_queue": true
+  }
+]

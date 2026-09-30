@@ -64,3 +64,4 @@
 {"timestamp": "2026-09-29T21:00:57", "symbol": "TWST", "action": "promoted", "queued_at": "2026-09-24", "confluence": 3, "signal_price": 184.03, "drift_pct": 1.14, "rsi": 50.0, "ema20_ok": true, "live_price": 186.13, "drop_reason": null}
 {"timestamp": "2026-09-30T13:31:19", "symbol": "ADT", "action": "expired", "queued_at": "2026-09-24", "confluence": 2, "signal_price": 6.36, "drift_pct": null, "rsi": null, "ema20_ok": null, "live_price": null, "drop_reason": "age 6d exceeded max 5d"}
 {"timestamp": "2026-09-30T13:31:20", "symbol": "BCE", "action": "kept", "queued_at": "2026-09-25", "confluence": 2, "signal_price": 20.97, "drift_pct": -3.98, "rsi": 50.0, "ema20_ok": true, "live_price": 20.14, "drop_reason": null}
+{"timestamp": "2026-09-30T16:10:17", "symbol": "BCE", "action": "promoted", "queued_at": "2026-09-25", "confluence": 2, "signal_price": 20.97, "drift_pct": -2.81, "rsi": 50.0, "ema20_ok": true, "live_price": 20.38, "drop_reason": null}
