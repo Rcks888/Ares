@@ -1,7 +1,7 @@
 {
   "baseline_schema_version": 1,
-  "generated_at": "2026-09-29T09:26:55.883527+00:00",
-  "generated_from_commit": "5f94c8f",
+  "generated_at": "2026-09-30T00:28:50.017933+00:00",
+  "generated_from_commit": "50a42a7",
   "schema_v2_activation_commit": "8a43064",
   "parity_activation_commit": "64f6b9c",
   "parity_activation_effective_at": "2026-09-29T05:52:22.528410+00:00",
@@ -39,15 +39,16 @@
     "blast_radius": 26,
     "output_path": 38,
     "tracker_diff": 102,
-    "vps_verify": 114,
+    "vps_verify": 132,
     "parity_output": 129,
-    "parity_freshness": 90
+    "parity_freshness": 103,
+    "phase5_gates": 112
   },
-  "assertion_total": 1812,
+  "assertion_total": 1955,
   "parity_collection_at_generation": {
     "state": "ACTIVE_VALID",
     "collection_declared": true,
-    "records": 8,
+    "records": 18,
     "NOTE": "informational only; the state advances and records grow, so these are never compared"
   },
   "suite_count_changes_since_previous_baseline": {
