@@ -1,26 +1,5 @@
 [
   {
-    "symbol": "ADT",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 2,
-    "price_at_signal": 6.36,
-    "rsi_at_signal": 29.6,
-    "stdev_20": 0.0165,
-    "vol_ratio": 1.08,
-    "date_added": "2026-09-24",
-    "screens": [
-      "oversold_bounce"
-    ],
-    "checked_at": "2026-09-29T21:00:57",
-    "drift_pct": -3.46,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 6.14
-  },
-  {
     "symbol": "BCE",
     "strategy": "mean_reversion",
     "trigger": "oversold+sma_support",
@@ -35,8 +14,8 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-09-29T21:00:56",
-    "drift_pct": -3.96,
+    "checked_at": "2026-09-30T13:31:20",
+    "drift_pct": -3.98,
     "rsi": 50.0,
     "ema20_ok": true,
     "live_price": 20.14
