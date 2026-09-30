@@ -116,7 +116,17 @@ def append_heartbeat(summary, lineage, cycle_id, output_path=None):
             # a process-local counter that restarts at 1 in every new Python
             # process, which is exactly what cron creates twice a day. Two
             # different cycles would otherwise share token 1.
-            "production_commit": (lineage or {}).get("ares_commit"),
+            # SAME key the evidence records read (parity_compare.build_record).
+            # This was "ares_commit" -- a key no producer ever emits -- so .get()
+            # returned None on every cycle while contract_valid still said true.
+            # One lineage source, read one way, or the two diverge unnoticed.
+            "production_commit": (lineage or {}).get("production_commit"),
+            # Absence is recorded as a NAMED defect rather than an empty field.
+            # A heartbeat whose only cross-process-unique identity component is
+            # missing is not a healthy heartbeat: capture_cycle_token restarts at
+            # 1 in every cron process, so without the commit two distinct cycles
+            # are distinguishable only by wall-clock proximity.
+            "lineage_complete": bool((lineage or {}).get("production_commit")),
             "cycle_started_at": summary.get("cycle_started_at"),
             "capture_cycle_token": summary.get("capture_cycle_token"),
             "cycle_completed_at": _now(),

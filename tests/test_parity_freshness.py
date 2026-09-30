@@ -505,6 +505,91 @@ def test_activation_is_preserved_not_regenerated():
           or "or ACTIVATION_EFFECTIVE_AT" in src, "preservation pattern absent")
 
 
+# ---- 13. heartbeat lineage -------------------------------------------------
+def test_heartbeat_reads_the_same_lineage_key_as_the_records():
+    """THE bug: the heartbeat read "ares_commit", a key no producer emits.
+
+    .get() returned None on every cycle, and because absence was not a named
+    defect the heartbeat still reported contract_valid true -- while its only
+    cross-process-unique identity component was missing.
+    """
+    src = (ROOT / "engine" / "parity_runner.py").read_text()
+    comp = (ROOT / "engine" / "parity_compare.py").read_text()
+    check("the heartbeat no longer reads the phantom key",
+          'get("ares_commit")' not in src)
+    check("it reads production_commit", 'get("production_commit")' in src)
+    check("which is the key the records read",
+          'lineage.get("production_commit")' in comp)
+    hook = (ROOT / "engine" / "parity_hook.py").read_text()
+    check("and the key the lineage producer actually emits",
+          '"production_commit": None' in hook or
+          '"production_commit"' in hook)
+
+
+def test_missing_commit_is_a_named_lineage_defect():
+    import importlib
+    pr = importlib.import_module("engine.parity_runner")
+    d = Path(tempfile.mkdtemp())
+    out = d / "ev.jsonl"
+    summary = {"attempted": 1, "written": 1, "write_failures": 0,
+               "contract_valid": True, "capture_cycle_token": 1,
+               "cycle_started_at": "2026-09-30T13:30:00+00:00"}
+    pr.append_heartbeat(summary, {"production_commit": None}, "abc123",
+                        output_path=str(out))
+    beat = json.loads((d / pr.HEARTBEAT_NAME).read_text().strip())
+    check("an absent commit is reported as incomplete lineage",
+          beat["lineage_complete"] is False, beat)
+    check("and the field is null rather than fabricated",
+          beat["production_commit"] is None, beat)
+    pr.append_heartbeat(summary, {"production_commit": "33d8106"}, "def456",
+                        output_path=str(out))
+    beats = [json.loads(l) for l in
+             (d / pr.HEARTBEAT_NAME).read_text().splitlines()]
+    check("a present commit is carried exactly",
+          beats[1]["production_commit"] == "33d8106", beats[1])
+    check("and lineage reads complete", beats[1]["lineage_complete"] is True)
+
+
+def test_two_processes_with_token_1_are_distinguishable():
+    """capture_cycle_token restarts at 1 in every cron process. Composite
+    identity is what separates two cycles, and it needs all three parts."""
+    import importlib
+    pr = importlib.import_module("engine.parity_runner")
+    d = Path(tempfile.mkdtemp())
+    out = d / "ev.jsonl"
+    for started, commit, cid in (("2026-09-30T13:30:00+00:00", "aaa1111", "c1"),
+                                 ("2026-09-30T21:00:00+00:00", "bbb2222", "c2")):
+        pr.append_heartbeat({"attempted": 1, "written": 1, "write_failures": 0,
+                             "contract_valid": True, "capture_cycle_token": 1,
+                             "cycle_started_at": started},
+                            {"production_commit": commit}, cid,
+                            output_path=str(out))
+    beats = [json.loads(l) for l in
+             (d / pr.HEARTBEAT_NAME).read_text().splitlines()]
+    check("both cycles really do share token 1",
+          beats[0]["capture_cycle_token"] == beats[1]["capture_cycle_token"] == 1)
+    ident = [(b["production_commit"], b["cycle_started_at"],
+              b["capture_cycle_token"]) for b in beats]
+    check("yet the composite identities differ", ident[0] != ident[1], ident)
+    check("and each component is present in both",
+          all(all(x is not None for x in i) for i in ident), ident)
+
+
+def test_the_live_heartbeats_expose_the_defect_they_were_written_under():
+    """The two real heartbeats were written by the buggy code. They must keep
+    reading null -- never be backfilled -- and the current code must not."""
+    p = ROOT / "logs" / "parity_heartbeat_v1.jsonl"
+    if not p.exists():
+        check("no live heartbeat file yet (archive checkout)", True)
+        return
+    beats = [json.loads(l) for l in p.read_text().splitlines() if l.strip()]
+    pre = [b for b in beats if "lineage_complete" not in b]
+    check("the pre-fix heartbeats are still present and unaltered",
+          all(b.get("production_commit") is None for b in pre), len(pre))
+    check("they are identifiable by the absent lineage_complete field",
+          len(pre) >= 1, len(pre))
+
+
 if __name__ == "__main__":
     before = (PROD_HB.exists(),
               PROD_HB.stat().st_size if PROD_HB.exists() else None)

@@ -248,6 +248,68 @@ else:
         print(f"  incomplete_cycles          = {ch['incomplete_cycles']}")
     if ch.get("malformed"):
         print(f"  malformed                  = {ch['malformed']}")
+    # Per-gate accounting. The aggregate flag alone hid that only ONE gate had
+    # ever been wired in, so every registered gate is now shown individually.
+    reg = ch.get("phase5_gate_registry") or []
+    gates = ch.get("phase5_gates") or {}
+    if reg:
+        print("  phase5_gates:")
+        for g in reg:
+            x = gates.get(g)
+            if not isinstance(x, dict):
+                print(f"    {g:32s} MISSING")
+                display_failures.append(f"registered gate not reported: {g}")
+                continue
+            mark = "pass" if x.get("passed") else (
+                "FAIL" if x.get("evaluated") else "UNEVALUATED")
+            print(f"    {g:32s} {mark:12s} {x.get('blocker') or ''}")
+    else:
+        display_failures.append("phase5_gate_registry absent")
+
+    cov = s.get("required_shadow_coverage")
+    tally = ch.get("coverage_tally")
+    if isinstance(cov, dict) and cov:
+        print("  required_coverage:")
+        for sym in sorted(cov):
+            d = cov[sym]
+            print(f"    {sym:6s} {d.get('coverage_state'):14s} "
+                  f"disposition={d.get('requirement_disposition'):9s} "
+                  f"blocking={d.get('blocking')}")
+            ev = d.get("evidence")
+            if ev:
+                print(f"           evidence {ev.get('cycle_id')} "
+                      f"{str(ev.get('timestamp'))[:19]} "
+                      f"{ev.get('inline_exit_reason')} "
+                      f"stop {ev.get('inline_effective_stop')} "
+                      f"{ev.get('difference_class')} "
+                      f"basis={ev.get('inline_effective_stop_basis')}")
+            if d.get("coverage_state") == "unobtainable" \
+                    and d.get("requirement_disposition") == "active":
+                display_failures.append(
+                    f"{sym}: unobtainable coverage with an ACTIVE disposition "
+                    f"must block and be resolved explicitly")
+            if d.get("coverage_state") == "satisfied" and not d.get("evidence"):
+                display_failures.append(
+                    f"{sym}: satisfied without demonstrating evidence")
+    else:
+        display_failures.append("required_shadow_coverage absent or empty")
+    if isinstance(tally, dict):
+        # Denominator stays visible: "1 of 1 satisfied" after dropping a retired
+        # obligation would be the misreading this accounting exists to prevent.
+        print(f"  coverage_tally             = obligations "
+              f"{tally.get('obligations')} | satisfied {tally.get('satisfied')} "
+              f"| pending {tally.get('pending')} | retired_unobtainable "
+              f"{tally.get('retired_unobtainable')} | unresolved "
+              f"{tally.get('unresolved_unobtainable')}")
+        print(f"  empirically_complete       = "
+              f"{tally.get('empirically_complete')}")
+        print(f"  administratively_resolved  = "
+              f"{tally.get('administratively_resolved')}")
+        if tally.get("empirically_complete") is None:
+            display_failures.append("coverage_tally.empirically_complete absent")
+    else:
+        display_failures.append("coverage_tally absent")
+
     blockers = ch.get("phase5_blockers")
     if blockers:
         print("  phase5_blockers:")
@@ -255,6 +317,12 @@ else:
             print(f"    - {b}")
     elif blockers == []:
         print("  phase5_blockers: none")
+        # An empty blocker list with gates outstanding is the exact false green
+        # that shipped: it must never read as satisfied on its own.
+        if not all(isinstance(gates.get(g), dict) and gates[g].get("passed")
+                   for g in reg):
+            display_failures.append(
+                "phase5_blockers empty while registered gates are outstanding")
 
     # Structural contract. Each of these was displayable-but-unchecked before.
     if ch.get("host_context") not in ("live", "archive", "unknown"):

@@ -24,6 +24,10 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from tools import pre_parity_snapshot as pps  # noqa: E402
+
 SCRIPT = ROOT / "tools" / "vps_phase3_verify.sh"
 SNAPSHOT = ROOT / "tools" / "pre_parity_snapshot.py"
 
@@ -125,7 +129,30 @@ def good_snapshot():
             "phase4_operational_ready": False,
             "phase5_gates_satisfied": False,
             "phase5_blockers": ["parity_collection_recent is None"],
-            "phase5_authorization": "PROHIBITED -- requires operator sign-off"},
+            "phase5_authorization": "PROHIBITED -- requires operator sign-off",
+            "phase5_gate_registry": list(pps.PHASE5_GATE_REGISTRY),
+            "phase5_gates": {g: {"evaluated": True, "passed": True,
+                                 "evidence": None, "blocker": None}
+                             for g in pps.PHASE5_GATE_REGISTRY},
+            "coverage_tally": {"obligations": 2, "satisfied": 1, "pending": 0,
+                               "retired_unobtainable": 1,
+                               "unresolved_unobtainable": 0,
+                               "empirically_complete": False,
+                               "administratively_resolved": True}},
+        # Top level, mirroring the real snapshot.
+        "required_shadow_coverage": {
+            "ABM": {"coverage_state": "satisfied",
+                    "requirement_disposition": "active", "blocking": False,
+                    "evidence": {"cycle_id": "d800900e",
+                                 "timestamp": "2026-09-29T21:00:55+00:00",
+                                 "inline_exit_reason": "stop_loss",
+                                 "inline_effective_stop": 48.67,
+                                 "difference_class": "MATCH",
+                                 "inline_effective_stop_basis":
+                                     "captured_inline_local"}},
+            "SDGR": {"coverage_state": "unobtainable",
+                     "requirement_disposition": "retired", "blocking": False,
+                     "evidence": None}},
     }
 
 
@@ -150,6 +177,71 @@ def test_collection_health_is_printed_not_merely_present():
           "parity_collection_recent is None" in out, out[-500:])
     check("display contract still passes on a complete block",
           "DISPLAY CONTRACT: PASS" in out, out[-300:])
+
+
+def test_gate_registry_and_coverage_are_displayed():
+    rc, out = run_block(good_snapshot(), good_baseline())
+    check("per-gate accounting is printed, not just the aggregate",
+          "phase5_gates:" in out, out[-600:])
+    for g in pps.PHASE5_GATE_REGISTRY:
+        check(f"gate {g} appears in the report", g in out)
+    check("coverage states are printed", "required_coverage:" in out, out[-600:])
+    check("ABM's demonstrating evidence is shown",
+          "d800900e" in out and "captured_inline_local" in out, out[-700:])
+    check("the denominator is shown, not just the numerator",
+          "obligations 2" in out, out[-600:])
+    check("empirical and administrative completeness are both shown",
+          "empirically_complete" in out and "administratively_resolved" in out)
+
+
+def test_a_registered_gate_missing_from_the_report_fails():
+    s = good_snapshot()
+    del s["collection_health"]["phase5_gates"]["phase2_clearance"]
+    rc, out = run_block(s, good_baseline())
+    check("an unreported registered gate is a display failure",
+          "registered gate not reported: phase2_clearance" in out, out[-500:])
+
+
+def test_unobtainable_with_active_disposition_must_block():
+    s = good_snapshot()
+    s["required_shadow_coverage"]["SDGR"]["requirement_disposition"] = "active"
+    rc, out = run_block(s, good_baseline())
+    check("unobtainable + active disposition is refused",
+          "must block and be resolved explicitly" in out, out[-500:])
+
+
+def test_satisfied_without_evidence_is_refused():
+    s = good_snapshot()
+    s["required_shadow_coverage"]["ABM"]["evidence"] = None
+    rc, out = run_block(s, good_baseline())
+    check("satisfied with no demonstrating evidence is refused",
+          "satisfied without demonstrating evidence" in out, out[-500:])
+
+
+def test_empty_blockers_with_outstanding_gates_is_refused():
+    """The exact false green: an empty blocker list reading as satisfied."""
+    s = good_snapshot()
+    s["collection_health"]["phase5_blockers"] = []
+    s["collection_health"]["phase5_gates"]["minimum_closed_sample"] = {
+        "evaluated": False, "passed": False, "evidence": None,
+        "blocker": "threshold not registered"}
+    rc, out = run_block(s, good_baseline())
+    check("an empty blocker list cannot coexist with an outstanding gate",
+          "phase5_blockers empty while registered gates are outstanding" in out,
+          out[-500:])
+
+
+def test_absent_coverage_block_fails():
+    s = good_snapshot()
+    del s["required_shadow_coverage"]
+    rc, out = run_block(s, good_baseline())
+    check("an absent coverage block is a display failure",
+          "required_shadow_coverage absent or empty" in out, out[-500:])
+    s2 = good_snapshot()
+    s2["required_shadow_coverage"] = {}
+    rc2, out2 = run_block(s2, good_baseline())
+    check("an EMPTY coverage block is equally refused",
+          "required_shadow_coverage absent or empty" in out2, out2[-500:])
 
 
 def test_absent_collection_health_fails_the_display_contract():

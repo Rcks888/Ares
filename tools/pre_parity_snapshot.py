@@ -49,10 +49,221 @@ SUITES = {
     "parity_output": "tests/test_parity_output_gate.py",
     # Schedule-aware collection freshness and the states derived from it.
     "parity_freshness": "tests/test_parity_freshness.py",
+    # Phase 5 readiness gates and required-coverage dispositions.
+    "phase5_gates": "tests/test_phase5_gates.py",
 }
 
 PRE_CLEAN = {"ABM": "2026-09-09", "SDGR": "2026-09-18"}
 ROLLBACK_TAG = "pre-tracker-swap"
+
+# Fixed registry. Membership is the contract: a gate missing from the computed
+# set is a blocker, so deleting a check can never quietly reduce the requirement.
+PHASE5_GATE_REGISTRY = (
+    "deployment_integrity",
+    "evidence_valid",
+    "collection_recent",
+    "phase2_clearance",
+    "required_coverage_resolution",
+    "minimum_closed_sample",
+    "explicit_operator_authorization",
+)
+
+# UNREGISTERED ON PURPOSE. A threshold picked now, knowing the closed count, would
+# be chosen to be met. None means "not preregistered", and the gate reports
+# evaluated=False, which blocks.
+MIN_CLOSED_SAMPLE = None
+MIN_CLOSED_SAMPLE_POPULATION = (
+    "undeclared: must specify clean_v3 vs parity-covered exits, the exact "
+    "integer, contamination exclusions, and which implementation epoch counts")
+
+# Human decision, never computed. Kept separate from phase5_gates_satisfied so an
+# all-green evidence state cannot become an authorization by itself.
+OPERATOR_AUTHORIZATION = False
+
+COVERAGE_STATES = ("satisfied", "pending", "unobtainable")
+COVERAGE_DISPOSITIONS = ("active", "retired", "replaced")
+
+# What each registered symbol must DEMONSTRATE, not merely appear in. Entry dates
+# come from PRE_CLEAN so the cohort labelling and the coverage requirement cannot
+# disagree about which position is meant.
+REQUIRED_COVERAGE = {
+    "ABM": {"entry_date": PRE_CLEAN["ABM"],
+            "required_event": "natural exit at the stop/trail equality boundary",
+            "required_action": "exit"},
+    "SDGR": {"entry_date": PRE_CLEAN["SDGR"],
+             "required_event": "dead-band lifecycle through natural exit",
+             "required_action": "exit"},
+}
+
+# Retirement is an OPERATOR DECISION recorded as data, never an inference. It
+# changes the disposition only: coverage_state stays "unobtainable" forever,
+# because rewriting missing evidence as satisfied is the one thing a retirement
+# must never be able to do.
+COVERAGE_RETIREMENTS = {
+    "SDGR": {
+        "disposition": "retired",
+        "decided_at": "2026-09-30",
+        "required_coverage": "dead-band lifecycle through natural exit",
+        "entry_date": "2026-09-18",
+        "exit_date": "2026-09-28",
+        "exit_reason_recorded_by_inline": "trailing_stop",
+        "exit_executed_on_cycle": "2026-09-29T05:35Z run (commit 14a324e)",
+        "parity_activation_effective_at": "2026-09-29T05:52:22.528410+00:00",
+        "required_exit_record": "absent",
+        "future_observability": False,
+        "reason": ("the position closed before Phase 4 collection was active, "
+                   "roughly 17 minutes before the first parity record; the "
+                   "required exit cycle can never be re-observed"),
+        "acknowledgement": ("this retirement ACKNOWLEDGES MISSING EVIDENCE and "
+                            "does not classify the requirement as satisfied"),
+        "substitute_accepted": None,
+        "note": ("SECZ dead-band observations are supplemental and do NOT "
+                 "retroactively satisfy SDGR's registered requirement"),
+    },
+}
+
+
+def _evidence_records():
+    """Parsed evidence records, or [] when the file is absent or unreadable.
+
+    Returning [] on absence is safe HERE because every coverage state derived
+    from an empty set is non-satisfied: no records means pending or unobtainable,
+    never satisfied. Schema validity is proven separately by the validator, which
+    fails closed on the same file.
+    """
+    p = ROOT / PARITY_OUTPUT
+    if not p.exists():
+        return []
+    recs = []
+    for line in p.read_text().splitlines():
+        if not line.strip():
+            continue
+        try:
+            recs.append(json.loads(line))
+        except Exception:
+            continue
+    return recs
+
+
+def _coverage_evidence(sym, spec, records):
+    """Find a record that actually DEMONSTRATES the required event.
+
+    Presence of the symbol is not coverage. An ABM record written while the
+    position was still open says nothing about its exit, so the search is for the
+    required ACTION with an affirmative comparison result.
+    """
+    for r in records:
+        if r.get("symbol") != sym:
+            continue
+        if r.get("parity_action") != spec["required_action"]:
+            continue
+        if r.get("record_schema_version") not in RECORD_FIELDS_BY_VERSION:
+            continue
+        if r.get("difference_class") != "MATCH":
+            continue
+        if r.get("would_change_action") is not False:
+            continue
+        if r.get("inline_exit_reason") != r.get("shadow_exit_reason"):
+            continue
+        if r.get("inline_effective_stop") != r.get("shadow_effective_stop"):
+            continue
+        if r.get("inline_effective_stop") is None:
+            continue
+        return r
+    return None
+
+
+def required_coverage(records, open_symbols):
+    """Resolve every registered obligation to exactly one of three states.
+
+    The distinction this exists to preserve: once a symbol is closed, satisfied
+    and unobtainable are both "not open", and a still_open test collapses them.
+    ABM exited WITH evidence; SDGR exited WITHOUT. Those must never look alike.
+    """
+    out = {}
+    for sym, spec in REQUIRED_COVERAGE.items():
+        rec = _coverage_evidence(sym, spec, records)
+        still_open = sym in open_symbols
+        if rec is not None:
+            state = "satisfied"
+        elif still_open:
+            state = "pending"
+        else:
+            # Closed with no demonstrating record. The required event cannot
+            # recur, so this is not a "not yet" -- it is a permanent absence.
+            state = "unobtainable"
+        retirement = COVERAGE_RETIREMENTS.get(sym)
+        disposition = (retirement or {}).get("disposition", "active")
+        if disposition not in COVERAGE_DISPOSITIONS:
+            disposition = "active"          # unrecognised never weakens anything
+        # A retirement can only stop an UNOBTAINABLE requirement from blocking.
+        # Applied to a pending one it would excuse a still-collectable gap.
+        blocking = state != "satisfied" and not (
+            state == "unobtainable" and disposition in ("retired", "replaced"))
+        entry = {
+            "required_event": spec["required_event"],
+            "required_action": spec["required_action"],
+            "expected_entry_date": spec["entry_date"],
+            "still_open": still_open,
+            "coverage_state": state,
+            "requirement_disposition": disposition,
+            "blocking": blocking,
+            "retirement": retirement,
+            "evidence": None,
+        }
+        if rec is not None:
+            entry["evidence"] = {
+                "cycle_id": rec.get("cycle_id"),
+                "timestamp": rec.get("timestamp"),
+                "entry_date": rec.get("entry_date"),
+                "observed_action": rec.get("parity_action"),
+                "inline_exit_reason": rec.get("inline_exit_reason"),
+                "shadow_exit_reason": rec.get("shadow_exit_reason"),
+                "inline_effective_stop": rec.get("inline_effective_stop"),
+                "shadow_effective_stop": rec.get("shadow_effective_stop"),
+                "inline_effective_stop_basis":
+                    rec.get("inline_effective_stop_basis"),
+                "difference_class": rec.get("difference_class"),
+                "would_change_action": rec.get("would_change_action"),
+                "record_schema_version": rec.get("record_schema_version"),
+                "production_commit": rec.get("production_commit"),
+                "boundary": rec.get("abm_equality_boundary"),
+            }
+            if rec.get("entry_date") != spec["entry_date"]:
+                # A matching symbol from a LATER re-entry is a different position
+                # and cannot discharge the registered obligation.
+                entry["coverage_state"] = "pending" if still_open else \
+                    "unobtainable"
+                entry["blocking"] = True
+                entry["evidence"]["rejected"] = (
+                    f"entry_date {rec.get('entry_date')} != registered "
+                    f"{spec['entry_date']}: different position")
+    # Denominator stays visible. Reporting "1 of 1 satisfied" after quietly
+    # dropping SDGR would be the misreading this accounting prevents.
+        out[sym] = entry
+    return out
+
+
+def coverage_tally(cov):
+    return {
+        "obligations": len(cov),
+        "satisfied": sum(1 for v in cov.values()
+                         if v["coverage_state"] == "satisfied"),
+        "pending": sum(1 for v in cov.values()
+                       if v["coverage_state"] == "pending"),
+        "retired_unobtainable": sum(
+            1 for v in cov.values()
+            if v["coverage_state"] == "unobtainable"
+            and v["requirement_disposition"] in ("retired", "replaced")),
+        "unresolved_unobtainable": sum(
+            1 for v in cov.values()
+            if v["coverage_state"] == "unobtainable"
+            and v["requirement_disposition"] == "active"),
+        "empirically_complete": all(v["coverage_state"] == "satisfied"
+                                    for v in cov.values()),
+        "administratively_resolved": all(not v["blocking"]
+                                         for v in cov.values()),
+    }
 
 
 IMPLEMENTATION_GLOBS = ("engine/", "tests/", "tools/pre_parity_snapshot.py",
@@ -1248,17 +1459,12 @@ def main():
                 for t in open_t
             ],
         },
-        "required_shadow_coverage": {
-            sym: {
-                "expected_entry_date": date,
-                "still_open": any(t.get("symbol") == sym for t in open_t),
-                "entry_date_matches": any(
-                    t.get("symbol") == sym and t.get("entry_date") == date
-                    for t in open_t),
-                "gates": "Phase 5 only. Does not gate Phase 4.",
-            }
-            for sym, date in PRE_CLEAN.items()
-        },
+        # Three-state resolution. The previous form tested only still_open and
+        # entry_date_matches, which was adequate while both symbols were open and
+        # became actively misleading the moment they closed: it could not tell an
+        # obligation discharged by a captured exit from one lost forever.
+        "required_shadow_coverage": required_coverage(
+            _evidence_records(), {t.get("symbol") for t in open_t}),
         "runtime": {
             "python": platform.python_version(),
             "implementation": platform.python_implementation(),
@@ -1287,8 +1493,15 @@ def main():
                                    "error": f"{type(exc).__name__}: {exc}"}
 
     lin = snap["lineage"]
+    # --no-suites exists ONLY to break a recursion: test_phase5_gates needs the
+    # assembled gate block, and running the full snapshot from inside a suite that
+    # the snapshot itself runs never terminates. The mode is made unable to
+    # manufacture a green gate -- suites_skipped is recorded and all_suites_pass is
+    # forced False below -- so it can never stand in for a real verification run.
+    skip_suites = "--no-suites" in sys.argv
+    snap["suites_skipped"] = skip_suites
     tests = {}
-    for name, path in SUITES.items():
+    for name, path in ({} if skip_suites else SUITES).items():
         out = sh(sys.executable, path)
         lines = out.splitlines()
         tests[name] = {
@@ -1331,7 +1544,10 @@ def main():
             not snap["live_logs"]["review_commits_touching_logs"],
         "live_log_changes_are_bot_only_and_allowlisted":
             snap["live_logs"]["valid"],
-        "all_suites_pass": all(t["passed"] for t in tests.values()),
+        # all() over an empty dict is True, so --no-suites would otherwise report
+        # every suite passing precisely because none ran.
+        "all_suites_pass": bool(tests) and not skip_suites and all(
+            t["passed"] for t in tests.values()),
         "marker_contract_valid": bool(snap["marker_contract"].get("valid")),
         "working_tree_clean": lin["working_tree_clean"],
         # Was parity_output_absent, a bare .exists() that encoded "Phase 4 has
@@ -1424,23 +1640,90 @@ def main():
     # PHASE 5 ELIGIBILITY. Freshness must VISIBLY prevent Phase 5 rather than be
     # informational: a stalled collector means the evidence backing the swap is
     # not current, whatever the already-written records say.
-    cov = snap["phase3_gate"].get("required_shadow_coverage", {})
-    blockers = []
-    if not snap["phase3_gate"]["deployment_integrity_valid"]:
-        blockers.append("deployment_integrity_valid is False")
-    if not snap["parity_output"]["valid"]:
-        blockers.append(f"evidence state {st}")
-    if recent is not True:
-        blockers.append(
-            f"parity_collection_recent is {recent} "
-            f"({snap['collection_health']['measures']})")
-    for sym, d in sorted(cov.items()):
-        if not d.get("entry_date_matches"):
-            blockers.append(f"required shadow coverage incomplete: {sym}")
-    # PHASE 5 IS PROHIBITED independently of this computation. The field reports
-    # whether the registered technical gates are satisfied; it is not an
-    # authorization, and an empty blocker list does not grant one.
-    snap["collection_health"]["phase5_gates_satisfied"] = not blockers
+    cov = snap.get("required_shadow_coverage") or {}
+    tally = coverage_tally(cov)
+    gates = {}
+
+    def gate(name, evaluated, passed, evidence, blocker=None):
+        gates[name] = {"evaluated": bool(evaluated), "passed": bool(passed),
+                       "evidence": evidence, "blocker": blocker}
+
+    gate("deployment_integrity",
+         True, snap["phase3_gate"]["deployment_integrity_valid"],
+         "phase3 gate aggregate",
+         None if snap["phase3_gate"]["deployment_integrity_valid"]
+         else "deployment_integrity_valid is False")
+    gate("evidence_valid", True, snap["parity_output"]["valid"],
+         f"state {st}", None if snap["parity_output"]["valid"]
+         else f"evidence state {st}")
+    gate("collection_recent", recent is not None, recent is True,
+         {"measures": snap["collection_health"]["measures"],
+          "last_heartbeat": hb["last_timestamp"]},
+         None if recent is True else
+         f"parity_collection_recent is {recent} "
+         f"({snap['collection_health']['measures']})")
+    # PHASE 2 CLEARANCE answers a DIFFERENT question from coverage: are any
+    # pre-migration positions still running under the legacy tracker? It can pass
+    # while the empirical evidence is incomplete, and conflating the two would let
+    # a closed-but-unobserved position read as cleared AND covered.
+    p2_open = sorted(s for s in PRE_CLEAN if s in {t.get("symbol")
+                                                  for t in open_t})
+    gate("phase2_clearance", True, not p2_open,
+         {"pre_clean_still_open": p2_open,
+          "question": "are pre-migration positions still under the legacy "
+                      "tracker (NOT whether their evidence was collected)"},
+         None if not p2_open else
+         f"pre-clean positions still open: {', '.join(p2_open)}")
+    # An EMPTY coverage set is not resolution. all() over nothing is True, so
+    # without this the gate reads passed whenever the block is missing entirely.
+    cov_complete = set(cov) == set(REQUIRED_COVERAGE) and bool(cov)
+    gate("required_coverage_resolution", cov_complete,
+         cov_complete and tally["administratively_resolved"],
+         tally,
+         (f"coverage set {sorted(cov)} != registered "
+          f"{sorted(REQUIRED_COVERAGE)}") if not cov_complete else
+         None if tally["administratively_resolved"] else
+         "; ".join(f"{s}: {d['coverage_state']}/{d['requirement_disposition']}"
+                   for s, d in sorted(cov.items()) if d["blocking"]))
+    # MINIMUM CLOSED SAMPLE is deliberately UNREGISTERED. Choosing a threshold
+    # now, with the closed count already known, would be fitting the bar to the
+    # data. Unevaluated is reported as unevaluated, and an unevaluated gate blocks.
+    gate("minimum_closed_sample", MIN_CLOSED_SAMPLE is not None,
+         False if MIN_CLOSED_SAMPLE is None else False,
+         {"threshold": MIN_CLOSED_SAMPLE,
+          "population": MIN_CLOSED_SAMPLE_POPULATION,
+          "note": "retired/unobtainable coverage does not contribute"},
+         "threshold not registered" if MIN_CLOSED_SAMPLE is None
+         else "sample gate not yet implemented")
+    gate("explicit_operator_authorization", True, OPERATOR_AUTHORIZATION,
+         {"granted": OPERATOR_AUTHORIZATION},
+         None if OPERATOR_AUTHORIZATION else
+         "explicit operator authorization absent")
+
+    # An ABSENT gate is itself a blocker: the satisfied flag must never be derived
+    # from an empty blocker list alone, which is precisely how it read True while
+    # nothing but freshness had ever been wired in.
+    missing = [g for g in PHASE5_GATE_REGISTRY if g not in gates]
+    blockers = [f"registered gate not evaluated: {g}" for g in missing]
+    for name in PHASE5_GATE_REGISTRY:
+        g = gates.get(name)
+        if not g:
+            continue
+        if not g["evaluated"]:
+            blockers.append(f"gate {name} not evaluated"
+                            + (f": {g['blocker']}" if g["blocker"] else ""))
+        elif not g["passed"]:
+            blockers.append(g["blocker"] or f"gate {name} failed")
+
+    snap["collection_health"]["phase5_gate_registry"] = list(
+        PHASE5_GATE_REGISTRY)
+    snap["collection_health"]["phase5_gates"] = gates
+    snap["collection_health"]["coverage_tally"] = tally
+    snap["collection_health"]["phase5_gates_satisfied"] = bool(
+        not blockers
+        and not missing
+        and all(gates[g]["evaluated"] and gates[g]["passed"]
+                for g in PHASE5_GATE_REGISTRY))
     snap["collection_health"]["phase5_blockers"] = blockers
     snap["collection_health"]["phase5_authorization"] = (
         "PROHIBITED -- Phase 5 requires explicit operator sign-off regardless "
