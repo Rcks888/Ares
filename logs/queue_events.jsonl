@@ -67,3 +67,4 @@
 {"timestamp": "2026-09-30T16:10:17", "symbol": "BCE", "action": "promoted", "queued_at": "2026-09-25", "confluence": 2, "signal_price": 20.97, "drift_pct": -2.81, "rsi": 50.0, "ema20_ok": true, "live_price": 20.38, "drop_reason": null}
 {"timestamp": "2026-09-30T21:01:32", "symbol": "GMAB", "action": "queued", "queued_at": "2026-09-30", "confluence": 3, "signal_price": 35.67, "drift_pct": null, "rsi": null, "ema20_ok": null, "live_price": null, "drop_reason": null}
 {"timestamp": "2026-10-01T13:31:31", "symbol": "GMAB", "action": "kept", "queued_at": "2026-09-30", "confluence": 3, "signal_price": 35.67, "drift_pct": -1.01, "rsi": 50.0, "ema20_ok": true, "live_price": 35.31, "drop_reason": null}
+{"timestamp": "2026-10-01T16:10:17", "symbol": "GMAB", "action": "promoted", "queued_at": "2026-09-30", "confluence": 3, "signal_price": 35.67, "drift_pct": -2.72, "rsi": 50.0, "ema20_ok": true, "live_price": 34.7, "drop_reason": null}
