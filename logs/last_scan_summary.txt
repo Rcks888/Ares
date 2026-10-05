@@ -1,6 +1,6 @@
 candidates_screened:103
 signals_found:1
-signal_details:PCVX | momentum_breakout | conf3 | uptrend
-  Price: $86.78 | RSI: 83.4 | Vol: 1.57x
-  Buy: $150 (1.7 shares)
-  SL: $65.54 | TP: $102.40 (+18%) | TS: 10%
+signal_details:WBD | momentum_breakout | conf3 | uptrend
+  Price: $30.95 | RSI: 74.5 | Vol: 6.03x
+  Buy: $150 (4.8 shares)
+  SL: $29.41 | TP: $36.52 (+18%) | TS: 10%

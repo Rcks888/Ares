@@ -74,7 +74,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 12.88,
       "avoided_downside_pct": 7.97,
-      "latest_price": 10.34
+      "latest_price": 10.28
     }
   },
   {
@@ -452,13 +452,13 @@
       "active": true,
       "days_tracked": 7,
       "max_days": 30,
-      "peak_after_exit": 31.05,
+      "peak_after_exit": 32.6,
       "trough_after_exit": 28.22,
-      "peak_date": "2026-09-30",
+      "peak_date": "2026-10-05",
       "trough_date": "2026-09-28",
-      "missed_upside_pct": 10.11,
+      "missed_upside_pct": 15.6,
       "avoided_downside_pct": -0.07,
-      "latest_price": 29.99
+      "latest_price": 32.6
     }
   },
   {
@@ -773,8 +773,8 @@
     "position_size": 149.0,
     "stop_loss": 167.83,
     "take_profit": 222.06,
-    "trailing_stop": 181.51,
-    "peak_price": 201.68,
+    "trailing_stop": 184.5,
+    "peak_price": 205.0,
     "rsi_at_entry": 73.9,
     "vol_at_entry": 1.92,
     "stdev_20": 0.0541,
@@ -876,7 +876,7 @@
       "trough_date": "2026-10-05",
       "missed_upside_pct": 2.52,
       "avoided_downside_pct": 1.06,
-      "latest_price": 19.63
+      "latest_price": 19.74
     }
   },
   {
@@ -946,13 +946,61 @@
       "active": true,
       "days_tracked": 3,
       "max_days": 30,
-      "peak_after_exit": 35.4,
+      "peak_after_exit": 38.48,
       "trough_after_exit": 34.16,
       "peak_date": "2026-10-05",
       "trough_date": "2026-10-02",
-      "missed_upside_pct": 3.72,
+      "missed_upside_pct": 12.75,
       "avoided_downside_pct": -0.09,
-      "latest_price": 35.4
+      "latest_price": 38.48
     }
+  },
+  {
+    "symbol": "PCVX",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "signal_date": "2026-10-05",
+    "signal_price": 86.78,
+    "entry_date": "2026-10-05",
+    "entry_price": 87.3,
+    "entry_slippage": 0.0872,
+    "entry_commission": 1.0,
+    "shares": 1.71,
+    "original_shares": 1.71,
+    "position_size": 149.0,
+    "stop_loss": 65.93,
+    "take_profit": 103.01,
+    "trailing_stop": 65.93,
+    "peak_price": 87.29720908355712,
+    "rsi_at_entry": 83.4,
+    "vol_at_entry": 1.57,
+    "stdev_20": 0.1224,
+    "stdev_fallback": false,
+    "strength": "medium",
+    "scaled_out": false,
+    "scale_out_price": null,
+    "scale_out_date": null,
+    "from_queue": false,
+    "sample_phase": "clean_v3",
+    "contaminated": false,
+    "contamination_reasons": [],
+    "fill_source": "scheduled",
+    "fill_detect": "env",
+    "fill_run_ts": "2026-10-05T21:00:56",
+    "status": "open",
+    "exit_date": null,
+    "exit_price": null,
+    "exit_reason": null,
+    "exit_slippage": null,
+    "exit_commission": null,
+    "total_commission": 1.0,
+    "pnl": null,
+    "pnl_pct": null,
+    "pnl_after_costs": null,
+    "version": "3.0",
+    "holding_days": 0
   }
 ]
