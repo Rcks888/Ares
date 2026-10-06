@@ -1,3 +1,12 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:3
+signal_details:EROC | momentum_breakout | conf3 | uptrend
+  Price: $13.64 | RSI: 50.7 | Vol: 1.72x
+  Buy: $150 (11.0 shares)
+  SL: $12.04 | TP: $16.10 (+18%) | TS: 10%|||ITUB | momentum_breakout | conf3 | uptrend
+  Price: $10.15 | RSI: 76.5 | Vol: 1.61x
+  Buy: $150 (14.8 shares)
+  SL: $9.35 | TP: $11.98 (+18%) | TS: 10%|||XP | momentum_breakout | conf3 | uptrend
+  Price: $29.73 | RSI: 85.5 | Vol: 2.06x
+  Buy: $150 (5.0 shares)
+  SL: $25.44 | TP: $35.08 (+18%) | TS: 10%

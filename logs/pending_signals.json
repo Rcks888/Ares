@@ -1,1 +1,40 @@
-[]
+[
+  {
+    "symbol": "EROC",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-10-06",
+    "price": 13.64,
+    "rsi": 50.7,
+    "vol_ratio": 1.72,
+    "stdev_20": 0.0585,
+    "strength": "medium",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "from_queue": false
+  },
+  {
+    "symbol": "ITUB",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-10-06",
+    "price": 10.15,
+    "rsi": 76.5,
+    "vol_ratio": 1.61,
+    "stdev_20": 0.0395,
+    "strength": "medium",
+    "screens": [
+      "unusual_volume",
+      "near_52w_high"
+    ],
+    "from_queue": false
+  }
+]

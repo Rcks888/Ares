@@ -74,7 +74,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 12.88,
       "avoided_downside_pct": 7.97,
-      "latest_price": 10.28
+      "latest_price": 10.13
     }
   },
   {
@@ -458,7 +458,7 @@
       "trough_date": "2026-09-28",
       "missed_upside_pct": 15.6,
       "avoided_downside_pct": -0.07,
-      "latest_price": 32.6
+      "latest_price": 28.9
     }
   },
   {
@@ -623,12 +623,12 @@
       "days_tracked": 12,
       "max_days": 30,
       "peak_after_exit": 13.76,
-      "trough_after_exit": 12.13,
+      "trough_after_exit": 11.96,
       "peak_date": "2026-09-25",
-      "trough_date": "2026-10-05",
+      "trough_date": "2026-10-06",
       "missed_upside_pct": 0.15,
-      "avoided_downside_pct": 11.72,
-      "latest_price": 13.13
+      "avoided_downside_pct": 12.95,
+      "latest_price": 11.96
     }
   },
   {
@@ -823,12 +823,12 @@
       "days_tracked": 0,
       "max_days": 30,
       "peak_after_exit": 188.1,
-      "trough_after_exit": 188.1,
+      "trough_after_exit": 166.97,
       "peak_date": "2026-10-06",
       "trough_date": "2026-10-06",
-      "missed_upside_pct": 0,
-      "avoided_downside_pct": 0,
-      "latest_price": 188.1
+      "missed_upside_pct": 0.1,
+      "avoided_downside_pct": 11.14,
+      "latest_price": 166.97
     }
   },
   {
@@ -904,7 +904,7 @@
       "trough_date": "2026-10-05",
       "missed_upside_pct": 2.52,
       "avoided_downside_pct": 1.06,
-      "latest_price": 19.74
+      "latest_price": 19.75
     }
   },
   {
@@ -980,7 +980,7 @@
       "trough_date": "2026-10-02",
       "missed_upside_pct": 12.75,
       "avoided_downside_pct": -0.09,
-      "latest_price": 38.48
+      "latest_price": 37.8
     }
   },
   {
@@ -1050,13 +1050,13 @@
       "active": true,
       "days_tracked": 0,
       "max_days": 30,
-      "peak_after_exit": 65.93,
+      "peak_after_exit": 66.7,
       "trough_after_exit": 65.93,
       "peak_date": "2026-10-06",
       "trough_date": "2026-10-06",
-      "missed_upside_pct": 0,
-      "avoided_downside_pct": 0,
-      "latest_price": 65.93
+      "missed_upside_pct": 1.28,
+      "avoided_downside_pct": -0.11,
+      "latest_price": 66.7
     }
   }
 ]
