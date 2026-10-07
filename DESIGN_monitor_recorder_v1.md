@@ -54,12 +54,30 @@ open a position. It appends to `pending_signals.json` and returns `'pending'`
 computed. The fill happens in `execute_pending_signals()`, which is called from
 **`daily_report.py:54` only** — the report path.
 
+### 2.1.1 The three-stage entry pipeline — canonical description
+
+This replaces every earlier description of the monitor as an entry-execution
+path, in this document and in the incident record.
+
+```
+STAGE 1  candidate selection
+         scan (daily_report, report path)  OR  promote_queue (monitor path)
+                ↓
+STAGE 2  open_trade  →  appends to pending_signals.json, returns 'pending'
+         no price, no shares, no stop
+                ↓
+STAGE 3  execute_pending_signals  →  the FILL
+         entry_price = today_open * (1 + slippage_pct)
+         position_size = 149.00, shares, stop_loss, take_profit
+         daily_report.py:54 ONLY — report path
+```
+
 So the correct characterisation is:
 
-| Path | Can select a candidate into pending | Can fill a position |
-|---|---|---|
-| monitor | **yes**, unobserved | no |
-| report | yes | **yes** |
+| Path | Stage 1 select | Stage 2 pending | Stage 3 fill |
+|---|---|---|---|
+| monitor | **yes**, unobserved | yes | **no** |
+| report | yes | yes | **yes** |
 
 The monitor is an **admission-initiating** path, not an admission-completing one.
 That is narrower than "a full admission path" and the distinction matters: the
@@ -71,10 +89,11 @@ Consequence for the recorder: admission capture is still required, but its
 subject is **candidate selection**, not entry. And `price_basis` on the monitor
 path is the *validation* price, which never becomes the entry price.
 
-**This also resolves the EROC/ITUB question in §7A directly.** Both carry
-`from_queue: false`, so they were admitted by the scan, not promoted by a
-monitor. They will be filled by `execute_pending_signals()` on a report cycle.
-The monitor promotion route is not implicated for these two.
+**This settles the EROC/ITUB *fill* question in §7A, but not their origin.**
+Stage 3 is report-path-only, so whichever path selected them, the fill must come
+from `execute_pending_signals()` on a report cycle. Their **initiating source is
+`unknown`** and no record field establishes it — see §3.5 on why `from_queue` is
+not a proxy.
 
 ### 2.2 `get_live_price` cannot fail visibly
 
@@ -297,6 +316,48 @@ argued for in that diff on its own merits.
 Admission evidence stays in `logs/queue_events.jsonl` — the existing stream —
 rather than a new file, so one admission does not produce two partial records in
 two places.
+
+#### `source` is one field but still a record-contract change
+
+**Revised after review.** "One field, already a parameter, currently discarded"
+understated it. `queue_events.jsonl` is an append-only evidence stream with
+existing consumers, and adding a key changes the contract for every reader. It
+must be registered before it is added, not alongside it:
+
+| Contract element | Specification |
+|---|---|
+| Destination | `logs/queue_events.jsonl`, existing stream, append-only |
+| Field name | `initiating_source` — **not** `source`, which is already an overloaded word in this codebase |
+| Allowed values | `scan`, `monitor`, `unknown` — closed set; an unrecognised value is a validation failure, not a pass-through |
+| Schema version | `queue_event_schema_version: 2`; absence of the key means version 1 |
+| Historical behaviour | Records written before the change have **no** key. Readers must treat absent as `unknown`, never as `scan`. |
+| Backfill | **None.** No historical record is edited. |
+| Validation | A version-2 record missing `initiating_source` is invalid; a version-1 record missing it is valid. Version-aware, as with the parity record schema. |
+
+#### `from_queue` is not a proxy for the initiating process
+
+An earlier draft leaned on `from_queue: false` to conclude EROC and ITUB were
+scan-initiated. That inference is **too strong and is withdrawn.**
+
+`from_queue` records whether `open_trade` was reached via `promote_queue` (queue
+origin) or called directly. It distinguishes **queue-originated from
+non-queue-originated**, which is not the same as identifying the initiating
+process:
+
+- `promote_queue` is called from **both** `daily_report.py:64` (`source="scan"`)
+  and `monitor_trades.py:89` (`source="monitor"`), and both produce
+  `from_queue: true`.
+- So `from_queue: true` is **ambiguous** between the two paths — precisely the
+  distinction being sought.
+- `from_queue: false` means the direct `daily_report.py:119` call, which is
+  report-path **on current code**. That is a fact about today's call graph, not a
+  property the record asserts, and it would silently stop being true if any other
+  caller were added.
+
+For EROC and ITUB the conclusion is therefore: `from_queue: false` is
+**consistent with** scan initiation, and no record field establishes it.
+Correct status is `initiating_source: unknown`, with the call-graph reading noted
+as an inference. Every pre-change record is permanently `unknown`.
 
 ### 3.6 Lifecycle identity
 
@@ -701,9 +762,38 @@ evidence grouping needs.
 Keeping the last two apart matters because a recorder change must not look like a
 decision change, and vice versa.
 
-### 7.2 Manifest — explicit, versioned, and wider than the obvious five
+### 7.2 Three manifests, separated by responsibility
+
+**Revised after review.** One manifest conflated three different questions. Each
+fingerprint is independent, each **fails loudly if any required path is missing**,
+and none may silently skip an absent entry — the failure mode caught at §7.2's
+`config/params.json` error, where a wrong path would have hashed nothing and
+still produced a stable-looking fingerprint.
+
+| Manifest | Governs | Changes mean |
+|---|---|---|
+| `DECISION_MANIFEST_V1` | admissions, fills, exits | production behaviour changed |
+| `CLASSIFICATION_MANIFEST_V1` | clean/contaminated sample membership | what counts as evidence changed |
+| `OBSERVATION_MANIFEST_V1` | recorder, parity comparison, evidence validation | how we watch changed |
+
+Keeping them apart means a recorder change cannot look like a decision change, and
+a change to sample-membership rules cannot masquerade as either.
 
 ```python
+CLASSIFICATION_MANIFEST_V1 = (
+    "engine/sample.py",             # CLEAN_FROM, classify, is_clean, metrics
+)
+
+OBSERVATION_MANIFEST_V1 = (
+    "engine/monitor_recorder.py",   # proposed, not yet existing
+    "engine/parity_hook.py",
+    "engine/parity_eval.py",
+    "engine/parity_runner.py",
+    "engine/parity_compare.py",
+    "engine/tracker_compat.py",
+    "tools/pre_parity_snapshot.py",
+)
+
 DECISION_MANIFEST_V1 = (
     "monitor_trades.py",            # monitor policy  (was unmanifested)
     "daily_report.py",              # report entry point
@@ -711,13 +801,39 @@ DECISION_MANIFEST_V1 = (
     "engine/data_feed.py",          # price acquisition (was unmanifested)
     "engine/indicators.py",         # RSI, divergence
     "engine/exit_policy.py",        # canonical module
-    "engine/tracker_compat.py",     # 2dp adapter
-    "engine/parity_hook.py",        # report observation bridge
-    "engine/parity_eval.py",
-    "engine/parity_runner.py",
+    "engine/signals.py",            # candidate generation
     "config/strategy_params.json",  # effective config, see 7.3
 )
 ```
+
+`engine/tracker_compat.py` and the parity modules move to the observation
+manifest: they adapt and compare, they do not decide. `engine/exit_policy.py`
+stays in the decision manifest because it is the intended future decision
+implementation, even though nothing calls it in production today.
+
+#### `engine/sample.py` — call-chain audit, as required before placement
+
+Audited rather than assumed. Every production reader of `sample`:
+
+| Call site | Uses | Decides? |
+|---|---|---|
+| `tracker.py:168` | `fill_context()` → `fill_reasons` | **no** — computed *after* sizing (132-135) and stop (153); the fill happens regardless |
+| `tracker.py:172,208` | `PRE_PHASE`/`CLEAN_PHASE` → `sample_phase`, `contaminated` written to the record | **no** — labels only |
+| `tracker.py:1010-1050` | `clean`, `excluded`, `metrics`, `net_pnl` | **no** — `print_scorecard` |
+| `tracker.py:1167` | `sample_phase`, `contaminated` as CSV columns | **no** — `export_csv` |
+| `build_dashboard.py:252-306` | `clean`, `excluded`, `metrics`, `net_pnl` | **no** — display |
+| `backfill_sample_phase.py`, `repair_stale_entries.py` | `classify`, `STALE_ENTRY_TOL_PCT` | **no** — offline tools |
+
+**No decision path reads `sample_phase` or `contaminated`.** Placement in the
+classification manifest is confirmed.
+
+One boundary worth stating precisely, because it looks like a counterexample: a
+missing `stdev_20` both **changes the stop** (`tracker.py:151` substitutes `0.05`,
+roughly doubling stop distance) and **sets a contamination label**. The
+substitution is a decision and lives in `tracker.py`; only the labelling is
+classification. `sample.FALLBACK_STOP_FRAC` and `FALLBACK_TOL` are used solely by
+`used_fallback_stdev()` to *detect* that substitution after the fact. The split
+holds.
 
 **Verified, not assumed.** The config path is
 `config/strategy_params.json` (`tracker.py:28`); `config/params.json` does not
@@ -759,6 +875,77 @@ provenance per key:
 `source: "code_default"` is itself the finding — it marks every parameter that can
 change without any config diff.
 
+### 7.3.1 Effective-parameter inventory — completed 2026-10-07
+
+Enumerated from all `params.get(...)` call sites against
+`config/strategy_params.json` (23 keys). Read-only; independent of tonight's
+cycle.
+
+**Exactly two keys resolve from a code default:**
+
+| Key | Resolved value | Origin | Affects |
+|---|---|---|---|
+| `slippage_pct` | `0.001` | **code default** | every booked entry and exit price, both paths |
+| `commission_per_trade` | `1.00` | **code default** | `position_size`, every exit's `total_commission` |
+
+All 21 others — `cash_reserve_pct`, `starting_capital`, `max_positions`,
+`stop_loss_multiplier`, `tp_momentum`, `tp_reversal`, `trailing_stop_pct`,
+`scale_out`, `scale_out_pct`, `rsi_extreme_high`, `rsi_length`, `min_confluence`,
+`sma_trend_length`, `sma_slope_threshold`, `disable_trend_continuation`,
+`queue_max_age_days`, `queue_max_drift_pct`, `queue_max_size`,
+`pending_max_age_days`, `pending_max_gap_hours` — are present in the config file.
+
+So the two parameters that can change with no config diff are precisely the two
+that set every booked price. That is the whole of the exposure, and it is
+narrower than feared.
+
+**To verify at implementation, not claimed here:** `rsi_oversold`, `min_vol_ratio`
+and `version` are present in the config but matched no `params.get` site in this
+scan. They are either accessed by another pattern (likely in `engine/signals.py`)
+or unused. Not asserted either way.
+
+### 7.3.2 Defaults differ per call site — a latent divergence
+
+**New finding, and the reason "resolved value and origin" is not quite
+sufficient.** `trailing_stop_pct` is read with **two different defaults**:
+
+| Call site | Default |
+|---|---|
+| `monitor_trades.py:29` | **0.08** |
+| `engine/tracker.py:873` | 0.10 |
+| `engine/exit_policy.py:106` | 0.10 |
+| `engine/tracker_compat.py:92` | 0.10 |
+| `daily_report.py:111,143` | 0.10 |
+| `repair_stale_entries.py:47` | 0.10 |
+
+The config currently supplies `0.10`, so **both paths trail at 10% today and the
+divergence is invisible.** Remove, rename or typo that key and the monitor would
+trail at 8% while the report path trails at 10% — a silent exit-policy
+divergence pre-wired into the defaults, triggered by a config edit that touches
+no code.
+
+This is an **eleventh divergence**, in the defaults layer rather than the logic
+layer, and it is currently masked.
+
+Consequence for the contract: recording one global `source` per key is not
+enough. The effective-config record must carry the **per-call-site default**, so
+a masked divergence is visible in evidence before a config change unmasks it:
+
+```json
+"trailing_stop_pct": {
+  "value": 0.10,
+  "source": "config",
+  "defaults_by_site": {"monitor_trades.py:29": 0.08,
+                       "engine/tracker.py:873": 0.10},
+  "defaults_agree": false,
+  "masked_divergence": true
+}
+```
+
+`defaults_agree: false` with `source: "config"` is the signature of a divergence
+that exists but cannot currently fire. A control must assert that this
+combination is reported rather than normalised away.
+
 ---
 
 ## 7A. Pre-cycle preservation record — 2026-10-07, before 13:30 UTC
@@ -799,9 +986,12 @@ cash = 1000 − 78.38 − 447.27 − 3.00 entry commissions = $471.35
 | ITUB | $10.15 | 3 | 76.5 | 1.61 | 0.0395 | false |
 
 Both dated 2026-10-06, `momentum_breakout` / `breakout` / `uptrend`,
-`strength: medium`. **`from_queue: false`** — these were admitted directly from
-the scan, not promoted from the queue, which means the 13:30 report path is the
-expected filler and the monitor promotion route is not implicated for these two.
+`strength: medium`, `from_queue: false`.
+
+The fill must come from a **report** cycle regardless of origin, because Stage 3
+exists only there (§2.1.1). Their **initiating source is `unknown`**:
+`from_queue: false` is consistent with scan initiation on the current call graph
+but does not establish it (§3.5).
 
 `logs/queue_ranked.json` is `[]`. XP sits in `signal_queue.json` at $29.73 with
 one logged event: `queued` at 2026-10-06T21:01:19, all drift/live fields `null`.
@@ -844,9 +1034,13 @@ and $10.15 signal prices; the dollar outlay can.
 Supersedes the earlier figure of $169.35, which double-counted commission: the
 $149 `position_size` already has the $1 commission deducted.
 
-**This remains a prediction.** It is not confirmed until the actual booked
-`entry_price`, `shares`, `position_size` and `entry_commission` are read from
-`virtual_trades.json` after the fill, per §8.3.
+**This remains provisional.** The arithmetic is consistent *assuming each fill
+consumes exactly $149.00 + $1.00*, which is what the code computes but not yet
+what the record shows. It is not confirmed until actual `shares`, `entry_price`,
+`position_size` and `entry_commission` are reconciled from
+`virtual_trades.json`, per §8.3. `shares` is rounded to 2dp at
+`tracker.py:187-188`, so `shares × entry_price` will not land on exactly $149.00
+and the residual must be read, not assumed.
 
 Two fill risks could falsify it outright: `_pending_age_days` (both pendings are
 1 day old against a 4-day maximum, so this should pass), and the `bar_date !=
@@ -858,14 +1052,18 @@ assume.
 
 ### A policy asymmetry visible at admission
 
-ITUB is admitted with `rsi: 76.5`. The report path implements an
-`emotional_extreme` exit at `rsi_extreme_high: 90`; **the monitor path implements
-no RSI exit at all**. So whether ITUB is ever subject to an RSI exit depends on
-which cycle its price moves in.
+ITUB is admitted with `rsi: 76.5`, below the configured
+`rsi_extreme_high: 90`.
 
-That is the finding. An earlier draft characterised 76.5 as "two thirds of the way
-to an immediate exit" — removed, as it is not a defined measure and 76.5 is
-simply below the threshold.
+The narrow finding: **the report path can apply an RSI exit; the monitor path
+cannot.** Which path acts on any position first depends on its inputs and
+schedule, not solely on when price moves — the monitor runs at 16:10 and 17:30
+on IBKR live prices, the report path at 13:30 and 21:00 on a daily bar with a
+live override, and either may reach a threshold first.
+
+Two earlier formulations are withdrawn: "two thirds of the way to an immediate
+exit" (not a defined measure), and "depends on which cycle its price moves in"
+(too narrow — inputs and schedule both matter).
 
 ### 7.4 Completeness accounting
 
@@ -922,15 +1120,39 @@ than a narrative fitted afterwards.
 
 ### 8.3 After (capture, do not act)
 
-- Were both admitted, or did `max_positions`/`_fill_window_ok` intervene?
-- Quantity and **pricing basis** for each: `checks['live']` versus daily close —
-  the field §3.5 exists to make explicit in future
-- Which cycle admitted them: 13:30 report, or a 16:10/17:30 monitor promotion
-- Booked entry price, shares, commission; resulting cash
-- Whether the reserve breach matched the prediction, and by how much
-- Report-path parity records for the new positions: expect
-  `not_computed_entry_day_skip` and `parity_action: skipped_entry_day`
-- Heartbeat `attempted` — expect 5 if both filled
+Read-only. Fixed list, so the capture cannot drift toward whatever happened to
+be interesting.
+
+| # | Capture | Source |
+|---|---|---|
+| 1 | **Pending before and after** — full records, both states | `logs/pending_signals.json`, pre-state in §7A |
+| 2 | **Per-symbol status**: filled / retained / expired / rejected / queued | `queue_events.jsonl` actions, stdout |
+| 3 | **Actual fill price, quantity, commission** — `entry_price`, `entry_slippage`, `shares`, `original_shares`, `position_size`, `entry_commission` | `virtual_trades.json` |
+| 4 | **Bar date used by the fill guard** — the `bar_date` vs `today` comparison at `tracker.py:120-127`, and whether either symbol was retained on it | stdout, `fill_retry` events |
+| 5 | **Resulting cash and reserve comparison** — recomputed, against the $250 nominal and the provisional $171.35 | derived |
+| 6 | **Executing path and source evidence where available** — which cycle filled, and `initiating_source` recorded as `unknown` for both unless evidence exists | heartbeat timestamps, `from_queue`, §3.5 caveat |
+
+Supporting observations, same read-only pass:
+
+- Report-path parity records for any new position: expect
+  `inline_effective_stop_basis: not_computed_entry_day_skip` and
+  `parity_action: skipped_entry_day`
+- Heartbeat `attempted` — 5 if both filled, 4 if one, 3 if neither
+- `stdev_fallback` on each fill: EROC carries `stdev_20: 0.0585` and ITUB
+  `0.0395`, so both should be `false`; a `true` would mean the pending lost the
+  field between admission and fill
+- `sample_phase` on each fill: expect `clean_v3`, since `ARES_SCHEDULED=1` is
+  exported by the launcher and `fill_context()` reads it as authoritative
+
+### 8.4 What the capture cannot establish
+
+Stated now so the reconciliation is not over-read later:
+
+- **Which path initiated** EROC and ITUB. No record field carries it (§3.5).
+- **Whether the fill price was executable.** `today_open × 1.001` is a model, and
+  the same unresolved fill-realism question as PCVX.
+- **Whether the reserve breach is harmful.** It establishes that the computed
+  reserve does not track cash. Whether that matters is a separate risk decision.
 
 ### 8.4 Explicit non-authorisation
 
@@ -1125,9 +1347,56 @@ shape; the key list widens.
 5. With **zero open positions the monitor cannot admit at all**, because the early
    return precedes `promote_queue`.
 
+### Second pass — 2026-10-07, both prerequisites closed
+
+Item 9 and item 10 are now resolved, read-only and independent of the cycle.
+
+**Manifests split three ways** (§7.2) by responsibility: decision,
+classification, observation. `engine/sample.py` placed in the classification
+manifest **after** the call-chain audit confirmed no decision path reads
+`sample_phase` or `contaminated` — six production readers enumerated, all
+labelling, display, export or offline tooling. `tracker_compat.py` and the parity
+modules moved to observation; `engine/signals.py` added to decision. Every
+fingerprint must fail on a missing path rather than skip it.
+
+**Parameter inventory complete** (§7.3.1): of 23 keys, **exactly two** resolve
+from code defaults — `slippage_pct` (0.001) and `commission_per_trade` (1.00).
+Narrower than feared, and they are precisely the two that set every booked price.
+
+**`source` capture re-scoped** (§3.5): registered as a record-contract change
+with destination, field name `initiating_source`, closed value set
+`{scan, monitor, unknown}`, schema version 2, absent-means-unknown for history,
+and no backfill. The earlier "one field" framing understated it.
+
+**`from_queue` inference withdrawn** (§3.5). `promote_queue` is called from
+*both* paths and both yield `from_queue: true`, so the field is ambiguous exactly
+where the distinction is wanted. `from_queue: false` is consistent with scan
+initiation on the current call graph but asserts nothing. EROC and ITUB are
+`initiating_source: unknown`.
+
+### Finding added by the second pass — an eleventh divergence, currently masked
+
+`trailing_stop_pct` is read with **0.08** at `monitor_trades.py:29` and **0.10**
+at all six other sites. The config supplies `0.10`, so both paths trail at 10%
+today and the divergence cannot fire.
+
+Remove, rename or mistype that one config key and the monitor trails at 8% while
+the report path trails at 10% — an exit-policy divergence pre-wired into the
+defaults, unmasked by a config edit that touches no code and passes every
+existing check.
+
+This is why "resolved value and origin" needed extending: a single global
+`source` per key would record `"config"` and look clean. The contract now carries
+`defaults_by_site`, `defaults_agree` and `masked_divergence`, and
+`defaults_agree: false` with `source: "config"` is the signature to watch for.
+
 ### Next
 
-Resolutions are applied. Remaining before implementation review: enumerate
-parameter provenance (item 10), and place `engine/sample.py` deliberately
-(item 9). Then tonight's cycle runs **unchanged**, §8.3 is captured read-only,
-and predicted-versus-actual is reconciled as a separate step.
+Prerequisites closed. Tonight's 13:30 UTC cycle runs **unchanged** — about
+6h15m from 15:15 SGT. Then §8.3 is captured read-only against the fixed list,
+§8.4 bounds what it cannot establish, and predicted-versus-actual is reconciled
+as a separate step before any implementation diff is presented.
+
+Nothing in this document authorises a runtime change. In particular, the recorder
+must not quietly repair admission gating, reserve sizing, exception handling, the
+defaults divergence, or any exit-policy difference. **Observe first.**
