@@ -15,10 +15,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-10-07T13:31:20",
-    "drift_pct": -0.87,
+    "checked_at": "2026-10-07T21:01:09",
+    "drift_pct": -0.67,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 29.47
+    "live_price": 29.53
   }
 ]

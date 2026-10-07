@@ -74,7 +74,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 12.88,
       "avoided_downside_pct": 7.97,
-      "latest_price": 10.13
+      "latest_price": 10.33
     }
   },
   {
@@ -453,12 +453,12 @@
       "days_tracked": 9,
       "max_days": 30,
       "peak_after_exit": 32.6,
-      "trough_after_exit": 28.22,
+      "trough_after_exit": 27.29,
       "peak_date": "2026-10-05",
-      "trough_date": "2026-09-28",
+      "trough_date": "2026-10-07",
       "missed_upside_pct": 15.6,
-      "avoided_downside_pct": -0.07,
-      "latest_price": 28.9
+      "avoided_downside_pct": 3.23,
+      "latest_price": 27.29
     }
   },
   {
@@ -623,12 +623,12 @@
       "days_tracked": 13,
       "max_days": 30,
       "peak_after_exit": 13.76,
-      "trough_after_exit": 11.96,
+      "trough_after_exit": 11.68,
       "peak_date": "2026-09-25",
-      "trough_date": "2026-10-06",
+      "trough_date": "2026-10-07",
       "missed_upside_pct": 0.15,
-      "avoided_downside_pct": 12.95,
-      "latest_price": 12.88
+      "avoided_downside_pct": 14.99,
+      "latest_price": 11.68
     }
   },
   {
@@ -823,12 +823,12 @@
       "days_tracked": 1,
       "max_days": 30,
       "peak_after_exit": 188.1,
-      "trough_after_exit": 166.97,
+      "trough_after_exit": 155.65,
       "peak_date": "2026-10-06",
-      "trough_date": "2026-10-06",
+      "trough_date": "2026-10-07",
       "missed_upside_pct": 0.1,
-      "avoided_downside_pct": 11.14,
-      "latest_price": 166.97
+      "avoided_downside_pct": 17.17,
+      "latest_price": 155.65
     }
   },
   {
@@ -904,7 +904,7 @@
       "trough_date": "2026-10-05",
       "missed_upside_pct": 2.52,
       "avoided_downside_pct": 1.06,
-      "latest_price": 19.71
+      "latest_price": 19.76
     }
   },
   {
@@ -980,7 +980,7 @@
       "trough_date": "2026-10-02",
       "missed_upside_pct": 12.75,
       "avoided_downside_pct": -0.09,
-      "latest_price": 37.8
+      "latest_price": 36.65
     }
   },
   {
@@ -1050,13 +1050,13 @@
       "active": true,
       "days_tracked": 1,
       "max_days": 30,
-      "peak_after_exit": 66.7,
+      "peak_after_exit": 66.96,
       "trough_after_exit": 65.93,
-      "peak_date": "2026-10-06",
+      "peak_date": "2026-10-07",
       "trough_date": "2026-10-06",
-      "missed_upside_pct": 1.28,
+      "missed_upside_pct": 1.67,
       "avoided_downside_pct": -0.11,
-      "latest_price": 65.94
+      "latest_price": 66.96
     }
   },
   {

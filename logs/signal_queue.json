@@ -15,5 +15,22 @@
       "unusual_volume",
       "big_movers_up"
     ]
+  },
+  {
+    "symbol": "BSP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 41.07,
+    "rsi_at_signal": 52.2,
+    "stdev_20": 0.0644,
+    "vol_ratio": 2.83,
+    "date_added": "2026-10-07",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
   }
 ]
