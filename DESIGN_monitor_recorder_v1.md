@@ -827,18 +827,33 @@ CONDITIONAL_MEMBERSHIP = {
         "today":       "observation only",
     },
     "engine/exit_policy.py": {
-        "decision":    "listed now as the intended future implementation",
-        "today":       "called by no production decision path",
+        "role":        "REFERENCE decision implementation",
+        "authority":   "none — no production decision path calls it",
+        "today":       "decision manifest by role, not by authority",
     },
 }
 ```
 
-`engine/exit_policy.py` is the mirror case and is listed as the exception it is:
-it sits in the decision manifest although **nothing in production calls it**,
-because it is the intended future decision implementation. One module is
-decision-manifest without current authority; the other is observation-manifest
-and may acquire authority later. Writing both down prevents a future reader from
-inferring a filename rule that does not exist.
+**Manifest membership does not imply live authority.**
+`engine/exit_policy.py` is the **reference decision implementation** — the
+canonical expression of Policy A, against which the two production
+implementations can be compared. It is distinct from the **currently
+authoritative production implementations**, which are:
+
+| Implementation | Authority today |
+|---|---|
+| `tracker.check_open_trades` | authoritative, report path |
+| `monitor_trades.monitor` | authoritative, monitor path |
+| `engine/exit_policy.py` | **reference only, no authority** |
+
+It is in the decision manifest because a change to the reference changes what
+"Policy A" means, which is a decision-semantics change. That is a different claim
+from saying it decides anything.
+
+Together the two entries prevent a filename rule being inferred: one module is
+decision-manifest **without** authority, the other observation-manifest and may
+**acquire** authority later. Membership tracks role and runtime authority, which
+are two axes, not one.
 
 A manifest-placement audit is therefore required whenever the set of callers
 changes — the same event that would invalidate the §7.2 `sample.py` audit.
@@ -991,11 +1006,21 @@ is reported rather than normalised away.
 #### The recorder must not fix this
 
 The temptation is one line — make `monitor_trades.py:29` read `0.10`. **Out of
-scope, and prohibited here.** It is an exit-policy change dressed as a typo fix,
-and it would be made inside an observation diff reviewed for something else.
-Which default is *correct* is undecidable until the governing question is
+scope, and prohibited here.**
+
+Stated precisely, because the obvious objection is "it changes nothing": while
+the config supplies `0.10`, that edit would **not change current behaviour** —
+both paths already resolve to 0.10. What it would change is **missing-key
+behaviour**, which is the only circumstance in which either default is ever read.
+
+So the edit is not a no-op dressed as a fix; it is a change to the system's
+behaviour under a *different* configuration, invisible under the present one. It
+would alter exactly the latent condition this record exists to preserve, and do
+so inside an observation diff reviewed for something else.
+
+Which default is *correct* is also undecidable until the governing question is
 answered: unifying on 0.10 presumes the report path is authoritative, which is
-exactly what has not been established.
+exactly what has not been established. Separate review, on its own merits.
 
 Required instead:
 
