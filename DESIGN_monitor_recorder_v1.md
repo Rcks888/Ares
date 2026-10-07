@@ -42,20 +42,39 @@ Phase 5 and AI modelling remain prohibited throughout.
 These emerged while reading the call chain for this draft and were **not** in the
 incident document. Two of them widen the scope of what is unobserved.
 
-### 2.1 The monitor also makes ENTRY decisions
+### 2.1 The monitor initiates admissions but cannot complete them
 
 `monitor_trades.py:89` calls `promote_queue(source="monitor", use_live=True)`
-whenever a close freed a slot. That reaches `open_trade(signal, from_queue=True)`
-with `price = checks['live']` (`tracker.py:589`).
+whenever the loop set `updated`. That reaches `open_trade(signal,
+from_queue=True)` with `price = checks['live']` (`tracker.py:589`).
 
-**The monitor is not an exit-only path. It is a full admission path.** The
-incident characterised it as a second exit implementation; it is a second exit
-implementation *and* an unobserved entry mechanism. The recorder must cover
-admission decisions, not only exits.
+**Correction to the first reading of this finding.** `open_trade` does **not**
+open a position. It appends to `pending_signals.json` and returns `'pending'`
+(`tracker.py:635-658`). No price is filled, no shares are sized, no stop is
+computed. The fill happens in `execute_pending_signals()`, which is called from
+**`daily_report.py:54` only** — the report path.
 
-This also means the Oct 7 open question about EROC/ITUB pricing basis has two
-possible answers depending on which cycle admits them, and the recorder must
-record which.
+So the correct characterisation is:
+
+| Path | Can select a candidate into pending | Can fill a position |
+|---|---|---|
+| monitor | **yes**, unobserved | no |
+| report | yes | **yes** |
+
+The monitor is an **admission-initiating** path, not an admission-completing one.
+That is narrower than "a full admission path" and the distinction matters: the
+monitor decides *which* candidate becomes pending, using a live-price
+re-validation (`_validate_queued(use_live=True)`) that no evidence records, but
+it cannot set entry price, size or stop.
+
+Consequence for the recorder: admission capture is still required, but its
+subject is **candidate selection**, not entry. And `price_basis` on the monitor
+path is the *validation* price, which never becomes the entry price.
+
+**This also resolves the EROC/ITUB question in §7A directly.** Both carry
+`from_queue: false`, so they were admitted by the scan, not promoted by a
+monitor. They will be filled by `execute_pending_signals()` on a report cycle.
+The monitor promotion route is not implicated for these two.
 
 ### 2.2 `get_live_price` cannot fail visibly
 
@@ -93,8 +112,30 @@ hours.
 
 Not a defect, and not this design's problem to solve — but `price_source: "IBKR"`
 is currently too coarse to distinguish them, and any later fill-realism work will
-need that distinction. The recorder adds `session_context` derived from the
-cycle's UTC time.
+need that distinction.
+
+**Corrected after review.** An earlier draft proposed deriving `session_context`
+from the cycle's scheduled UTC time. That is wrong: `useRTH=False` *permits*
+extended-hours bars, it does not establish the session of any particular returned
+bar, and a cron slot is not evidence about a price. Deriving session from the
+schedule would manufacture provenance.
+
+`get_live_price` returns `round(float(bars[-1].close), 2)` and discards
+`bars[-1].date`, so the actual bar timestamp is **not available** at the decision
+site today. Therefore:
+
+```json
+"price_timestamp": null,
+"price_timestamp_available": false,
+"session_context": "unknown",
+"session_basis": "bar_timestamp_unavailable"
+```
+
+`session_context` is recorded as `unknown`, never inferred. Preserving the real
+bar timestamp requires returning it from `data_feed.get_live_price`, which is a
+decision-path file and therefore its own narrowly registered diff — not something
+the exit recorder may absorb. Evaluation time and source are recorded separately
+and are not substitutes for it.
 
 ### 2.5 Resolved: why WBD did not re-enter
 
@@ -199,23 +240,63 @@ the report path. The vocabulary makes that visible rather than smoothing it over
 `close:take_profit` is flagged in-schema with `full_exit_on_tp: true` so the
 scale-out divergence is queryable, not buried in prose.
 
-### 3.5 Admission capture (new, from §2.1)
+### 3.5 Admission capture — scoped out of this recorder
 
-`promote_queue(source="monitor", use_live=True)` runs after `save_trades` when a
-close freed a slot. Capture per candidate:
+**Revised after review.** Admission decisions are made inside `promote_queue`,
+`_validate_queued` and `open_trade` — all in `engine/tracker.py`. They are **not
+visible in the monitor loop's locals**. Capturing them from the exit recorder
+would require reaching into tracker primitives, and that must not be implied by
+or smuggled into an exit-capture design.
 
-- `lifecycle_id`, `symbol`, `source: "monitor"`
-- `admission_outcome`: `promoted` / `dropped_already_held` / `dropped_validation`
-  / `deferred_transient` / `deferred_fill_window` / `open_trade_rejected`
-- `validation_checks` (the `checks` dict: `live`, `drift_pct`, …)
-- `price_basis`: `checks['live']` versus a daily close — the field that would
-  have answered the EROC/ITUB question
-- `open_trade_result`: `pending` / `opened` / other
-- `free_slots_before`, `pending_max_gap_hours`, `fill_window_ok`, `fill_window_reason`
+Therefore admission capture is **split out** into its own narrowly registered
+diff, reviewed separately. What follows is the requirement it must satisfy, not a
+change this document authorises.
 
-Admission records go to a **separate stream** from exit observations
-(`logs/monitor_admission_v1.jsonl`). They answer a different question and mixing
-them would make both harder to reason about.
+#### Required admission chain
+
+```
+candidate → eligibility result → price used → quantity
+          → accepted / rejected / dropped → persistence outcome
+```
+
+#### What existing queue events already cover
+
+`_log_queue_event` (`tracker.py:270-291`) is append-only and already records
+`timestamp`, `symbol`, `action` (`queued|kept|dropped|promoted|expired|evicted|
+fill_dropped|fill_retry`), `queued_at`, `confluence`, `signal_price`,
+`drift_pct`, `rsi`, `ema20_ok`, `live_price`, `drop_reason`.
+
+That covers **candidate, eligibility result, and price used**. Reuse it; do not
+duplicate it.
+
+#### What it does not cover
+
+| Missing | Why it matters |
+|---|---|
+| `source` (`scan` vs `monitor`) | `promote_queue` takes `source=` and prints it, but never records it. **The one field that would distinguish a monitor-initiated admission from a scan-initiated one is printed to stdout and lost.** |
+| `use_live` | Whether the validation price was intraday IBKR or a daily close |
+| `open_trade` return value | `duplicate` / `queued` / `pending` — the persistence outcome |
+| quantity | Not knowable at this stage; set at fill, in `execute_pending_signals` |
+| lifecycle linkage | No key ties a queue event to the trade it eventually became |
+
+`source` is the highest-value, lowest-risk addition in the entire repair: one
+field, already in scope as a parameter, currently discarded.
+
+#### Quantity belongs to the fill, not the admission
+
+`open_trade` computes no quantity. Sizing happens at
+`tracker.py:132-135`. So "quantity" in the required chain is a **report-path
+fill** property, and admission evidence must link to it rather than claim it.
+
+#### Minimum additional fields, for the separate diff to justify
+
+`source`, `use_live`, `open_trade_result`, `free_slots_before`,
+`fill_window_ok`, `fill_window_reason`, and a lifecycle linkage key. Each must be
+argued for in that diff on its own merits.
+
+Admission evidence stays in `logs/queue_events.jsonl` — the existing stream —
+rather than a new file, so one admission does not produce two partial records in
+two places.
 
 ### 3.6 Lifecycle identity
 
@@ -259,7 +340,7 @@ A recorder failure must not change:
 | No stdout contamination | The recorder prints **nothing** on success. On failure it prints one line to **stderr**, which `tee` does not capture into `/tmp/ares_monitor.txt` and the Telegram `grep` never sees. |
 | No import-time risk | Recorder imported lazily inside the post-loop `try`, not at module top. An unimportable recorder leaves the monitor fully functional. |
 | Write atomicity | Append-only JSONL, one `write()` of a newline-terminated serialised line, same discipline as `parity_runner.append_record`. |
-| Separate files | `logs/monitor_observation_v1.jsonl`, `logs/monitor_admission_v1.jsonl`, `logs/monitor_heartbeat_v1.jsonl`. Never appended to `tracker_parity_v1.jsonl` — different semantics, no comparator, and mixing would corrupt the meaning of the 64 existing records. |
+| Separate files | `logs/monitor_observation_v1.jsonl` and `logs/monitor_heartbeat_v1.jsonl`. Never appended to `tracker_parity_v1.jsonl` — different semantics, no comparator, and mixing would corrupt the meaning of the 64 existing records. Admission evidence is **not** written by this recorder; it stays in `logs/queue_events.jsonl` under the separate diff of §3.5. |
 
 ### 4.3 The early-return problem
 
@@ -297,6 +378,71 @@ distinguishable from absence.
 The `finally` placement also covers §2.3: an aborted loop still emits a heartbeat
 carrying `cycle_aborted: true`, `positions_reached: N`, and the exception type —
 turning a currently-silent partial cycle into recorded evidence.
+
+#### 4.3.1 Zero open positions also means zero admissions attempted
+
+Raised in review, and confirmed in source. The early return at line 22 precedes
+the loop **and** the `if updated:` block at line 85, so
+`promote_queue(source="monitor", use_live=True)` is never reached. Worse,
+admission on this path is gated on `updated` at all — so a monitor cycle that
+evaluates positions and changes nothing also attempts no admission.
+
+| Monitor cycle | Exit evaluation | Admission evaluation |
+|---|---|---|
+| no open positions | not attempted (early return) | **not attempted** |
+| open, nothing changed | attempted | **not attempted** (`updated` false) |
+| open, ratchet or close | attempted | attempted |
+
+A heartbeat reporting `no_open_positions` would therefore be truthful about exits
+and **silent about admissions**, which is the same conflation at a smaller scale
+as one heartbeat covering two paths. Note the first row's consequence: with the
+portfolio empty, five slots free and candidates queued, the monitor path cannot
+admit anything. That is a behaviour fact, recorded; **the recorder must not
+change the early return**, and this design proposes no change to it.
+
+Exit and admission evaluation are therefore accounted **separately**, each with
+its own attempted / skipped / aborted state:
+
+```json
+"exit_evaluation":      {"attempted": 0, "written": 0, "skipped": 0,
+                         "not_reached": 0, "aborted": false,
+                         "skip_reason": "no_open_positions"},
+"admission_evaluation": {"attempted": false,
+                         "skip_reason": "early_return_no_open_positions",
+                         "gated_on": "updated"}
+```
+
+`admission_evaluation.attempted` is a boolean, not a count, because at this layer
+the monitor either reached `promote_queue` or did not. Candidate-level counts
+belong to the separate admission diff in §3.5.
+
+#### 4.3.2 `finally` must preserve the original failure
+
+A `finally` block that raises **replaces** the in-flight exception, and one that
+returns **discards** it. Either would convert a genuine monitor failure into a
+recorder failure — destroying the evidence the recorder exists to produce, and
+doing it precisely when it matters most.
+
+Requirements:
+
+- `_emit_observation()` is wholly wrapped in `try/except Exception` internally and
+  **cannot raise**.
+- The `finally` block contains **no** `return`, `break`, or `continue`.
+- Recorder write failure is recorded in its own field (`write_failures`), not
+  raised, and surfaces at evaluation time per §4.4.
+- The original traceback must be unchanged, not chained or re-raised.
+
+On an aborted cycle, classification must stay honest about what did and did not
+persist:
+
+- Positions processed before the abort: ratchet updates were **computed but not
+  persisted**, because `save_trades` at line 86 is never reached. Recorded as
+  `state_update_computed_not_persisted` — not as `state_update`.
+- Positions after the abort point: `not_reached`. **Never `hold`.** A hold is a
+  decision; not-reached is the absence of one.
+
+This distinction is the whole point. An aborted cycle currently looks like a
+quiet cycle.
 
 ### 4.4 Fail-closed vs fail-open, and where each applies
 
@@ -380,6 +526,36 @@ producer emitted. Controls, not vigilance:
 19. **A report-path heartbeat cannot satisfy a monitor cycle.** Assert that
     feeding only report heartbeats leaves every monitor cycle unsatisfied.
     This is the §6 claim, pinned as a test.
+
+### Added in review (§4.3.1, §4.3.2, §2.4)
+
+20. **`finally` preserves the original exception.** Force a monitor exception
+    *and* a recorder serialisation failure in the same cycle. Assert the
+    **monitor's** exception type, message and traceback propagate unchanged, and
+    the recorder's failure appears only as `write_failures: 1`.
+21. **No control-flow statement in `finally`.** Static assertion over the AST of
+    the wrapper: no `return`/`break`/`continue` inside the `finally` body.
+22. **Unpersisted ratchets are classified as such.** Abort after position 2 of 5
+    with a ratchet on position 1. Assert position 1 records
+    `state_update_computed_not_persisted`, and that `virtual_trades.json` is
+    byte-identical to its pre-cycle state.
+23. **Zero open positions records admission as not attempted.** Assert
+    `exit_evaluation.skip_reason == "no_open_positions"` **and**
+    `admission_evaluation.attempted is False` with
+    `skip_reason == "early_return_no_open_positions"`. Assert the heartbeat is not
+    treated as admission coverage.
+24. **An unchanged cycle records admission as not attempted.** Open positions,
+    no ratchet, no close → assert `admission_evaluation.attempted is False` with
+    `gated_on: "updated"`, while exit evaluation is `attempted` and complete.
+25. **Session is never inferred from the schedule.** Assert
+    `session_context == "unknown"` and `session_basis ==
+    "bar_timestamp_unavailable"` for every record, and that no code path derives
+    a session value from `cycle_utc`. A future `data_feed` diff that supplies a
+    real timestamp must flip `price_timestamp_available` rather than
+    reinterpreting old records.
+26. **Early-return behaviour is unchanged.** Zero-position fixture: assert
+    `promote_queue` is called **zero** times in both modes, and that stdout is
+    byte-identical. The recorder must not "fix" the early return.
 
 ---
 
@@ -630,18 +806,66 @@ expected filler and the monitor promotion route is not implicated for these two.
 `logs/queue_ranked.json` is `[]`. XP sits in `signal_queue.json` at $29.73 with
 one logged event: `queued` at 2026-10-06T21:01:19, all drift/live fields `null`.
 
-### Refined prediction, from actual signal prices
+### The sizing mechanism, read rather than assumed
 
-At ~$150 fixed notional: EROC ≈ 10.99 sh, ITUB ≈ 14.78 sh.
+`execute_pending_signals` (`tracker.py:132-135`):
 
+```python
+portfolio         = params.get('starting_capital', 1000)
+available_capital = portfolio * (1 - cash_reserve_pct)   # 1000 * 0.75 = 750
+position_size     = (available_capital / max_positions) - commission
+shares            = position_size / entry_price
 ```
-471.35 − 150 − 150 − 2.00 commissions ≈ $169.35   vs $250 reserve
-```
 
-**Predicted breach ≈ $80.65.** RSI 76.5 on ITUB at admission is worth noting
-against the `rsi_extreme_high: 90` exit threshold — it enters already two thirds
-of the way to an immediate `emotional_extreme` exit on the report path, a
-condition the monitor path does not implement at all.
+This refines the defect statement. **A reserve is not missing — it is computed
+against a constant.** `cash_reserve_pct = 0.25` holds back 25% of the *initial*
+$1000 permanently, giving a fixed `position_size` of **$149.00** per slot and a
+fixed total deployment of $745 across 5 slots. Actual cash is never consulted at
+any point.
+
+So as realised losses accumulate, deployment stays constant while cash falls, and
+the nominal $250 reserve is breached without any code noticing — because the code
+reserved 25% of a number that stopped being true after the first loss.
+
+`entry_price = today_open * (1 + slippage_pct)`, i.e. the **next session's open**,
+not the signal price. Share counts therefore cannot be predicted from the $13.64
+and $10.15 signal prices; the dollar outlay can.
+
+### Prediction — labelled as a prediction, pending actual fills
+
+| Quantity | Predicted |
+|---|---|
+| Cash before | $471.35 |
+| Outlay per fill | $149.00 position + $1.00 commission = $150.00 |
+| Cash after two fills | **≈ $171.35** |
+| Nominal reserve | $250.00 |
+| Predicted breach | **≈ $78.65** |
+
+Supersedes the earlier figure of $169.35, which double-counted commission: the
+$149 `position_size` already has the $1 commission deducted.
+
+**This remains a prediction.** It is not confirmed until the actual booked
+`entry_price`, `shares`, `position_size` and `entry_commission` are read from
+`virtual_trades.json` after the fill, per §8.3.
+
+Two fill risks could falsify it outright: `_pending_age_days` (both pendings are
+1 day old against a 4-day maximum, so this should pass), and the `bar_date !=
+today` retention guard at `tracker.py:122` — if the daily bar for Oct 7 has not
+appeared when the 13:30 cycle runs, both are **retained, not filled**, and the
+fill lands on the 21:00 cycle instead. AMP and TWST both filled at 13:30, so the
+bar normally exists by then, but this is an observation to make rather than
+assume.
+
+### A policy asymmetry visible at admission
+
+ITUB is admitted with `rsi: 76.5`. The report path implements an
+`emotional_extreme` exit at `rsi_extreme_high: 90`; **the monitor path implements
+no RSI exit at all**. So whether ITUB is ever subject to an RSI exit depends on
+which cycle its price moves in.
+
+That is the finding. An earlier draft characterised 76.5 as "two thirds of the way
+to an immediate exit" — removed, as it is not a defined measure and 76.5 is
+simply below the threshold.
 
 ### 7.4 Completeness accounting
 
@@ -740,8 +964,14 @@ Listed so none of it is mistaken for handled.
 7. **Disposition of the five lost exits.** They remain blocking pending explicit
    review. This design does not retire them.
 8. **`MIN_CLOSED_SAMPLE`.** Still unregistered, still correctly blocking.
-9. **The 0-of-6 monitor-exit coverage already in the record** is permanent. The
-   recorder prevents recurrence; it cannot repair history.
+9. **The 0-of-6 monitor-exit coverage already in the record** is permanent and
+   cannot be repaired. Nor does this design yet prevent recurrence: a design
+   prevents nothing. Observation loss stops only once every relevant path is
+   instrumented, deployed and **verified against live cycles** — which is a state
+   this document does not reach and does not authorise reaching.
+10. **Whether `cash_reserve_pct` should be computed against equity** rather than
+   `starting_capital`. Identified precisely in §7A; repairing it is an
+   operational-risk decision with its own preregistration.
 
 ---
 
@@ -780,3 +1010,124 @@ Separately preregister: policy unification, sizing, fill realism
 
 Phase 5 and AI modelling remain prohibited. The goal is complete observation of
 the existing two-policy production system — not unifying it, and not changing it.
+
+---
+
+## 11. Checklist walk — 2026-10-07, pre-cycle
+
+Walked against current source and the §7A preserved state. **No implementation
+or deployment is authorised by this review.** Seven items pass; five required
+amendment, all now applied above.
+
+| # | Item | Result |
+|---|---|---|
+| 1 | Every decided value captured at its decision site | **AMEND** → §3.5 |
+| 2 | No captured value re-derived or re-requested | **AMEND** → §2.4 |
+| 3 | Four cycles, both paths, per-path freshness | **AMEND** → §4.3.1 |
+| 4 | Report heartbeat cannot satisfy a monitor cycle | PASS (control 19) |
+| 5 | `attempted == written + skipped + not_reached` asserted | **AMEND** → §4.3.1 |
+| 6 | No comparator, no `MATCH`, no `difference_class` | PASS |
+| 7 | Observation fail-open; interpretation fail-closed | **AMEND** → §4.3.2 |
+| 8 | `phase4_operational_ready` permitted to go false | PASS |
+| 9 | Manifest includes `monitor_trades.py`, `data_feed.py` | PASS, path corrected |
+| 10 | Effective config records `code_default` provenance | PASS, widened |
+| 11 | No schema key lacks a producer | PASS (control 17) |
+| 12 | No empty collection reads as covered | PASS (control 16) |
+
+### Item 1 — exits pass, admissions do not
+
+Exit capture is sound: every value the monitor's branches read is bound in the
+loop, and §3.3 captures each at its site. Admission decisions are **not** in the
+loop's locals — they are inside `promote_queue`, `_validate_queued` and
+`open_trade`. The original §3.5 proposed capturing them anyway, which would have
+meant an exit recorder reaching into tracker primitives under cover of a design
+reviewed for something else.
+
+**Resolved:** admission capture split into its own registered diff. §3.5 now
+states the requirement and the existing `queue_events.jsonl` coverage, and
+authorises nothing. The single highest-value field is `source` — already a
+parameter of `promote_queue`, printed to stdout, never recorded.
+
+### Item 2 — session provenance was being inferred
+
+The draft derived `session_context` from the cycle's scheduled UTC time. A cron
+slot is not evidence about a price, and `useRTH=False` permits extended-hours
+bars without establishing the session of any given bar.
+
+**Resolved:** `session_context: "unknown"`, `price_timestamp: null`,
+`session_basis: "bar_timestamp_unavailable"`. The real `bars[-1].date` is
+discarded inside `get_live_price`; recovering it is a `data_feed` diff. Control
+25 pins that no code path derives session from `cycle_utc`.
+
+### Items 3 and 5 — the conflation reappeared one level down
+
+Confirmed in source: the early return at `monitor_trades.py:22` precedes both the
+loop and the `if updated:` block, so `promote_queue` is unreachable on that path —
+and admission is gated on `updated` even when positions exist. A
+`no_open_positions` heartbeat is truthful about exits and silent about
+admissions. Same shape as one heartbeat covering two paths, one level down.
+
+**Resolved:** separate `exit_evaluation` and `admission_evaluation` accounting
+(§4.3.1), controls 23, 24 and 26. The early return is **not changed**; control 26
+asserts `promote_queue` is called zero times in both modes.
+
+### Item 7 — `finally` could have destroyed the evidence it exists to produce
+
+The draft specified `try/finally` for heartbeat emission but never stated that
+`finally` must not raise or return. A raising `finally` replaces the in-flight
+exception; a returning one discards it. The failure mode is exactly inverted:
+the recorder would erase the monitor's exception at the moment that exception is
+most diagnostic.
+
+**Resolved:** §4.3.2 — no control flow in `finally`, recorder cannot raise,
+original traceback unchanged and unchained. Plus two classification rules that
+were missing: pre-abort ratchets are
+`state_update_computed_not_persisted` (because `save_trades` at line 86 is never
+reached), and post-abort positions are `not_reached`, **never `hold`**. Controls
+20–22.
+
+### Item 9 — manifest widened again
+
+`config/params.json` → `config/strategy_params.json` (`tracker.py:28`), already
+corrected. Review adds a candidate: `engine/sample.py`, whose `fill_context()`
+sets `PRE_PHASE` vs `CLEAN_PHASE` at fill time (`tracker.py:168-172`). It governs
+**evidence classification**, not decisions, so it belongs in a classification
+manifest rather than `DECISION_MANIFEST_V1`. Flagged for the implementation
+review to place deliberately rather than by default.
+
+### Item 10 — more parameters resolve from code defaults than recorded
+
+Beyond `slippage_pct` and `commission_per_trade`, the fill path reads
+`cash_reserve_pct`, `max_positions`, `starting_capital`,
+`stop_loss_multiplier`, `tp_momentum`, `tp_reversal`, `pending_max_age_days`
+and `pending_max_gap_hours`, each via `params.get(key, default)`.
+
+Which of these are present in `config/strategy_params.json` and which fall
+through to a code default is **not asserted here** — it must be enumerated at
+implementation and recorded per key, because a parameter resolving from a code
+default can change with no config diff. §7.3's `source` field already carries the
+shape; the key list widens.
+
+### Findings this walk added to the record
+
+1. The monitor **cannot complete an admission** — `open_trade` only writes a
+   pending; `execute_pending_signals` is report-path only. Corrects §2.1 from
+   "full admission path" to "admission-initiating path".
+2. **`source` is discarded.** `promote_queue(source=...)` prints it and records
+   nothing, so no evidence distinguishes a monitor-initiated pending from a
+   scan-initiated one. The retrospective question "which path initiated this
+   admission?" is unanswerable for every existing entry.
+3. **The reserve is computed against `starting_capital`**, so it reserves 25% of a
+   number that stopped being true after the first loss. `position_size` is a flat
+   $149.00 and actual cash is never read.
+4. **Admission is gated on `updated`** — a monitor cycle that changes nothing
+   attempts no admission, even with free slots and queued candidates.
+5. With **zero open positions the monitor cannot admit at all**, because the early
+   return precedes `promote_queue`.
+
+### Next
+
+Resolutions are applied. Remaining before implementation review: enumerate
+parameter provenance (item 10), and place `engine/sample.py` deliberately
+(item 9). Then tonight's cycle runs **unchanged**, §8.3 is captured read-only,
+and predicted-versus-actual is reconciled as a separate step.
