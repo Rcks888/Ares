@@ -1968,6 +1968,247 @@ Keeping those separate is the whole reason the coverage gate was rebuilt; a
 
 ---
 
+### Sep 30, 2026 (Wednesday)
+
+The session that verified the heartbeat lineage fix — and, in hindsight, the
+first of five consecutive exits that parity never saw. Logged retrospectively on
+Oct 7 after the vacation.
+
+##### Collection record
+
+| Event | Detail |
+|-------|--------|
+| Heartbeat | first post-fix cycle: `production_commit cb9d92b`, `lineage_complete true`, 5/5 attempted/written, 0 write failures, `contract_valid true` |
+| Records | 18 → 23 |
+| Entries | TWST $188.19, 0.79 sh, SL $167.83, TP $222.06 — captured `not_computed_entry_day_skip`, `parity_action skipped_entry_day` |
+| | BCE $20.22, 7.4 sh, SL $19.86, TP $22.24 (appeared Day 0 at 21:01 UTC) |
+| Closes | **SECZ** at $15.13 `trailing_stop` — **announced in a 16:10/17:30 UTC monitor run** |
+| Scan | 103 screened, 2 signals — GMAB `momentum_breakout` `conf3` |
+| Clean sample | 2 closed (NEOG −$7.07, SECZ +$2.41), realised −$4.66, W 1/2 |
+
+All five 13:31 records `MATCH`, `would_change_action: 0`, `price_source IBKR`,
+`tracker.py` md5 unchanged. Everything we set out to verify verified.
+
+##### The reserve rule and the sizing rule conflicted for the first time
+
+TWST filled at `188.19 × 0.79 = $148.67`, taking cash to
+
+```
+1000 − 28.20 realised − 744.67 cost basis − 5.00 commissions = $222.13
+```
+
+against a $250 target — **$27.87 short**, almost exactly the $221.80 projected on
+Sep 29. Nothing stopped it: no gate, no alert. Sizing still reads a constant
+`starting_capital`. Observed only, per V3 rules.
+
+With the portfolio at 5/5 the breach could not deepen; the next opportunity for
+the defect to bite was the first entry after a slot freed.
+
+##### A rounding-basis mismatch, logged and not acted on
+
+TWST recorded `entry_price 188.19` with `peak_price 188.188` — peak below entry,
+which is structurally impossible in a correct peak tracker. Entry is rounded to
+2dp under the `tracker_v3_2dp` contract while peak retains the raw fill. Harmless
+in effect; the two fields are simply not on the same rounding basis.
+
+##### What was not noticed
+
+SECZ's exit was announced in a **monitor** block, not a report cycle. At the time
+this read as an ordinary intraday alert. It was the first instance of the
+condition documented in `INCIDENT_2026-10-07_monitor_decision_path.md`: the
+monitor decides exits on a path parity does not observe.
+
+---
+
+### Oct 1, 2026 (Thursday)
+
+| Event | Detail |
+|-------|--------|
+| Heartbeats | 13:31 and 21:01, both `lineage_complete true`, 5/5, clean |
+| Entries | GMAB $35.29, 4.2 sh, SL $34.16, TP $41.64 |
+| Closes | **BCE** at $19.86 `stop_loss`, Day 1 — **monitor path** |
+| Scan | 103 screened, 0 signals |
+| Clean sample | 3 closed, realised −$9.46, W 1/3, PF 0.20 |
+
+BCE held for one day with a peak of +0.54% and a stop just 1.78% below entry —
+the tightest stop in the sample. Monitor live check at 17:30: TMO $666.07,
+WBD $30.94, AMP $494.82, TWST $187.25 with the trail ratcheted to $178.50.
+
+##### Note on `production_commit`
+
+Each heartbeat carried a different commit — `9b40821` at 13:31, `60fba24` at
+21:01. The bot commits its own logs every cycle, so HEAD advances constantly and
+the field records a *log* commit. See Oct 7.
+
+---
+
+### Oct 2, 2026 (Friday)
+
+| Event | Detail |
+|-------|--------|
+| Heartbeats | 13:31 (5/5) and 21:01 (**4/4**) |
+| Closes | **GMAB** at $34.16 `stop_loss`, Day 1 — **monitor path** |
+| Scan | 103 screened, 0 signals |
+| Clean sample | 4 closed, realised −$16.37, W 1/4, PF 0.13 |
+
+The drop from 5 to 4 attempted positions between the two cycles is the monitor
+path becoming visible in the evidence without being visible in it: GMAB closed
+between 13:31 and 21:01, and the only trace in parity is a decremented count.
+
+GMAB turned out to be the sample's genuine whipsaw. Stopped at $34.16 with a peak
+of −0.01% — it never moved favourably — then rallied to $38.48 by Oct 5.
+`missed_upside_pct: 12.75`, `avoided_downside_pct: −0.09`.
+
+---
+
+### Oct 5, 2026 (Monday)
+
+The weekend crossing, and the first live test of schedule-aware freshness.
+
+| Event | Detail |
+|-------|--------|
+| Heartbeats | 13:31 (4/4) and 21:01 (**5/5**) |
+| Entries | PCVX $87.30, 1.7 sh, **SL $65.93**, TP $103.01 |
+| Closes | none |
+| Scan | 103 screened, 1 signal — PCVX `momentum_breakout` `conf3` |
+| System | ⚠️ stall 1218 ms over 64.5 h — flagged memory pressure, benign |
+
+##### The weekend gap behaved as designed
+
+The Fri 21:00 → Mon 13:30 interval is **64.5 hours**. The collector reported
+normally throughout and freshness stayed valid. A fixed 36h or 48h staleness rule
+would have raised a false alarm here; the schedule-aware design was built for
+exactly this interval and has now been exercised once in production.
+
+##### PCVX's stop was placed 24.5% from entry
+
+`65.93 / 87.30 = 0.7552`. That is by far the widest stop in the sample, and it
+sits on the same ~$150 fixed notional as every other position. The implication
+was not drawn until Oct 7.
+
+TWST meanwhile ran to peak +8.9%, trail ratcheting $180.64 → $181.51 → $184.50
+across the monitor runs.
+
+---
+
+### Oct 6, 2026 (Tuesday)
+
+| Event | Detail |
+|-------|--------|
+| Heartbeats | 13:31 (5/5) and 21:01 (**3/3**) |
+| Closes | **TWST** at $188.10 `trailing_stop`, **PCVX** at $65.93 `stop_loss` — **both monitor path** |
+| Scan | 103 screened, 0 signals at 13:32; 1 signal at 05:01 MYT — **WBD, already held at Day 14** |
+| Clean sample | 6 closed, realised **−$57.25**, W 1/6, PF 0.04 |
+| Pending | EROC, ITUB → next open. Queue: XP |
+
+##### One trade is two thirds of the clean sample's loss
+
+| Trade | Entry | Booked exit | Net | Day | Reason |
+|-------|-------|-------------|-----|-----|--------|
+| TWST | $188.19 | $187.91 | −$2.22 | 7 | trailing_stop |
+| **PCVX** | **$87.30** | **$65.86** | **−$38.66** | **1** | **stop_loss** |
+
+PCVX alone is **67.5%** of −$57.25. Expectancy −$9.54 and PF 0.04 therefore
+describe one outlier, not a process. Median net is near −3.3%. At n=6 with this
+much concentration the mean is retained as descriptive only; no strategy-validity
+claim is made or implied.
+
+##### TWST's trail was correct ex-post
+
+The trail surrendered 11.1 points of peak to close at −0.1%, which is the
+giveback weakness Block A documented. But `avoided_downside_pct: 11.14` — TWST
+fell to $166.97 after exit. The giveback was real and the alternative was worse.
+Both halves belong in the record.
+
+##### WBD signalled while held
+
+The 05:01 MYT scan listed WBD as a fresh `momentum_breakout conf3` while WBD was
+open at Day 14. It did not re-enter. *Why* it did not — which guard fired — has
+not been read from the logs and is not assumed.
+
+---
+
+### Oct 7, 2026 (Wednesday) — the monitor path is a second exit implementation
+
+No trading observations of note. This session was diagnosis, and it invalidates a
+claim the migration had been resting on since Phase 0.5.
+
+Full record: **`INCIDENT_2026-10-07_monitor_decision_path.md`**.
+
+##### What was found
+
+Verification of the vacation evidence showed heartbeat continuity intact — 12
+heartbeats, no missing cycle, weekend correctly absent, `write_failures 0`,
+`contract_valid true` throughout — and **exit coverage of 1 in 6**:
+
+```
+decisions: hold 52, state_update 11, close:stop_loss 1
+exit records: [('ABM', '2026-09-29', 'stop_loss')]
+```
+
+The cause is not a missing flag. `monitor_trades.py` never calls
+`check_open_trades`. It implements **its own exit loop** over tracker primitives
+using IBKR live prices, writes production state directly, and has done since
+commit `03c3c50` on Sep 17 — before parity activation.
+
+The originally planned repair — `export ARES_PARITY=1` in `run_monitor.sh` —
+would have had **no effect**, because that variable gates a function the monitor
+does not call. Verifying the call chain before editing was the instruction that
+caught it.
+
+##### Ten divergences, two critical
+
+`scale_out: True`, so reaching take-profit sells **half** the position on the
+report path and **all** of it on the monitor path — selected by which cron slot
+the price happens to touch TP in. The monitor also has **no entry-day skip**,
+implements 2 of 5 exit reasons, and performs **no stop evaluation at all** when
+IBKR returns no price.
+
+##### Claims withdrawn
+
+- **"The inline tracker is the sole production authority"** is withdrawn. It is
+  sole authority *on the report path*. An unchanged `tracker.py` md5 no longer
+  demonstrates unchanged production exit behaviour.
+- **The 64 MATCH records remain valid for the report path only.** They do not
+  establish whole-system exit equivalence.
+- **`phase4_operational_ready: true` is too broad** and splits into *collector
+  healthy on registered paths* (true) and *all decision paths registered and
+  observed* (false).
+
+Five exits — SECZ, BCE, GMAB, TWST, PCVX — are **unobtainable and blocking**,
+keyed by lifecycle identity. They are explicitly **not** retired by analogy with
+SDGR: one pre-activation closure and five systematic omissions are different
+findings. `trade['shadow']` was checked as a possible partial recovery and is
+post-exit price tracking only — no decision context, no recovery.
+
+##### Shared defect, both paths
+
+Both discard the observed price and book exits at the stop level, then apply a
+flat 0.1% haircut (`slippage_pct` absent from params, in-code default). The
+monitor holds `live` at line 68 for the trigger and throws it away at line 70 —
+**the most diagnostic value in the system is computed and discarded on every
+monitor exit.** Had it been captured, PCVX's gap question would be settled; it is
+currently unanswerable from persisted data.
+
+##### Corrections of record
+
+Seven claims made during the session were wrong or overstated, including "zero
+slippage, ever" (slippage *is* applied), "PCVX gapped" (unfounded), and a second
+wrong inference from `trough_after_exit` in the opposite direction. All are
+tabulated in the incident document rather than quietly dropped.
+
+##### The governing question has changed
+
+`exit_policy` was built to replace `check_open_trades`, and Block A's Policy A is
+defined by that function. But most live exits came from the other implementation.
+So before *"is Policy A worth modelling?"* comes:
+
+> **Which production exit policy are we trying to preserve or replace?**
+
+Phase 5 and AI modelling remain prohibited.
+
+---
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
