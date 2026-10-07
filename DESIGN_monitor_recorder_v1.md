@@ -806,10 +806,42 @@ DECISION_MANIFEST_V1 = (
 )
 ```
 
-`engine/tracker_compat.py` and the parity modules move to the observation
-manifest: they adapt and compare, they do not decide. `engine/exit_policy.py`
-stays in the decision manifest because it is the intended future decision
-implementation, even though nothing calls it in production today.
+The parity modules move to the observation manifest: they compare, they do not
+decide.
+
+#### Membership follows runtime authority, not filename
+
+`engine/tracker_compat.py` is in the observation manifest **because it currently
+serves only the non-authoritative parity branch** — not because of what it is
+called or where it sits. If Phase 5 ever makes it part of live decision
+execution, it must **also** enter the decision manifest. Conditional, and
+recorded as such:
+
+```python
+# Membership is a statement about runtime authority at a point in time.
+# Re-audit on any change to what calls these modules.
+CONDITIONAL_MEMBERSHIP = {
+    "engine/tracker_compat.py": {
+        "observation": "always — adapts state for comparison",
+        "decision":    "IF a production decision path calls it (Phase 5 cutover)",
+        "today":       "observation only",
+    },
+    "engine/exit_policy.py": {
+        "decision":    "listed now as the intended future implementation",
+        "today":       "called by no production decision path",
+    },
+}
+```
+
+`engine/exit_policy.py` is the mirror case and is listed as the exception it is:
+it sits in the decision manifest although **nothing in production calls it**,
+because it is the intended future decision implementation. One module is
+decision-manifest without current authority; the other is observation-manifest
+and may acquire authority later. Writing both down prevents a future reader from
+inferring a filename rule that does not exist.
+
+A manifest-placement audit is therefore required whenever the set of callers
+changes — the same event that would invalidate the §7.2 `sample.py` audit.
 
 #### `engine/sample.py` — call-chain audit, as required before placement
 
@@ -936,15 +968,45 @@ a masked divergence is visible in evidence before a config change unmasks it:
   "value": 0.10,
   "source": "config",
   "defaults_by_site": {"monitor_trades.py:29": 0.08,
-                       "engine/tracker.py:873": 0.10},
+                       "engine/tracker.py:873": 0.10,
+                       "engine/exit_policy.py:106": 0.10,
+                       "engine/tracker_compat.py:92": 0.10,
+                       "daily_report.py:111": 0.10,
+                       "daily_report.py:143": 0.10},
   "defaults_agree": false,
-  "masked_divergence": true
+  "masked_divergence": true,
+  "currently_active": false
 }
 ```
 
+`currently_active: false` is the fifth field and the one that keeps the record
+honest in both directions: the disagreement is real, and it is not firing. A
+record showing only `masked_divergence: true` would read as an active defect; one
+showing only `value: 0.10` would read as no defect at all. Both would be wrong.
+
 `defaults_agree: false` with `source: "config"` is the signature of a divergence
-that exists but cannot currently fire. A control must assert that this
-combination is reported rather than normalised away.
+that exists but cannot currently fire, and a control must assert the combination
+is reported rather than normalised away.
+
+#### The recorder must not fix this
+
+The temptation is one line — make `monitor_trades.py:29` read `0.10`. **Out of
+scope, and prohibited here.** It is an exit-policy change dressed as a typo fix,
+and it would be made inside an observation diff reviewed for something else.
+Which default is *correct* is undecidable until the governing question is
+answered: unifying on 0.10 presumes the report path is authoritative, which is
+exactly what has not been established.
+
+Required instead:
+
+- **Control 27** — set `trailing_stop_pct` absent in a fixture config. Assert the
+  two paths then resolve to **0.08** and **0.10** respectively, that
+  `currently_active` flips to `true`, and that the evidence names both sites.
+  The control *demonstrates* the exposure; it does not remove it.
+- **Review gate** — a change to `trailing_stop_pct` in
+  `config/strategy_params.json`, including deletion or rename, requires explicit
+  review against this record before acceptance. The key is load-bearing for
+  policy equivalence in a way its name does not suggest.
 
 ---
 
@@ -1143,6 +1205,47 @@ Supporting observations, same read-only pass:
   field between admission and fill
 - `sample_phase` on each fill: expect `clean_v3`, since `ARES_SCHEDULED=1` is
   exported by the launcher and `fill_context()` reads it as authoritative
+
+### 8.3.1 Reconciliation rules
+
+Four rules, binding on the reconciliation, each closing a way the capture could
+be over-read.
+
+**1. Do not infer initiation from `from_queue`.** `promote_queue` is called from
+both paths and both yield `from_queue: true`; the field is ambiguous exactly
+where the distinction is wanted. Record `initiating_source: unknown` for both
+symbols unless a record field establishes otherwise. It will not.
+
+**2. Compute cash from booked values, not from the model.** Use actual `shares`,
+`entry_price` and `entry_commission` read from `virtual_trades.json`:
+
+```
+cash = 1000 − Σ realised_after_costs
+            − Σ (shares × entry_price)       ← booked, not position_size
+            − Σ entry_commission
+```
+
+`shares` is rounded to 2dp, so `shares × entry_price ≠ 149.00`. Report the
+residual rather than absorbing it. If the reconciled figure differs from the
+provisional $171.35, **the prediction was wrong and the booked value stands** —
+do not adjust the method to recover the prediction.
+
+**3. A retained pending is not a failed fill.** Three distinct outcomes that must
+not collapse:
+
+| Outcome | Evidence | Meaning |
+|---|---|---|
+| `retained_date_guard` | `fill_retry`, `last bar X != today Y` (`tracker.py:122`) | the session's bar had not appeared; pending **survives**, fill deferred |
+| `retained_no_data` | `fill_retry`, `fill_attempts` incremented | data fetch returned nothing; pending survives until `MAX_FILL_ATTEMPTS` |
+| `fill_dropped` | `fill_dropped` event | aged out past `pending_max_age_days`, or data exhausted — pending **gone** |
+
+A retention is the guard working. Only `fill_dropped` is a loss.
+
+**4. Preserve unavailable provenance as `unknown`.** Never substitute a default,
+a plausible value, or an inference presented as a reading. Specifically:
+`initiating_source`, `price_timestamp`, `session_context`, and any field whose
+producer did not run. An `unknown` that is accurate is worth more than a value
+that is merely present.
 
 ### 8.4 What the capture cannot establish
 
