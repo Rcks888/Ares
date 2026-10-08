@@ -72,3 +72,5 @@
 {"timestamp": "2026-10-07T13:31:20", "symbol": "XP", "action": "kept", "queued_at": "2026-10-06", "confluence": 3, "signal_price": 29.73, "drift_pct": -0.87, "rsi": 50.0, "ema20_ok": true, "live_price": 29.47, "drop_reason": null}
 {"timestamp": "2026-10-07T21:01:09", "symbol": "XP", "action": "kept", "queued_at": "2026-10-06", "confluence": 3, "signal_price": 29.73, "drift_pct": -0.67, "rsi": 50.0, "ema20_ok": true, "live_price": 29.53, "drop_reason": null}
 {"timestamp": "2026-10-07T21:01:36", "symbol": "BSP", "action": "queued", "queued_at": "2026-10-07", "confluence": 3, "signal_price": 41.07, "drift_pct": null, "rsi": null, "ema20_ok": null, "live_price": null, "drop_reason": null}
+{"timestamp": "2026-10-08T13:31:18", "symbol": "XP", "action": "kept", "queued_at": "2026-10-06", "confluence": 3, "signal_price": 29.73, "drift_pct": -0.84, "rsi": 50.0, "ema20_ok": true, "live_price": 29.48, "drop_reason": null}
+{"timestamp": "2026-10-08T13:31:18", "symbol": "BSP", "action": "kept", "queued_at": "2026-10-07", "confluence": 3, "signal_price": 41.07, "drift_pct": -4.41, "rsi": 50.0, "ema20_ok": true, "live_price": 39.26, "drop_reason": null}

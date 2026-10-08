@@ -15,10 +15,32 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-10-07T21:01:09",
-    "drift_pct": -0.67,
+    "checked_at": "2026-10-08T13:31:18",
+    "drift_pct": -0.84,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 29.53
+    "live_price": 29.48
+  },
+  {
+    "symbol": "BSP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 41.07,
+    "rsi_at_signal": 52.2,
+    "stdev_20": 0.0644,
+    "vol_ratio": 2.83,
+    "date_added": "2026-10-07",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-10-08T13:31:18",
+    "drift_pct": -4.41,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 39.26
   }
 ]
