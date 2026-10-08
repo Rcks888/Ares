@@ -17,17 +17,34 @@
     ]
   },
   {
-    "symbol": "BSP",
+    "symbol": "INSM",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 100.48,
+    "rsi_at_signal": 28.7,
+    "stdev_20": 0.0266,
+    "vol_ratio": 1.92,
+    "date_added": "2026-10-08",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce"
+    ]
+  },
+  {
+    "symbol": "MANE",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 41.07,
-    "rsi_at_signal": 52.2,
-    "stdev_20": 0.0644,
-    "vol_ratio": 2.83,
-    "date_added": "2026-10-07",
+    "price_at_signal": 126.63,
+    "rsi_at_signal": 61.7,
+    "stdev_20": 0.0447,
+    "vol_ratio": 3.72,
+    "date_added": "2026-10-08",
     "screens": [
       "unusual_volume",
       "big_movers_up"
