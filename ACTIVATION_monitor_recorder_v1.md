@@ -102,14 +102,58 @@ cd /root/ares/Ares
 git fetch -q origin
 git show origin/main:monitor_trades.py > /tmp/monitor_before.py
 git show origin/recorder/monitor-observer-v1:monitor_trades.py > /tmp/monitor_after.py
-diff /tmp/monitor_before.py /tmp/monitor_after.py | grep '^<' || echo "NO LINES REMOVED"
+diff /tmp/monitor_before.py /tmp/monitor_after.py | grep '^<'
 diff /tmp/monitor_before.py /tmp/monitor_after.py | grep -c '^>'
 ```
 
-**Acceptance: `NO LINES REMOVED`, and every added line is either a comment, an
-`obs[...]` / `_MONITOR_EVAL[...]` assignment, the guarded import, or the
-`try/except/finally` entrypoint.** A single removed or altered decision line
-voids the review.
+**Acceptance: exactly one removed line, exactly `    monitor()`, and 120 added
+lines.**
+
+The single removal is the bare `monitor()` call under `__main__`, replaced by the
+`try/except/finally` that wraps the identical call. It is a removal in `diff`
+terms only; the call itself survives inside the `try`. Control 28 proves the
+replacement still calls `monitor()`, still re-raises bare, and still flushes in
+the `finally`.
+
+An earlier draft of this section asserted "no lines removed", which this check
+immediately falsified. The corrected criterion names the one permitted removal
+rather than tolerating removals in general.
+
+Every added line must be a comment, an `obs[...]` or `_MONITOR_EVAL[...]`
+assignment, the guarded import, or the entrypoint wrapper. **Any other removed
+or altered line voids the review.**
+
+To confirm no decision logic moved, use the purpose-built verifier rather than a
+text diff:
+
+```sh
+cd /tmp/ares_review
+python3 tools/verify_recorder_isolation.py /tmp/monitor_before.py /tmp/monitor_after.py
+echo "EXIT=$?"
+```
+
+**Acceptance: `decision logic IDENTICAL after removing observation`, no
+`PROBLEM:` lines, exit 0.**
+
+It removes the registered observation additions from the syntax tree and compares
+what remains. It unwraps the entrypoint wrapper **only after** confirming the
+handler re-raises bare and the `finally` body does nothing but flush, so a
+wrapper that swallowed the production exception fails rather than being
+normalised away.
+
+A line-based strip was tried first and abandoned: filtering comment lines also
+removes pre-existing comments adjacent to additions, and removing statements by
+prefix leaves dangling `try:` and `except:` headers. Both reported an unchanged
+file as changed. Parsing avoids each — comments are absent from the tree, and a
+statement is removed whole or not at all.
+
+Demonstrated to detect the two repairs this design forbids:
+
+| Injected change | Verdict |
+|---|---|
+| `trailing_stop_pct` default 0.08 → 0.10 | `DECISION LOGIC DIFFERS`, diff shown |
+| entry-day skip added to the loop | `DECISION LOGIC DIFFERS`, diff shown |
+| bare `raise` → `pass` in the handler | `PROBLEM: ... would be swallowed`, exit 1 |
 
 ### 3.3 Confirm recorder failure cannot alter decisions, persistence or exceptions
 
