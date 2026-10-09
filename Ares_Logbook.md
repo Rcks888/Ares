@@ -2209,6 +2209,68 @@ Phase 5 and AI modelling remain prohibited.
 
 ---
 
+### 2026-10-07 — EROC and ITUB filled; monitor caught writing state
+
+Both pendings filled on the 13:30 UTC report cycle. Portfolio to 5/5.
+
+- EROC 11.81 @ $12.61, SL 11.14, TP 14.88
+- ITUB 14.72 @ $10.12, SL 9.32, TP 11.94
+
+Cash fell to **$171.46** against a nominal $250 reserve — a **$78.54 breach**.
+The pre-cycle prediction of $171.35 was wrong by $0.11, caused entirely by
+`shares` being **floored** to 2dp rather than rounded, so each fill consumes
+slightly less than `position_size`. `position_size` is the pre-floor notional,
+not the outlay. Booked value stands; the method was not adjusted to recover the
+prediction.
+
+The reserve is a sizing constant against `starting_capital`, never a runtime cash
+check. Documenting this breach does not authorise the entries that caused it.
+
+**The incident was demonstrated end to end.** At 16:10 and 17:30 UTC the monitor
+ratcheted EROC's trailing stop 11.14 → 11.66 → 11.76 and its peak to 13.07, with
+**no evidence written**; the 21:00 report cycle then read those values. An
+unobserved path mutated state the observed path depends on. The only artefact is
+Telegram text.
+
+The monitor ratcheted at **10%**, confirming `trailing_stop_pct` resolved from
+config at both sites and that the 0.08/0.10 default divergence remains masked and
+not firing — `currently_active: false` stands. Not to be fixed in the recorder.
+
+Also observed: EROC was Day 0, and the monitor has no entry-day skip, so it acted
+on a position the report path would have skipped. WBD returned "No live price" on
+all four monitor checks across two days → `continue`, no stop evaluation, no
+trace.
+
+New finding: EROC filled 7.6% below its $13.64 signal price. The queue enforces
+`queue_max_drift_pct`; the pending path appears not to. Flagged to verify, not
+asserted, not repaired.
+
+`peak_price` has two precisions — 2dp when the monitor has ratcheted it, full
+unrounded float when it has not. ITUB's retains the discarded unrounded entry
+`10.120109656333922`.
+
+Parity 64 → 84, exactly 4 cycles × 5 positions. `stdev_fallback` false and
+`sample_phase: clean_v3` on both fills, as predicted. `initiating_source` is
+`unknown` for both and permanently so.
+
+Design correction found by observation: `queue_events.jsonl` has **no record** for
+either admission, so it cannot serve as the sole admission-evidence stream. §3.5
+amended.
+
+Recorded in `RECONCILIATION_2026-10-07_fill_cycle.md`. No runtime change.
+
+### 2026-10-08 — no new entries; near-miss on EROC
+
+5/5 slots, so BSP signalled and queued rather than admitted. Scan 103 screened.
+EROC traded to $11.92 against a trailing stop of $11.76 — within $0.16, no exit.
+TMO to $641.83 against $634.25. WBD again returned no live price on both monitor
+checks.
+
+BSP queued at −4.4% drift on Oct 8 and was absent from the queue by Oct 9 with no
+stated reason. To check against `queue_max_drift_pct` and `queue_max_age_days`.
+Dashboard also reported "2 signals" while listing one — same count/list mismatch
+seen on Oct 7.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)

@@ -317,6 +317,21 @@ Admission evidence stays in `logs/queue_events.jsonl` — the existing stream �
 rather than a new file, so one admission does not produce two partial records in
 two places.
 
+> **Corrected 2026-10-09 by observation.** This is **wrong as stated**, and the
+> 2026-10-07 reconciliation proved it. `grep -E 'EROC|ITUB' logs/queue_events.jsonl`
+> returned **nothing**: both admissions were `from_queue: False`, never entered
+> the queue, and produced **no queue event at all**.
+>
+> `queue_events.jsonl` covers **queue-routed admissions only**. For a direct scan
+> admission it is not merely insufficient — it is empty. A design that reuses it
+> as the sole admission stream would have recorded nothing for the only two
+> admissions observed in this period, while reporting full coverage.
+>
+> The separately registered admission diff must therefore cover **both routes**,
+> and the coverage contract must treat an absent direct-admission record as a
+> **gap**, not as an absence of admissions. See
+> `RECONCILIATION_2026-10-07_fill_cycle.md` §6.
+
 #### `source` is one field but still a record-contract change
 
 **Revised after review.** "One field, already a parameter, currently discarded"
