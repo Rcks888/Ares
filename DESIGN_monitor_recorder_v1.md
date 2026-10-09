@@ -1543,3 +1543,112 @@ as a separate step before any implementation diff is presented.
 Nothing in this document authorises a runtime change. In particular, the recorder
 must not quietly repair admission gating, reserve sizing, exception handling, the
 defaults divergence, or any exit-policy difference. **Observe first.**
+
+---
+
+## 12. Implementation review outcome — 2026-10-09
+
+Built on branch `recorder/monitor-observer-v1` (`7681d9c`, `ac73363`).
+**Deliberately not on `main`.** Review only; activation not authorised.
+
+### 12.1 Merging IS deployment
+
+Found while preparing the commit, and it changes the activation procedure.
+`run_monitor.sh` and `run_ares.sh` both contain:
+
+```sh
+if ! git push -q 2>/dev/null; then
+    if git pull -q --rebase --autostash && git push -q; then ...
+```
+
+A new `main` commit **guarantees** the bare push fails, which triggers the pull,
+which brings `main` into the VPS working tree — and the next cycle runs it. There
+is no separate deploy step and never was.
+
+Consequences:
+
+- Every documentation commit this week was propagated to the VPS the same way.
+  Harmless for markdown; **not** harmless for code.
+- Activation must be an explicit merge performed **between cycles**, with gateway
+  state known, not whenever convenient.
+- Code under review must live on a branch. The bot pushes `main` only, and
+  `pull --rebase` targets its tracked upstream, so a side branch cannot reach the
+  live tree.
+
+### 12.2 What was implemented
+
+`engine/monitor_observer.py` (new) — three manifests whose fingerprints report
+`complete: false` on a missing path; effective configuration recording resolved
+value and origin with **per-site** defaults; an exact 33-field record schema;
+a path-scoped heartbeat in its own file; deterministic serialisation with
+`fsync`; `flush` that never raises and is idempotent.
+
+`monitor_trades.py` (+120 lines) — a plain dict store mirroring
+`tracker._LAST_EVAL`. The loop writes **raw values only**: no imports, no
+arithmetic, no formatting, no I/O. Unconditional, with no env gate, because a
+store that behaves differently when observation is off means the observed path is
+not the path that runs. The per-trade record is appended **before any branch**
+and mutated in place, so a loop that dies mid-trade leaves a partial record
+rather than none. Guarded import; `finally` flush; original exception preserved
+by a bare `raise`.
+
+### 12.3 Recorded and fixed nowhere
+
+The divergent 0.08 trailing-stop default · the absent entry-day skip · the
+missing per-trade exception guard · the two-precision `peak_price` · the naive
+exit date · `get_live_price` collapsing four causes into `None` · the apparent
+absence of a drift guard on the pending path.
+
+### 12.4 Controls
+
+22 controls, **22/22 on the laptop and 22/22 on the VPS**, exit 0.
+
+`tests/test_monitor_observer.py` is the pytest form.
+`tests/run_monitor_observer_controls.py` is a stdlib-only runner, added because
+pytest is absent from the VPS venv and installing it would change the production
+environment in order to test an observation-only module. Both are kept and must
+not drift.
+
+Verified on the VPS through a `git worktree` in `/tmp`, so the live tree was
+never switched, then removed.
+
+Mutation-tested to show the controls can fail and are not over-coupled:
+
+| Mutation | Controls that fail |
+|---|---|
+| defaults forced to agree | 18, 19 — nothing else |
+| `decision_path` relabelled | 04 — nothing else |
+| schema given an unproduced key | 08 — nothing else |
+
+Control 00 is a harness self-test: a harness that cannot report a failure proves
+nothing.
+
+### 12.5 Two defects found by the recorder's own controls
+
+1. **`flush` applied the derivation twice.** The second pass saw the keys the
+   first had filled with `None`, so a **partial record reported
+   `record_complete: true`** — the recorder would have claimed complete evidence
+   for an aborted loop, which is the exact failure mode it exists to prevent.
+2. **A legitimate skip reported incomplete.** WBD returns no live price on every
+   cycle, so it would have been indistinguishable from a loop that died.
+   Completeness is now judged against what the outcome can produce, and the skip
+   itself is never reported as missing evidence.
+
+Both fixed, both regression-guarded (controls 09 and 08).
+
+### 12.6 Qualifications on the review
+
+- Control 13 verified manifest completeness against the **worktree** checkout,
+  not the live tree. The two differ only in the recorder files, so the
+  decision-manifest paths are confirmed present — but a digest comparison against
+  the running tree is a separate check belonging to the merge decision.
+- **Admission capture is not included.** `queue_events.jsonl` is empty for a
+  direct scan admission, so that work needs its own registered diff covering both
+  routes. The recorder observes exits and state updates only, and that boundary
+  must be stated rather than discovered later from a gap in the records.
+- The recorder makes the monitor path **observable**. It does not make the two
+  paths reconciled, and it cannot be described as preventing recurrence until
+  every decision path is instrumented **and verified**. The five lost monitor
+  exits remain blocking.
+- The governing question — which production exit policy is authoritative — is
+  untouched by this work, deliberately.

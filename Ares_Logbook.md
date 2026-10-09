@@ -2271,6 +2271,52 @@ stated reason. To check against `queue_max_drift_pct` and `queue_max_age_days`.
 Dashboard also reported "2 signals" while listing one — same count/list mismatch
 seen on Oct 7.
 
+### 2026-10-09 — reconciliation closed; recorder built and reviewed, not activated
+
+**Reconciliation.** Booked cash **$171.46**, reserve breach **$78.54**. The
+pre-cycle prediction of $171.35 was wrong by **$0.11**, caused entirely by
+`shares` being floored to 2dp: EROC `149/12.61 = 11.8160` was booked as
+**11.81**, so each fill consumes slightly less than `position_size`, which is the
+pre-flooring notional and not the outlay. Legacy basis confirmed at
+`745.1608 − 297.8905 = 447.2703`. Booked value stands; the method was not
+adjusted to recover the prediction. Recorded in
+`RECONCILIATION_2026-10-07_fill_cycle.md`.
+
+**Recorder built** on branch `recorder/monitor-observer-v1` (`7681d9c`,
+`ac73363`). `engine/monitor_observer.py` plus 120 lines in `monitor_trades.py`:
+three manifests that fail on a missing path, per-site effective configuration, an
+exact 33-field schema, a path-scoped heartbeat, and a loop that writes raw values
+only with every derivation moved after it.
+
+**Critical finding — merging is deployment.** Both launchers run
+`git pull --rebase --autostash` whenever the bare push fails, which a new `main`
+commit guarantees. Pushing code to `main` therefore lands it in the VPS working
+tree at the next cycle. There is no separate deploy step and never was; every
+documentation commit this week propagated the same way. The recorder was
+committed to a branch for exactly this reason, and activation must be a
+deliberate merge between cycles.
+
+**Controls: 22/22 laptop, 22/22 VPS, exit 0.** Run through a `git worktree` in
+`/tmp` so the live tree was never switched, then removed. A stdlib-only runner
+was written because pytest is absent from the VPS venv and installing it would
+change the production environment to test an observation-only module.
+Mutation-tested three ways; each mutation fails only its own control.
+
+**Two defects found by the recorder's own controls.** `flush` applied the
+derivation twice, so a partial record reported `record_complete: true` — the
+exact failure mode the recorder exists to prevent. And a legitimately skipped
+symbol reported incomplete, which would have made every WBD cycle
+indistinguishable from a loop that died. Both fixed and regression-guarded.
+
+**Not activated. Nothing deployed. `main` is clean and the recorder is absent
+from it.** Admission capture is still outside scope: `queue_events.jsonl` is
+empty for a direct scan admission and needs its own registered diff covering both
+routes. The governing question — which exit policy is authoritative — remains
+open, the five lost monitor exits remain blocking, and the recorder cannot be
+called a fix for recurrence until every path is instrumented and verified.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
