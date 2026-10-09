@@ -339,3 +339,28 @@ def test_code_only_defaults_are_flagged_as_code_sourced():
 def test_review_gate_is_quiet_while_config_supplies_the_value():
     """CATCHES: a gate that fires constantly and is therefore ignored."""
     assert mo.config_review_gate({"trailing_stop_pct": 0.10}) == []
+
+
+# --- bridge to the standalone runner ---------------------------------------
+# The stdlib runner is the authoritative control set, because it is the one that
+# can run on the VPS. Rather than restating its controls here and letting the
+# two drift, every control it registers is executed as a pytest case. Adding a
+# control there makes it appear here automatically.
+
+sys.path.insert(0, str(Path(__file__).parent))
+import run_monitor_observer_controls as runner       # noqa: E402
+
+
+@pytest.mark.parametrize("name,why,fn",
+                         runner.RESULTS,
+                         ids=[n for n, _, _ in runner.RESULTS])
+def test_standalone_control(name, why, fn):
+    """Each control from the stdlib runner, with its stated failure mode."""
+    fn()
+
+
+def test_runner_registers_every_control_exactly_once():
+    """CATCHES: a control silently shadowed by a duplicate function name."""
+    names = [n for n, _, _ in runner.RESULTS]
+    assert len(names) == len(set(names)), "duplicate control names"
+    assert len(names) >= 29, f"expected the full control set, got {len(names)}"

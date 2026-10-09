@@ -366,6 +366,50 @@ def _append(path, payload):
         return False
 
 
+EVALUATED_DECISIONS = frozenset({"hold", "state_update", "closed"})
+
+
+def reconcile_population(open_positions_seen, attempted, records):
+    """Account for the STARTING population, not just the attempted subset.
+
+    Required because `attempted == written` is satisfiable by a cycle that
+    recorded every position it attempted and silently never attempted the rest.
+    A loop that dies on position 2 of 5 writes 2 of 2 and looks internally
+    consistent; the three positions it never reached are invisible in that tally
+    and must be named.
+
+    `not_reached` is the residual: positions that were open when the cycle
+    started and never entered the loop body. Coverage cannot be claimed while it
+    is non-zero, and the residual is computed rather than counted so it cannot be
+    under-reported by a producer that also failed to run.
+    """
+    seen = open_positions_seen if isinstance(open_positions_seen, int) else None
+    evaluated = sum(1 for r in records
+                    if r.get("decision") in EVALUATED_DECISIONS)
+    skipped = sum(1 for r in records if r.get("decision") == "skipped")
+    incomplete = sum(1 for r in records if r.get("decision") == "incomplete")
+    pop = {
+        "open_positions_seen": seen,
+        "attempted": attempted,
+        "evaluated": evaluated,
+        "skipped": skipped,
+        "incomplete": incomplete,
+        "not_reached": None if seen is None else seen - attempted,
+        # An attempted count that disagrees with the number of captured records
+        # means the store itself is inconsistent, which is a recorder defect and
+        # must not be absorbed into one of the outcome buckets.
+        "attempted_matches_records": attempted == len(records),
+    }
+    if seen is None:
+        pop["reconciled"] = False
+        return pop
+    pop["reconciled"] = (
+        evaluated + skipped + incomplete + pop["not_reached"] == seen
+        and pop["attempted_matches_records"]
+        and pop["not_reached"] >= 0)
+    return pop
+
+
 def flush(store):
     """Serialise one monitor invocation. NEVER raises, and is idempotent.
 
@@ -390,6 +434,7 @@ def flush(store):
         observations = list(store.get("observations") or [])
         summary["attempted"] = store.get("attempted", len(observations))
 
+        written_records = []
         for obs in observations:
             # Envelope first, then derive ONCE. Deriving twice is not harmless:
             # the first pass fills absent registered keys with None, so a second
@@ -403,10 +448,16 @@ def flush(store):
             rec["invocation_token"] = store.get("invocation_token")
             rec["repository_commit"] = commit
             rec = _derive(rec)
+            written_records.append(rec)
             if _append(observation_path(), rec):
                 summary["written"] += 1
             else:
                 summary["write_failures"] += 1
+
+        population = reconcile_population(
+            store.get("open_positions_seen"), summary["attempted"],
+            written_records)
+        summary["population"] = population
 
         beat = {
             "heartbeat_schema_version": HEARTBEAT_SCHEMA_VERSION,
@@ -428,6 +479,19 @@ def flush(store):
             "attempted": summary["attempted"],
             "written": summary["written"],
             "write_failures": summary["write_failures"],
+            # Reconciles the STARTING population into evaluated, skipped,
+            # incomplete and not-reached. attempted == written alone is
+            # satisfiable by a cycle that never attempted later positions.
+            "population": population,
+            # The only field a reader should consult to decide whether this
+            # cycle's monitor coverage is complete. Deliberately conjunctive: a
+            # missing observation must never be able to read as success.
+            "coverage_complete": bool(
+                population.get("reconciled")
+                and population.get("not_reached") == 0
+                and population.get("incomplete") == 0
+                and summary["write_failures"] == 0
+                and store.get("monitor_completed") is True),
             # Set when the monitor loop raised. The monitor has no per-trade
             # try/except, so one failure aborts the loop and leaves later
             # positions unevaluated AND unsaved. That gap is now visible.

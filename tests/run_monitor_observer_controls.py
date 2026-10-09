@@ -368,6 +368,237 @@ def control_21_review_gate_quiet_when_config_supplies_value():
     eq(mo.config_review_gate({"trailing_stop_pct": 0.10}), [], "gate output")
 
 
+# --- activation acceptance criteria ---------------------------------------
+
+@control("a cycle recording every position it attempted while silently never "
+         "attempting the rest: 2 of 2 written looks consistent, 3 unreached")
+def control_22_population_reconciliation_names_unreached():
+    isolate()
+    s = store(observations=[{"symbol": "A", "observed_live": 1.0,
+                             "decision": "hold",
+                             "effective_stop_unrounded": 0.5},
+                            {"symbol": "B", "observed_live": 2.0,
+                             "decision": "hold",
+                             "effective_stop_unrounded": 1.5}],
+              attempted=2, open_positions_seen=5, monitor_completed=False,
+              loop_exception="AttributeError: died on position 3")
+    summary = mo.flush(s)
+    pop = summary["population"]
+    eq(pop["open_positions_seen"], 5, "starting population")
+    eq(pop["attempted"], 2, "attempted")
+    eq(pop["not_reached"], 3, "not_reached")
+    eq(pop["reconciled"], True, "buckets sum to the population")
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(beat["population"]["not_reached"], 3, "heartbeat not_reached")
+    # attempted == written was TRUE here. Coverage must still be refused.
+    eq(summary["attempted"], summary["written"], "attempted == written")
+    eq(beat["coverage_complete"], False, "coverage refused despite tally")
+
+
+@control("an unreached position becoming successful coverage")
+def control_23_unreached_blocks_coverage_claim():
+    isolate()
+    full = {k: None for k in mo.REGISTERED_OBSERVATION_FIELDS}
+    full.update({"symbol": "A", "observed_live": 1.0, "decision": "hold",
+                 "effective_stop_unrounded": 0.5})
+    # Complete cycle: every position reached, nothing incomplete.
+    mo.flush(store(observations=[dict(full)], attempted=1,
+                   open_positions_seen=1, monitor_completed=True))
+    eq(lines(mo.heartbeat_path())[-1]["coverage_complete"], True,
+       "clean cycle claims coverage")
+    # Same records, one position never reached.
+    isolate()
+    mo.flush(store(observations=[dict(full)], attempted=1,
+                   open_positions_seen=2, monitor_completed=True))
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(beat["population"]["not_reached"], 1, "not_reached")
+    eq(beat["coverage_complete"], False, "coverage refused")
+
+
+@control("the flush in the finally block swallowing or replacing the original "
+         "production exception")
+def control_24_original_exception_propagates_through_finally():
+    isolate()
+    s = store(observations=[{"symbol": "A", "observed_live": 1.0}], attempted=1,
+              open_positions_seen=1)
+
+    class ProductionFailure(Exception):
+        pass
+
+    # The exact shape of monitor_trades.__main__.
+    def run():
+        try:
+            raise ProductionFailure("position evaluation failed")
+        except BaseException as exc:
+            s["loop_exception"] = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            mo.flush(s)
+
+    try:
+        run()
+    except ProductionFailure as exc:
+        eq(str(exc), "position evaluation failed", "original message")
+    else:
+        raise AssertionError("the production exception did not propagate")
+    beat = lines(mo.heartbeat_path())[-1]
+    truthy(beat["loop_exception"].startswith("ProductionFailure"),
+           "exception recorded")
+    eq(beat["monitor_completed"], True, "store value preserved verbatim")
+
+
+def code_identifiers(path):
+    """Identifiers REFERENCED IN CODE, excluding comments and docstrings.
+
+    A plain substring scan cannot distinguish a call from the comment that
+    explains why the call is absent -- this module documents get_live_price's
+    four indistinguishable failure causes, which is exactly the commentary a
+    naive scan flags. Parsing is the only honest way to ask the question.
+    """
+    import ast
+    tree = ast.parse(Path(path).read_text())
+    names, calls = set(), set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name):
+            names.add(node.id)
+        elif isinstance(node, ast.Attribute):
+            names.add(node.attr)
+        elif isinstance(node, ast.Import):
+            for a in node.names:
+                names.add(a.name.split(".")[0])
+        elif isinstance(node, ast.ImportFrom):
+            names.add((node.module or "").split(".")[0])
+            for a in node.names:
+                names.add(a.name)
+        if isinstance(node, ast.Call):
+            f = node.func
+            if isinstance(f, ast.Attribute):
+                base = f.value.id if isinstance(f.value, ast.Name) else "?"
+                calls.add(f"{base}.{f.attr}")
+            elif isinstance(f, ast.Name):
+                calls.add(f.id)
+    return names, calls
+
+
+@control("the recorder acquiring market data, which would add a second price "
+         "request and change what the gateway sees")
+def control_25_recorder_acquires_no_market_data():
+    names, calls = code_identifiers(mo.__file__)
+    for token in ("get_live_price", "load_stock", "yfinance", "ib_insync",
+                  "add_indicators", "requests", "urllib", "socket",
+                  "tracker", "data_feed"):
+        truthy(token not in names, f"recorder references {token} in code")
+    # subprocess IS imported, for git lineage only. Any other subprocess call
+    # must fail this control.
+    subprocess_calls = {c for c in calls if c.startswith("subprocess.")}
+    eq(subprocess_calls, {"subprocess.run"}, "subprocess calls")
+    import ast
+    args = [n for n in ast.walk(ast.parse(Path(mo.__file__).read_text()))
+            if isinstance(n, ast.Call)
+            and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "run"]
+    eq(len(args), 1, "exactly one subprocess.run")
+    argv = [c.value for c in args[0].args[0].elts]
+    eq(argv, ["git", "rev-parse", "--short", "HEAD"], "the only command run")
+
+
+@control("the recorder mutating production state, which would make it a "
+         "decision path rather than an observer")
+def control_26_recorder_does_not_mutate_production_state():
+    d = isolate()
+    # A decoy production state file inside the recorder's own output directory,
+    # which is the only place it writes at all.
+    trades = d / "virtual_trades.json"
+    trades.write_text(json.dumps([{"symbol": "TMO", "status": "open"}]))
+    before = trades.read_bytes()
+    mo.flush(store(observations=[{"symbol": "TMO", "observed_live": 1.0,
+                                  "decision": "hold"}], attempted=1,
+                   open_positions_seen=1))
+    eq(trades.read_bytes(), before, "production state bytes")
+    names, _ = code_identifiers(mo.__file__)
+    for token in ("save_trades", "_close_trade", "promote_queue",
+                  "open_trade", "save_pending", "execute_pending_signals"):
+        truthy(token not in names, f"recorder references {token} in code")
+
+
+@control("the recorder writing into the report path's evidence or heartbeat, "
+         "which would corrupt 84 existing parity records")
+def control_27_parity_evidence_is_untouched():
+    d = isolate()
+    parity = d / "tracker_parity_v1.jsonl"
+    beat = d / "parity_heartbeat_v1.jsonl"
+    parity.write_text('{"preexisting": true}\n')
+    beat.write_text('{"preexisting": true}\n')
+    mo.flush(store(observations=[{"symbol": "X", "observed_live": 1.0,
+                                  "decision": "hold"}], attempted=1,
+                   open_positions_seen=1))
+    eq(parity.read_text(), '{"preexisting": true}\n', "parity evidence")
+    eq(beat.read_text(), '{"preexisting": true}\n', "parity heartbeat")
+    truthy(mo.observation_path().exists(), "recorder wrote its own file")
+
+
+def _entrypoint_shape(source):
+    """Inspect the real __main__ block by PARSING, never importing.
+
+    monitor_trades imports ib_insync and would open a gateway connection, so the
+    deployed structure can only be checked statically. control_24 validates the
+    pattern in a replica; this validates the file that actually runs.
+
+    Returns (calls_monitor, reraises_bare, flushes_in_finally).
+    """
+    import ast
+    tree = ast.parse(source)
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Try):
+            continue
+        calls_monitor = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "monitor" for n in ast.walk(node)
+            if True) and any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+            and n.func.id == "monitor" for b in node.body for n in ast.walk(b))
+        if not calls_monitor:
+            continue
+        # A BARE raise re-raises the active exception unchanged. `raise exc`
+        # would rebind the traceback; anything else would replace the error.
+        reraises_bare = any(
+            isinstance(n, ast.Raise) and n.exc is None
+            for h in node.handlers for n in ast.walk(h))
+        flushes_in_finally = any(
+            isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and n.func.attr == "flush"
+            for f in node.finalbody for n in ast.walk(f))
+        return calls_monitor, reraises_bare, flushes_in_finally
+    return False, False, False
+
+
+@control("the DEPLOYED entrypoint swallowing the production exception or "
+         "flushing outside a finally, which control_24 cannot see because it "
+         "tests a replica")
+def control_28_deployed_entrypoint_shape():
+    path = Path(mo.__file__).parent.parent / "monitor_trades.py"
+    calls, reraise, finally_flush = _entrypoint_shape(path.read_text())
+    truthy(calls, "entrypoint calls monitor()")
+    truthy(reraise, "handler contains a bare raise")
+    truthy(finally_flush, "flush is in the finally block")
+
+    # Self-sensitivity: the same check must REJECT the defective shapes. A
+    # control that only ever sees correct input proves nothing.
+    swallowed = ("def monitor():\n    pass\n"
+                 "if True:\n"
+                 "    try:\n        monitor()\n"
+                 "    except BaseException:\n        pass\n"
+                 "    finally:\n        _obs.flush(s)\n")
+    eq(_entrypoint_shape(swallowed), (True, False, True), "swallowed variant")
+
+    outside = ("def monitor():\n    pass\n"
+               "if True:\n"
+               "    try:\n        monitor()\n"
+               "    except BaseException:\n        raise\n"
+               "    finally:\n        pass\n")
+    eq(_entrypoint_shape(outside), (True, True, False), "no-flush variant")
+
+
 def main():
     width = max(len(n) for n, _, _ in RESULTS)
     failed = []
