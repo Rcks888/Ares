@@ -1,22 +1,5 @@
 [
   {
-    "symbol": "XP",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 29.73,
-    "rsi_at_signal": 85.5,
-    "stdev_20": 0.0721,
-    "vol_ratio": 2.06,
-    "date_added": "2026-10-06",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
     "symbol": "INSM",
     "strategy": "mean_reversion",
     "trigger": "oversold+volume+sma_support",
@@ -45,6 +28,23 @@
     "stdev_20": 0.0447,
     "vol_ratio": 3.72,
     "date_added": "2026-10-08",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "XP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 29.73,
+    "rsi_at_signal": 85.5,
+    "stdev_20": 0.0721,
+    "vol_ratio": 2.06,
+    "date_added": "2026-10-06",
     "screens": [
       "unusual_volume",
       "big_movers_up"

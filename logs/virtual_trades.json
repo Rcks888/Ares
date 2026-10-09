@@ -66,7 +66,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 15,
+      "days_tracked": 16,
       "max_days": 30,
       "peak_after_exit": 10.85,
       "trough_after_exit": 8.43,
@@ -132,7 +132,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 20,
+      "days_tracked": 21,
       "max_days": 30,
       "peak_after_exit": 18.09,
       "trough_after_exit": 15.2,
@@ -224,15 +224,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 9,
+      "days_tracked": 10,
       "max_days": 30,
-      "peak_after_exit": 48.97,
+      "peak_after_exit": 49.89,
       "trough_after_exit": 47.91,
-      "peak_date": "2026-10-02",
+      "peak_date": "2026-10-08",
       "trough_date": "2026-10-01",
-      "missed_upside_pct": 0.72,
+      "missed_upside_pct": 2.61,
       "avoided_downside_pct": 1.46,
-      "latest_price": 48.75
+      "latest_price": 49.89
     }
   },
   {
@@ -276,15 +276,15 @@
     "holding_days": 7,
     "shadow": {
       "active": true,
-      "days_tracked": 22,
+      "days_tracked": 23,
       "max_days": 30,
-      "peak_after_exit": 20.28,
+      "peak_after_exit": 20.62,
       "trough_after_exit": 18.24,
-      "peak_date": "2026-10-08",
+      "peak_date": "2026-10-09",
       "trough_date": "2026-09-23",
-      "missed_upside_pct": 7.81,
+      "missed_upside_pct": 9.62,
       "avoided_downside_pct": 3.03,
-      "latest_price": 20.28
+      "latest_price": 20.62
     },
     "post_mortem": {
       "exit_reason": "stop_loss",
@@ -375,15 +375,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 16,
+      "days_tracked": 17,
       "max_days": 30,
-      "peak_after_exit": 91.94,
+      "peak_after_exit": 93.79,
       "trough_after_exit": 77.54,
-      "peak_date": "2026-10-08",
+      "peak_date": "2026-10-09",
       "trough_date": "2026-09-22",
-      "missed_upside_pct": 17.62,
+      "missed_upside_pct": 19.98,
       "avoided_downside_pct": 0.81,
-      "latest_price": 91.94
+      "latest_price": 93.79
     }
   },
   {
@@ -450,7 +450,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 10,
+      "days_tracked": 11,
       "max_days": 30,
       "peak_after_exit": 32.6,
       "trough_after_exit": 26.39,
@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 17
+    "holding_days": 18
   },
   {
     "symbol": "WBD",
@@ -553,7 +553,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 16
+    "holding_days": 17
   },
   {
     "symbol": "NEOG",
@@ -620,7 +620,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 14,
+      "days_tracked": 15,
       "max_days": 30,
       "peak_after_exit": 13.76,
       "trough_after_exit": 11.68,
@@ -696,7 +696,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 8,
+      "days_tracked": 9,
       "max_days": 30,
       "peak_after_exit": 15.79,
       "trough_after_exit": 11.63,
@@ -704,7 +704,7 @@
       "trough_date": "2026-10-08",
       "missed_upside_pct": 4.5,
       "avoided_downside_pct": 23.03,
-      "latest_price": 12.66
+      "latest_price": 13.0
     }
   },
   {
@@ -753,7 +753,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 9
+    "holding_days": 10
   },
   {
     "symbol": "TWST",
@@ -820,7 +820,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 2,
+      "days_tracked": 3,
       "max_days": 30,
       "peak_after_exit": 188.1,
       "trough_after_exit": 152.05,
@@ -896,15 +896,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 7,
+      "days_tracked": 8,
       "max_days": 30,
       "peak_after_exit": 20.34,
-      "trough_after_exit": 19.63,
+      "trough_after_exit": 19.47,
       "peak_date": "2026-10-01",
-      "trough_date": "2026-10-05",
+      "trough_date": "2026-10-09",
       "missed_upside_pct": 2.52,
-      "avoided_downside_pct": 1.06,
-      "latest_price": 19.75
+      "avoided_downside_pct": 1.86,
+      "latest_price": 19.47
     }
   },
   {
@@ -972,7 +972,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 6,
+      "days_tracked": 7,
       "max_days": 30,
       "peak_after_exit": 38.48,
       "trough_after_exit": 34.16,
@@ -1048,7 +1048,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 2,
+      "days_tracked": 3,
       "max_days": 30,
       "peak_after_exit": 66.96,
       "trough_after_exit": 65.01,
@@ -1105,7 +1105,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 1
+    "holding_days": 2
   },
   {
     "symbol": "ITUB",
@@ -1153,6 +1153,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 1
+    "holding_days": 2
   }
 ]

@@ -1,5 +1,49 @@
 [
   {
+    "symbol": "INSM",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 100.48,
+    "rsi_at_signal": 28.7,
+    "stdev_20": 0.0266,
+    "vol_ratio": 1.92,
+    "date_added": "2026-10-08",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce"
+    ],
+    "checked_at": "2026-10-09T13:31:15",
+    "drift_pct": -1.01,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 99.47
+  },
+  {
+    "symbol": "MANE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 126.63,
+    "rsi_at_signal": 61.7,
+    "stdev_20": 0.0447,
+    "vol_ratio": 3.72,
+    "date_added": "2026-10-08",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-10-09T13:31:16",
+    "drift_pct": -1.78,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 124.38
+  },
+  {
     "symbol": "XP",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -15,10 +59,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-10-08T21:01:06",
-    "drift_pct": 1.61,
+    "checked_at": "2026-10-09T13:31:13",
+    "drift_pct": 3.72,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 30.21
+    "live_price": 30.83
   }
 ]
