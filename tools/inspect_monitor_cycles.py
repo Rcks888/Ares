@@ -18,7 +18,14 @@ Nothing the producer claims about itself is trusted:
     schema and outcome contract; record_complete is required but never
     sufficient. The copy is pinned to the recorder's constants by inspection
     control 21, so drift in either is a FAIL, not a silent agreement;
-  - heartbeat population counts are recomputed from the validated records.
+  - heartbeat population counts are recomputed from the validated records;
+  - lineage is resolved, not just present: repository_commit must be the
+    commit the cycle ran on (the previous reference), and every manifest digest
+    must equal the md5 of that file at that commit;
+  - time is parsed, not just present: timezone-aware ISO timestamps, with
+    previous commit <= started <= every record <= completed <= this commit;
+  - every number in the evidence is finite; NaN and +/-Infinity are rejected
+    already at JSON parsing, and again by type checks.
 
 Exit 0 PASS: every cycle is complete, reconciled acceptance evidence.
 Exit 1 FAIL: a defect, or the inspection itself could not be carried out.
@@ -26,10 +33,14 @@ Exit 2 INCONCLUSIVE: truthful but not acceptance evidence (an aborted cycle,
        or observation reported unavailable through the health path).
 Any error inside this tool is a FAIL, never a pass.
 """
+import hashlib
 import json
+import math
 import numbers
+import re
 import subprocess
 import sys
+from datetime import datetime, timedelta
 
 HEARTBEAT = "logs/monitor_heartbeat_v1.jsonl"
 OBSERVATION = "logs/monitor_observation_v1.jsonl"
@@ -118,6 +129,17 @@ HEARTBEAT_FIELDS = frozenset({
     "manifests_complete", "manifest_missing", "effective_config",
     "config_review_required", "recorder_version",
 })
+HEARTBEAT_COUNTS = ("open_positions_seen", "attempted", "written",
+                    "write_failures")
+HEARTBEAT_BOOLS = ("lineage_complete", "monitor_completed", "coverage_complete",
+                   "manifests_complete", "trade_state_save_attempted",
+                   "trade_state_save_completed")
+MANIFESTS = ("decision_manifest", "classification_manifest",
+             "observation_manifest")
+SHORT_SHA = re.compile(r"[0-9a-f]{7,40}")
+MD5 = re.compile(r"[0-9a-f]{32}")
+# commit times have 1 s resolution; started/completed are microsecond-exact
+CLOCK_SLACK = timedelta(seconds=2)
 POPULATION_FIELDS = frozenset({
     "open_positions_seen", "attempted", "evaluated", "skipped", "incomplete",
     "incomplete_labelled", "not_reached", "attempted_matches_records",
@@ -152,11 +174,15 @@ def blob(commit, path):
     return git_bytes("cat-file", "blob", f"{commit}:{path}")
 
 
+def _reject_constant(token):
+    raise ValueError(f"non-finite number {token} is not valid evidence")
+
+
 def parse_lines(data, label):
     out = []
     for i, line in enumerate(data.split(b"\n")[:-1], 1):
         try:
-            obj = json.loads(line)
+            obj = json.loads(line, parse_constant=_reject_constant)
         except ValueError as exc:
             raise Fail(f"{label} line {i}: invalid JSON: {exc}")
         if not isinstance(obj, dict):
@@ -196,7 +222,27 @@ def history(commit):
 
 
 def is_num(v):
-    return isinstance(v, numbers.Real) and not isinstance(v, bool)
+    return (isinstance(v, numbers.Real) and not isinstance(v, bool)
+            and math.isfinite(v))
+
+
+def is_count(v, minimum=0):
+    return isinstance(v, int) and not isinstance(v, bool) and v >= minimum
+
+
+def parse_time(v):
+    """Timezone-aware ISO-8601 datetime, or None."""
+    if not isinstance(v, str):
+        return None
+    try:
+        t = datetime.fromisoformat(v)
+    except ValueError:
+        return None
+    return t if t.tzinfo is not None and t.utcoffset() is not None else None
+
+
+def commit_time(sha):
+    return datetime.fromisoformat(git("log", "-1", "--format=%cI", sha).strip())
 
 
 def record_violations(rec, hb):
@@ -292,11 +338,77 @@ def heartbeat_violations(hb):
         v.append("decision_path")
     if not isinstance(hb["cycle_id"], str) or not hb["cycle_id"]:
         v.append("cycle_id")
-    if not isinstance(hb["cycle_started_at"], str) or not hb["cycle_started_at"]:
-        v.append("cycle_started_at")
+    if not is_count(hb["invocation_token"], 1):
+        v.append(f"invocation_token: {hb['invocation_token']!r}")
+    for k in HEARTBEAT_COUNTS:
+        if not is_count(hb[k]):
+            v.append(f"{k}: not a non-negative integer: {hb[k]!r}")
+    for k in HEARTBEAT_BOOLS:
+        if not isinstance(hb[k], bool):
+            v.append(f"{k}: not a boolean: {hb[k]!r}")
+    if hb["lineage_complete"] is not True:
+        v.append("lineage_complete is not true")
+    if not (isinstance(hb["repository_commit"], str)
+            and SHORT_SHA.fullmatch(hb["repository_commit"])):
+        v.append(f"repository_commit: not a commit id: "
+                 f"{hb['repository_commit']!r}")
+    start = parse_time(hb["cycle_started_at"])
+    done = parse_time(hb["cycle_completed_at"])
+    if start is None:
+        v.append(f"cycle_started_at: not a timezone-aware ISO timestamp: "
+                 f"{hb['cycle_started_at']!r}")
+    if done is None:
+        v.append(f"cycle_completed_at: not a timezone-aware ISO timestamp: "
+                 f"{hb['cycle_completed_at']!r}")
+    if start is not None and done is not None and done < start:
+        v.append("cycle_completed_at is earlier than cycle_started_at")
+    for m in MANIFESTS:
+        d = hb[m]
+        if not isinstance(d, dict) or not d:
+            v.append(f"{m}: not a non-empty mapping")
+        elif not all(isinstance(x, str) and MD5.fullmatch(x) for x in d.values()):
+            v.append(f"{m}: a digest is missing or not md5")
+    if hb["manifest_missing"] != []:
+        v.append(f"manifest_missing: {hb['manifest_missing']!r}")
     p = hb["population"]
     if not isinstance(p, dict) or set(p) != POPULATION_FIELDS:
         v.append("population key set")
+    return v
+
+
+def lineage_violations(hb, a):
+    """The cycle ran on <a>: the bot commits only AFTER the monitor exits, so
+    HEAD during the cycle is the previous reference."""
+    v = []
+    if not a.startswith(hb["repository_commit"]):
+        v.append(f"repository_commit {hb['repository_commit']} is not the "
+                 f"commit the cycle ran on ({a[:7]})")
+    for m in MANIFESTS:
+        for path, digest in sorted(hb[m].items()):
+            data = blob(a, path)
+            if data is None:
+                v.append(f"{m}: {path} does not exist at {a[:7]}")
+            elif hashlib.md5(data).hexdigest() != digest:
+                v.append(f"{m}: {path} digest differs from the file at {a[:7]} "
+                         "(the code that ran is not the committed code)")
+    return v
+
+
+def time_violations(hb, recs, a, b):
+    v = []
+    start = parse_time(hb["cycle_started_at"])
+    done = parse_time(hb["cycle_completed_at"])
+    if start < commit_time(a) - CLOCK_SLACK:
+        v.append("cycle_started_at is earlier than the previous commit")
+    if done > commit_time(b) + CLOCK_SLACK:
+        v.append("cycle_completed_at is later than this cycle's commit")
+    for i, rec in enumerate(recs, 1):
+        t = parse_time(rec.get("timestamp"))
+        if t is None:
+            v.append(f"record {i}: timestamp not a timezone-aware ISO timestamp")
+        elif not start <= t <= done:
+            v.append(f"record {i}: timestamp outside the cycle "
+                     f"[{hb['cycle_started_at']}, {hb['cycle_completed_at']}]")
     return v
 
 
@@ -382,6 +494,9 @@ def inspect(refs):
             if bad:
                 raise Fail(f"{tag}: record {i} ({rec.get('symbol')!r}) fails "
                            f"the frozen contract: {bad}")
+        bad = lineage_violations(hb, a) + time_violations(hb, obs, a, b)
+        if bad:
+            raise Fail(f"{tag}: lineage or time evidence invalid: {bad}")
         syms = [o["symbol"] for o in obs]
         if len(set(syms)) != len(syms):
             raise Fail(f"{tag}: duplicate symbol records {sorted(syms)}")
@@ -408,6 +523,7 @@ def inspect(refs):
                 and hb["write_failures"] == 0
                 and hb["manifests_complete"] is True
                 and hb["manifest_missing"] == []
+                and hb["lineage_complete"] is True
                 and hb["loop_exception"] is None):
             raise Fail(f"{tag}: heartbeat not complete and consistent: "
                        f"coverage={hb['coverage_complete']} "

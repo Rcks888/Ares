@@ -227,7 +227,7 @@ python3 tests/run_inspection_controls.py              ; echo "EXIT=$?"
 ```
 
 **Acceptance: 44/44, 14/14 and 13/13, each exit 0. These are the 71 controls on
-the recorder itself.** In addition, **25/25** inspection controls (exit 0)
+the recorder itself.** In addition, **30/30** inspection controls (exit 0)
 establish that the §5.0 post-activation tool cannot pass a defective or
 uninspectable history.
 
@@ -452,7 +452,7 @@ python3 -c "import ast; ast.parse(open('monitor_trades.py').read()); print('pars
 python3 tests/run_monitor_observer_controls.py             # 44/44 on the live tree
 python3 tests/run_verifier_negative_controls.py            # 14/14
 python3 tests/run_entrypoint_containment_controls.py        # 13/13
-python3 tests/run_inspection_controls.py                    # 25/25 (§5.0 tool)
+python3 tests/run_inspection_controls.py                    # 30/30 (§5.0 tool)
 python3 tools/verify_recorder_isolation.py \
     tests/fixtures/monitor_trades_preactivation.py monitor_trades.py
 ```
@@ -507,10 +507,11 @@ The per-cycle checks in §5.1–§5.8 are carried out by
 `tools/inspect_monitor_cycles.py`, not by hand-run snippets. Two hand-run
 snippets in bundle v3 gave false results: one grouped cycles by the
 process-local `invocation_token`, the other printed "ok" when `git` failed.
-The v4 tool still trusted three producer claims (see the v5 review bundle). The
-tool is fail-closed, trusts no claim the producer makes about itself, and has
-its own controls (`tests/run_inspection_controls.py`, 25, with each of its 18
-checks mutation-tested).
+The v4 tool still trusted three producer claims, and v5 two more (lineage and
+time, and non-finite numbers); see review bundles v5 and v6. The tool is
+fail-closed, trusts no claim the producer makes about itself, and has its own
+controls (`tests/run_inspection_controls.py`, 30, with each of its 30 checks
+mutation-tested).
 
 ```sh
 cd /root/ares/Ares
@@ -541,7 +542,22 @@ Per cycle, the tool checks:
   absent from every heartbeat and observation already present at `<R>`, as
   well as from earlier supplied cycles.
 - **Heartbeat schema.** The exact registered key set and population key set,
-  the schema versions, and `decision_path: monitor`.
+  the schema versions, `decision_path: monitor`, integer counts, boolean
+  flags, and md5 manifest digests.
+- **Lineage resolved, not just present.** `lineage_complete` must be true.
+  `repository_commit` must be the commit the cycle ran on, i.e. the previous
+  reference, because the launcher commits only after the monitor exits. Every
+  manifest digest must equal the md5 of that file **at that commit**, so code
+  that differs from what is committed (an uncommitted edit on the VPS) is a FAIL.
+- **Time parsed, not just present.** `cycle_started_at`, `cycle_completed_at`
+  and every record `timestamp` must be timezone-aware ISO-8601, ordered as
+  previous commit ≤ started ≤ each record ≤ completed ≤ this commit (with 2 s
+  slack for git's 1 s commit-time resolution). This applies equally to a
+  zero-position cycle.
+- **Finite numbers only.** `NaN`, `Infinity` and `-Infinity` are rejected at
+  JSON parsing and again by the type checks. The recorder itself would write
+  them: `json.dumps` emits `Infinity`, and the recorder's contract does not
+  test finiteness.
 - **Every record validated independently.** The tool's own copy of the frozen
   schema and outcome contract is checked: the exact key set, values that are
   never null, types, the non-null, null, falsy, true and false rules for each

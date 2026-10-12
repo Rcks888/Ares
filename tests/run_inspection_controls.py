@@ -26,6 +26,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -76,11 +78,22 @@ def commit(repo, subject):
     return git(repo, "rev-parse", "HEAD")
 
 
-def new_repo():
+MANIFEST_FILES = sorted(set(mo.DECISION_MANIFEST) | set(mo.CLASSIFICATION_MANIFEST)
+                        | set(mo.OBSERVATION_MANIFEST))
+
+
+def new_repo(open_syms=OPEN):
+    """Scratch repo with the REAL manifest files committed, so the recorder's
+    repository_commit and manifest digests are genuine lineage, as on the VPS."""
     repo = Path(scratch())
     git(repo, "init", "-q")
+    for rel in MANIFEST_FILES:
+        dst = repo / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / rel, dst)
+    git(repo, "add", "-A")
     (repo / "logs").mkdir()
-    write_json(repo / "logs" / "virtual_trades.json", trades(OPEN))
+    write_json(repo / "logs" / "virtual_trades.json", trades(open_syms))
     (repo / "logs" / "tracker_parity_v1.jsonl").write_text('{"p": 1}\n')
     (repo / "logs" / "parity_heartbeat_v1.jsonl").write_text('{"h": 1}\n')
     return repo, commit(repo, "Ares V3 report 2026-10-19_13:32")
@@ -93,11 +106,14 @@ def run_cycle(repo, symbols=OPEN, n=1, mutate=None, **store_over):
     process: the serialiser mints the cycle_id.
     """
     mo.LOGS_DIR = repo / "logs"
+    mo.ROOT = repo
     obs = [complete_obs("hold", symbol=s) for s in symbols]
     kw = dict(invocation_token=1, cycle_id=None,
-              cycle_started_at=f"2026-10-19T{15 + n}:10:0{n}+00:00",
+              cycle_started_at=datetime.now(timezone.utc).isoformat(),
               observations=obs, attempted=len(obs),
-              open_positions_seen=len(OPEN))
+              open_positions_seen=len(OPEN),
+              trade_state_save_attempted=True,
+              trade_state_save_completed=True)
     kw.update(store_over)
     mo.flush(store(**kw))
     if mutate:
@@ -324,8 +340,10 @@ def control_17_identity_from_history_rejected():
     expect(repo, [r2, m], 1, "including history before the first reference")
     repo, _ = new_repo()
     run_cycle(repo, n=1)
+    old_start = read_lines(repo / "logs" / mo.HEARTBEAT_NAME)[-1][
+        "cycle_started_at"]
     r2 = commit(repo, "Ares V3 report 2026-10-20_13:32")
-    m = run_cycle(repo, n=1)                         # same cycle_started_at
+    m = run_cycle(repo, n=1, cycle_started_at=old_start)
     expect(repo, [r2, m], 1, "including history before the first reference")
 
 
@@ -484,8 +502,136 @@ def control_24_heartbeat_completeness_enforced():
         expect(repo, [r, m1], 1, "not complete and consistent")
 
 
+ZERO = dict(symbols=[], open_positions_seen=0,
+            early_return_reason="no_open_positions",
+            trade_state_save_attempted=False, trade_state_save_completed=False)
+
+
+def heartbeat_forged(fn, open_syms=OPEN, **cycle):
+    repo, r = new_repo(open_syms)
+    m1 = run_cycle(repo, n=1, mutate=lambda logs: edit_appended(
+        logs, mo.HEARTBEAT_NAME, 0, fn), **cycle)
+    return repo, r, m1
+
+
+@control("the harness cannot fail a valid zero-position cycle")
+def control_25_zero_position_cycle_passes():
+    repo, r = new_repo([])
+    m1 = run_cycle(repo, n=1, **ZERO)
+    expect(repo, [r, m1], 0, "RESULT: PASS")
+
+
+@control("[v5 finding 1] a zero-position cycle with null lineage and "
+         "unparseable or missing timestamps")
+def control_26_reviewer_lineage_probe_rejected():
+    def f(h):
+        h.update(repository_commit=None, lineage_complete=False,
+                 cycle_started_at="not-a-timestamp", cycle_completed_at=None)
+        return h
+    repo, r, m1 = heartbeat_forged(f, [], **ZERO)
+    expect(repo, [r, m1], 1, "heartbeat fails the frozen schema")
+
+
+@control("each lineage and time defect on its own, on an otherwise valid "
+         "two-position cycle")
+def control_27_lineage_and_time_each_rejected():
+    def shift(key, delta):
+        def f(h):
+            t = datetime.fromisoformat(h[key]) + delta
+            h[key] = t.isoformat()
+            return h
+        return f
+    cases = [
+        (lambda h: {**h, "repository_commit": None}, "repository_commit: not a commit id"),
+        (lambda h: {**h, "lineage_complete": False}, "lineage_complete is not true"),
+        (lambda h: {**h, "cycle_started_at": "not-a-timestamp"}, "cycle_started_at: not a timezone-aware"),
+        (lambda h: {**h, "cycle_completed_at": None}, "cycle_completed_at: not a timezone-aware"),
+        (lambda h: {**h, "cycle_started_at": h["cycle_started_at"][:19]}, "cycle_started_at: not a timezone-aware"),
+        (shift("cycle_completed_at", -timedelta(hours=1)), "earlier than cycle_started_at"),
+        (shift("cycle_started_at", -timedelta(days=1)), "earlier than the previous commit"),
+        (shift("cycle_completed_at", timedelta(days=1)), "later than this cycle's commit"),
+        (lambda h: {**h, "invocation_token": True}, "invocation_token"),
+        (lambda h: {**h, "attempted": 2.0}, "attempted: not a non-negative integer"),
+        (lambda h: {**h, "decision_manifest": {**h["decision_manifest"], "engine/tracker.py": None}}, "not md5"),
+    ]
+    for fn, needle in cases:
+        repo, r, m1 = heartbeat_forged(fn)
+        expect(repo, [r, m1], 1, needle)
+    # a well-formed commit id that is not the commit the cycle ran on
+    repo, r = new_repo()
+    m1 = run_cycle(repo, n=1)
+    def other_commit(logs):
+        edit_appended(logs, mo.HEARTBEAT_NAME, 1,
+                      lambda h: {**h, "repository_commit": r[:7]})
+        edit_appended(logs, mo.OBSERVATION_NAME, len(OPEN),
+                      lambda x: {**x, "repository_commit": r[:7]})
+    m2 = run_cycle(repo, n=2, mutate=other_commit)
+    expect(repo, [r, m1, m2], 1, "is not the commit the cycle ran on")
+    # a record stamped outside its cycle
+    repo, r = new_repo()
+
+    def stale(logs):
+        def f(x):
+            x["timestamp"] = "2026-01-01T00:00:00+00:00"
+            return x
+        edit_appended(logs, mo.OBSERVATION_NAME, 0, f)
+    m1 = run_cycle(repo, n=1, mutate=stale)
+    expect(repo, [r, m1], 1, "timestamp outside the cycle")
+
+
+@control("code that ran differing from the committed code (an uncommitted "
+         "edit on the VPS), while the manifest claims completeness")
+def control_28_manifest_must_match_committed_files():
+    repo, r = new_repo()
+    with open(repo / "engine" / "tracker.py", "a") as fh:
+        fh.write("\n# local edit\n")
+    m1 = run_cycle(repo, n=1)
+    expect(repo, [r, m1], 1, "the code that ran is not the committed code")
+
+
+@control("[v5 finding 2] non-finite numbers in evidence: written by the real "
+         "recorder, injected as JSON tokens, or passed to the validator directly")
+def control_29_non_finite_rejected():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("inspect_tool", TOOL)
+    t = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(t)
+    # the reviewer's probe: a record the validator accepts, then entry_price=inf
+    repo, r = new_repo()
+    run_cycle(repo, n=1)
+    hb = read_lines(repo / "logs" / mo.HEARTBEAT_NAME)[-1]
+    rec = read_lines(repo / "logs" / mo.OBSERVATION_NAME)[0]
+    if t.record_violations(rec, hb):
+        raise AssertionError("baseline record must be accepted")
+    for bad in (float("inf"), float("-inf"), float("nan")):
+        got = t.record_violations({**rec, "entry_price": bad}, hb)
+        if not any("entry_price: not a number" in x for x in got):
+            raise AssertionError(f"entry_price={bad} accepted: {got}")
+    # the real recorder serialises inf as the token Infinity
+    for value in (float("inf"), float("nan")):
+        repo, r = new_repo()
+        obs = [complete_obs("hold", symbol="AMP", entry_price=value),
+               complete_obs("hold", symbol="TMO")]
+        m1 = run_cycle(repo, n=1, observations=obs, attempted=2)
+        if "Infinity" not in (repo / "logs" / mo.OBSERVATION_NAME).read_text() \
+                and "NaN" not in (repo / "logs" / mo.OBSERVATION_NAME).read_text():
+            raise AssertionError("fixture must put a non-finite token on disk")
+        expect(repo, [r, m1], 1, "non-finite number")
+    # a non-finite token anywhere in a heartbeat
+    for token in ("Infinity", "-Infinity", "NaN"):
+        repo, r = new_repo()
+
+        def inject(logs, token=token):
+            p = logs / mo.HEARTBEAT_NAME
+            text = p.read_text()
+            p.write_text(text.replace('"write_failures": 0',
+                                      f'"write_failures": {token}', 1))
+        m1 = run_cycle(repo, n=1, mutate=inject)
+        expect(repo, [r, m1], 1, "non-finite number")
+
+
 def main():
-    saved = mo.LOGS_DIR
+    saved, saved_root = mo.LOGS_DIR, mo.ROOT
     width = max(len(n) for n, _, _ in RESULTS)
     failed = 0
     try:
@@ -498,7 +644,7 @@ def main():
                 print(f"  FAIL  {name.ljust(width)}  {why}")
                 print(f"        -> {type(exc).__name__}: {exc}")
     finally:
-        mo.LOGS_DIR = saved
+        mo.LOGS_DIR, mo.ROOT = saved, saved_root
         for d in SCRATCH:
             shutil.rmtree(d, ignore_errors=True)
     print(f"\n  {len(RESULTS) - failed}/{len(RESULTS)} inspection controls passed")
