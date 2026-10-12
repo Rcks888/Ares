@@ -52,8 +52,18 @@ first monitor cycle observed
 
 ## 2. Window
 
-**16.5 hours**, from the completion of a 21:00 UTC cycle to the start of the next
-13:30 UTC cycle. Not 16.
+**64.5 hours**, from the completion of the Friday 21:00 UTC cycle to the start of
+the Monday 13:30 UTC cycle.
+
+An earlier draft said 16.5 hours. That was wrong, and both parties computed it:
+it assumed a Saturday 13:30 UTC boundary. Every Ares crontab entry is `1-5`,
+weekday-only, so after Friday 21:00 the next scheduled Ares process is Monday
+13:30. The extra 48 hours are real and are the reason deployment need not be
+rushed.
+
+Note also that the first cycle to execute the recorder is **Monday 16:10 UTC,
+not 13:30**. The 13:30 cycle runs `run_ares.sh` → `daily_report.py`, which never
+invokes `monitor_trades.py`.
 
 Start only after the 21:00 cycle has **actually completed** — confirmed by its
 heartbeat and its log commit, not by the clock. Before starting, confirm no other
@@ -98,81 +108,145 @@ additions from `monitor_trades.py` and confirm what remains is byte-identical to
 the reviewed pre-activation file.
 
 ```sh
-cd /root/ares/Ares
-git fetch -q origin
-git show origin/main:monitor_trades.py > /tmp/monitor_before.py
-git show origin/recorder/monitor-observer-v1:monitor_trades.py > /tmp/monitor_after.py
-diff /tmp/monitor_before.py /tmp/monitor_after.py | grep '^<'
-diff /tmp/monitor_before.py /tmp/monitor_after.py | grep -c '^>'
-```
-
-**Acceptance: exactly one removed line, exactly `    monitor()`, and 120 added
-lines.**
-
-The single removal is the bare `monitor()` call under `__main__`, replaced by the
-`try/except/finally` that wraps the identical call. It is a removal in `diff`
-terms only; the call itself survives inside the `try`. Control 28 proves the
-replacement still calls `monitor()`, still re-raises bare, and still flushes in
-the `finally`.
-
-An earlier draft of this section asserted "no lines removed", which this check
-immediately falsified. The corrected criterion names the one permitted removal
-rather than tolerating removals in general.
-
-Every added line must be a comment, an `obs[...]` or `_MONITOR_EVAL[...]`
-assignment, the guarded import, or the entrypoint wrapper. **Any other removed
-or altered line voids the review.**
-
-To confirm no decision logic moved, use the purpose-built verifier rather than a
-text diff:
-
-```sh
 cd /tmp/ares_review
-python3 tools/verify_recorder_isolation.py /tmp/monitor_before.py /tmp/monitor_after.py
+python3 tools/verify_recorder_isolation.py \
+    tests/fixtures/monitor_trades_preactivation.py monitor_trades.py
 echo "EXIT=$?"
 ```
 
-**Acceptance: `decision logic IDENTICAL after removing observation`, no
-`PROBLEM:` lines, exit 0.**
+**Acceptance: `only registered observation additions found; all other logic
+aligned identically`, no `PROBLEM:` lines, exit 0.**
 
-It removes the registered observation additions from the syntax tree and compares
-what remains. It unwraps the entrypoint wrapper **only after** confirming the
-handler re-raises bare and the `finally` body does nothing but flush, so a
-wrapper that swallowed the production exception fails rather than being
-normalised away.
+Do not use a text diff, and do not use added/removed line counts, for this
+check. A previous draft of this section accepted "exactly one removed line and
+120 added lines", which is satisfied by any change that happens to balance.
 
-A line-based strip was tried first and abandoned: filtering comment lines also
-removes pre-existing comments adjacent to additions, and removing statements by
-prefix leaves dangling `try:` and `except:` headers. Both reported an unchanged
-file as changed. Parsing avoids each — comments are absent from the tree, and a
-statement is removed whole or not at all.
+#### How the verifier establishes this
 
-Demonstrated to detect the two repairs this design forbids:
+It aligns the two files recursively, scope by scope, and requires **every**
+difference to be an exactly registered subtree, identified by the sha256 of its
+normalised `ast.unparse`:
 
-| Injected change | Verdict |
+- additions must appear in `tools/recorder_registration.py`
+- the single removal — the bare `monitor()` call — must appear there as a
+  registered replacement
+- exactly one entry-point wrapper may be added
+
+Because the alignment proves everything else is equal, there is no separate
+"compare the remainder" pass that could be fooled. Registration is by **whole
+subtree**, so an extra statement inside a registered block changes its digest
+and the block simply stops being registered.
+
+`ast.unparse` regenerates source from the tree, so comments and whitespace are
+absent and a formatting-only change compares equal. Such changes remain visible
+in the human-readable diff, which is where they belong.
+
+#### Why the previous verifier was replaced
+
+It removed statements by broad rules — "the leftmost name is `obs`", "this is
+the `if _obs is not None:` block", "the `finally` body mentions flush" — which
+created an exemption zone. Review independently reproduced **three defective
+candidates that all returned `IDENTICAL`, exit 0**:
+
+| Defect | How it evaded the old rules |
 |---|---|
-| `trailing_stop_pct` default 0.08 → 0.10 | `DECISION LOGIC DIFFERS`, diff shown |
-| entry-day skip added to the loop | `DECISION LOGIC DIFFERS`, diff shown |
-| bare `raise` → `pass` in the handler | `PROBLEM: ... would be swallowed`, exit 1 |
+| `obs = trade["stop_loss"] = {...}` | first target was `obs`, so the statement was stripped and the second, production target never inspected |
+| `trade["stop_loss"] = 0` inside the `if _obs is not None:` block | the whole block was removed without reading its contents |
+| `finally: ... return_value = "flush"; raise RuntimeError(...)` | the substring `"flush"` appeared — inside a string literal — in a body that replaced the production exception |
+
+All three are now rejected, and each is a standing negative control rather than
+a one-off patch:
+
+```sh
+cd /tmp/ares_review && python3 tests/run_verifier_negative_controls.py
+echo "EXIT=$?"
+```
+
+**Acceptance: 14/14, exit 0.**
+
+| Negative control | Must be rejected |
+|---|---|
+| 00 | the approved file must still PASS, or every rejection below is vacuous |
+| 01 | chained production target on an observation assignment |
+| 02 | production mutation inside the registered configuration block |
+| 03 | exception replaced behind the word "flush" |
+| 04 | a persistence call inside an observation assignment |
+| 05 | an acquisition call inside an observation assignment |
+| 06 | a `return` in `finally` |
+| 07 | an additional handler that swallows the original exception |
+| 08 | a production statement adjacent to a registered observation line |
+| 09 | deletion of decision logic |
+| 10 | a second entry-point wrapper |
+| 12 | a **duplicated** registered statement |
+| 13 | a **removed** registered statement |
+| 14 | a missing registration table — must fail closed, not pass vacuously |
+
+Controls 12 and 13 exist because registration initially pinned only the *shape*
+of each addition, not how many times it may occur. Doubling
+`_MONITOR_EVAL["attempted"] += 1` — which double-counts the population and
+breaks reconciliation — passed. The registry now records an expected occurrence
+count per key and the verifier requires an exact match in both directions.
+
+#### Reconciling the accepted count
+
+The verifier reports **47 accepted** against **46 registered addition keys**.
+That is not a discrepancy:
+
+```
+46  registered additions, each registered 1x, each found exactly 1x
+ 1  registered replacement: the bare `monitor()` call
+--
+47  accepted items
+```
+
+Additions and the replacement are both reported as accepted. There are currently
+**no repeated occurrences** — every key is registered `1x` — so accepted
+additions equal registered addition keys exactly. Had any statement been
+registered with a count above 1, the accepted total would exceed the key count by
+the excess, and the verifier prints both numbers on the `additions :` line so the
+arithmetic is checkable without reading the table.
+
+The registration table is committed evidence, not configuration. A digest or
+count change must be reviewed alongside the source change that caused it;
+regenerating it to make the verifier pass defeats the control.
 
 ### 3.3 Confirm recorder failure cannot alter decisions, persistence or exceptions
 
 ```sh
 git worktree add /tmp/ares_review origin/recorder/monitor-observer-v1
-cd /tmp/ares_review && python3 tests/run_monitor_observer_controls.py
+cd /tmp/ares_review
+python3 tests/run_monitor_observer_controls.py        ; echo "EXIT=$?"
+python3 tests/run_verifier_negative_controls.py       ; echo "EXIT=$?"
+python3 tests/run_entrypoint_containment_controls.py  ; echo "EXIT=$?"
 ```
 
-**Acceptance: 29/29, exit 0.** The relevant controls:
+**Acceptance: 44/44, 14/14 and 13/13, each exit 0. 71 controls total.**
 
-| Concern | Control |
+| Concern | Controls |
 |---|---|
-| exception propagation, deployed file | 28 (AST of the real `__main__`) |
-| exception propagation, pattern | 24 |
+| exception propagation, **real deployed entry point executed** | containment 51, 54 |
+| exception propagation, AST of the real `__main__` | 28 |
+| recorder unavailable must not stop trading, and must not be silent | containment 52 |
+| recorder cannot write must be distinguishable from success | containment 53 |
+| recorder failure cannot mask a production exception | containment 54 |
+| close recorded as four separate facts | containment 55, observer 34–36 |
+| failed save not reported as completed | containment 56, observer 42 |
 | no decision/persistence mutation | 26 |
-| no market-data acquisition | 25 |
-| parity evidence untouched | 27 |
-| failure cannot become coverage | 22, 23 |
+| no market-data acquisition | 25, verifier-negative 05 |
+| parity evidence untouched | 27, containment 57 |
+| incomplete observation cannot become coverage | **30**, 31, 40, 41, 22, 23 |
+| full invocation reset | **43**, 44 |
 | isolation under I/O failure | 01, 02 |
+
+Controls 30 and 43 exist because review reproduced the defects they catch: an
+incomplete observation reporting `coverage_complete: true`, and invocation
+metadata surviving into a later cycle.
+
+The containment suite executes `monitor_trades.py`'s **own bytes** through
+`runpy` with every engine dependency stubbed, asserting the copy's sha256 equals
+the deployed file first. It replaced a control that tested a hand-written
+replica of `__main__` and passed an exception-swallowing mutation the real file
+would have failed.
 
 Also compare the live-tree digests against the manifest the worktree computes,
 since control 13 only sees the worktree:
@@ -191,6 +265,7 @@ Every digest except `monitor_trades.py` must equal §3.1.
 |---|---|
 | Evidence | `logs/monitor_observation_v1.jsonl` |
 | Heartbeat | `logs/monitor_heartbeat_v1.jsonl` |
+| Observation health | `logs/monitor_health_v1.jsonl` |
 | Schedule | 16:10 and 17:30 UTC, Mon–Fri |
 | Must not be read by | dashboards, exporters, `clean_v3` statistics, Telegram, training datasets |
 | Must never be merged with | `logs/tracker_parity_v1.jsonl`, `logs/parity_heartbeat_v1.jsonl` |
@@ -198,28 +273,117 @@ Every digest except `monitor_trades.py` must equal §3.1.
 Confirm neither file exists yet, so the first write is unambiguous:
 
 ```sh
-ls -l logs/monitor_observation_v1.jsonl logs/monitor_heartbeat_v1.jsonl 2>&1
+ls -l logs/monitor_observation_v1.jsonl logs/monitor_heartbeat_v1.jsonl \
+      logs/monitor_health_v1.jsonl 2>&1
 ```
+
+The health file exists so that three otherwise identical silences can be told
+apart. It is written by a path that needs no recorder, because the condition it
+reports may be that the recorder is unimportable:
+
+| Observed | Meaning |
+|---|---|
+| a heartbeat line | the recorder ran |
+| a health line, no heartbeat | the recorder was unavailable, or could not write |
+| neither | the monitor itself never ran |
+
+**Known limitation, accepted:** an OOM kill sends `SIGKILL`, which Python cannot
+catch, so `finally` never runs and nothing at all is written — indistinguishable
+from "the monitor never ran". There were zero OOM kills in the seven days
+checked. A cycle-open record would close this gap and is not part of v1.
 
 ### 3.5 Identify and pre-test the rollback
 
-**Use an isolated, clearly identified activation commit, not a merge commit.**
-Reverting a merge requires choosing a mainline parent with `-m`, which is exactly
-the kind of judgement call that should not be made during an incident.
+**Use a single squashed activation commit with exactly one parent.**
+
+A `--no-ff` merge commit has two parents, so reverting it requires choosing a
+mainline with `-m` — a judgement call that should not be made during an
+incident. `git merge --squash` produces one ordinary commit containing the whole
+change, whose inverse is unambiguous.
 
 ```sh
 cd /root/ares/Ares
 git log --oneline -1                      # record the pre-activation SHA: <PRE>
 ```
 
-Test the inverse **before** deploying, in the throwaway worktree:
+The inverse must be tested against the **actual activation commit**, which means
+creating it locally first and only then pushing. An inverse tested against a
+differently-shaped commit proves nothing about the one that gets deployed.
+
+#### What the rollback must and must not restore
+
+An earlier draft required `git diff --stat <PRE> HEAD` over the **whole
+repository** to be empty. That is wrong, and it would have failed in practice.
+The bot commits log files every cycle, so by the time a rollback is needed the
+tree legitimately differs from `<PRE>` in `logs/`. A whole-repository criterion
+would either fail spuriously or, worse, invite reverting operational state.
+
+Rollback is scoped to **deployment-owned** paths. Newer operational state and
+evidence must be **preserved**:
+
+| Path | On rollback |
+|---|---|
+| `monitor_trades.py` | restored to `<PRE>` |
+| `engine/monitor_observer.py` | removed |
+| `tools/verify_recorder_isolation.py`, `tools/recorder_registration.py` | restored / removed |
+| `tests/` recorder suites, fixtures, driver | restored / removed |
+| `*.md` activation and design documents | restored |
+| `logs/` **— all of it** | **untouched. Never reverted.** |
+
+`logs/` includes `virtual_trades.json` (authoritative position state),
+`tracker_parity_v1.jsonl`, `queue_events.jsonl`, and any
+`monitor_observation_v1.jsonl` / `monitor_heartbeat_v1.jsonl` /
+`monitor_health_v1.jsonl` the recorder produced before the rollback. That
+evidence is the reason the recorder was deployed; discarding it during a
+rollback would destroy the record of whatever prompted the rollback.
+
+The activation commit touches no file under `logs/`, so its inverse cannot
+either. The check below confirms that rather than assuming it.
 
 ```sh
-cd /tmp/ares_review
-git revert --no-edit --no-commit <ACTIVATION_SHA> && echo "INVERSE APPLIES CLEANLY"
-git diff --stat
-git revert --abort 2>/dev/null; git reset --hard
+# after creating <ACTIVATION_SHA> locally (step 1 below), BEFORE pushing:
+cd ~/Olympus/Ares
+git clone -q --no-hardlinks . /tmp/ares_revert_test
+cd /tmp/ares_revert_test
+git log --oneline -1                      # must show <ACTIVATION_SHA>
+
+# 1. the activation commit must own no operational state
+git show --stat --name-only <ACTIVATION_SHA> | grep '^logs/' \
+    && echo "FAIL: activation touches logs/" || echo "ok: activation owns no logs/"
+
+# 2. the inverse must apply
+git revert --no-edit <ACTIVATION_SHA> && echo "INVERSE APPLIES CLEANLY"
+
+# 3. deployment-owned paths must be restored EXACTLY
+git diff --stat <PRE> HEAD -- monitor_trades.py engine/ tools/ tests/ '*.md'
+#    must be EMPTY
+
+# 4. operational state must NOT have been reverted
+git diff --name-only <PRE> HEAD -- logs/
+#    whatever appears here is preserved newer evidence, which is correct
+
+python3 -c "import ast; ast.parse(open('monitor_trades.py').read())"
+md5sum monitor_trades.py                  # must equal the §3.1 value
+cd ~ && rm -rf /tmp/ares_revert_test
 ```
+
+**Acceptance: step 1 reports `ok`, step 3 is empty, and step 2 succeeds.** Step
+4 is informational — a non-empty result there is expected and correct once the
+bot has committed logs.
+
+On the VPS the same scoping applies, and the local restore is the fast path
+because it does not wait on git propagation at all:
+
+```sh
+cd /root/ares/Ares
+git checkout <PRE> -- monitor_trades.py
+rm -f engine/monitor_observer.py
+md5sum monitor_trades.py                  # must equal the §3.1 value
+git status --porcelain logs/              # whatever is here STAYS
+```
+
+Only `monitor_trades.py` and `engine/monitor_observer.py` are executed by cron.
+`tools/` and `tests/` are inert at runtime and need not be removed urgently.
 
 `git revert` is correct for published history because it adds a reversing commit
 rather than rewriting. Two caveats, both load-bearing:
@@ -250,8 +414,10 @@ Explicit, inside the window, after the 21:00 cycle has completed.
 cd ~/Olympus/Ares
 git checkout main && git fetch -q origin
 git rev-list --left-right --count origin/main...HEAD      # expect 0  0
-git merge --no-ff --no-commit recorder/monitor-observer-v1
+git merge --squash recorder/monitor-observer-v1
 git commit -m "activate: monitor-path recorder v1"        # <ACTIVATION_SHA>
+git log --oneline -1 --parents                            # exactly ONE parent
+# --- now run the §3.5 inverse test against <ACTIVATION_SHA>, then: ---
 git push origin main
 
 # 2. VPS: receive THAT EXACT commit
@@ -263,12 +429,24 @@ git rev-parse HEAD                                        # must equal <ACTIVATI
 
 # 3. verify what is actually on disk
 md5sum monitor_trades.py engine/monitor_observer.py
+python3 -VV
 python3 -c "import ast; ast.parse(open('monitor_trades.py').read()); print('parses')"
-python3 tests/run_monitor_observer_controls.py             # 29/29 on the live tree
+python3 tests/run_monitor_observer_controls.py             # 44/44 on the live tree
+python3 tests/run_verifier_negative_controls.py            # 14/14
+python3 tests/run_entrypoint_containment_controls.py        # 13/13
+python3 tools/verify_recorder_isolation.py \
+    tests/fixtures/monitor_trades_preactivation.py monitor_trades.py
 ```
 
 If step 2's `--ff-only` fails, the VPS has local commits. **Stop.** Resolve that
 separately; do not rebase during activation.
+
+**Do not infer success from the launcher's exit status.** `run_monitor.sh` pipes
+python through `tee`, so `$?` is `tee`'s status and a failed cycle can look
+clean. Use the heartbeat and the traceback in `/root/ares/cron.log` instead.
+Changing the launcher — adding `set -o pipefail`, or capturing
+`${PIPESTATUS[0]}` — would be a change to a shared production script and is
+**out of scope for this activation**; it needs its own isolated review.
 
 ---
 
@@ -287,14 +465,25 @@ cat logs/monitor_observation_v1.jsonl | python3 -m json.tool
 
 ```
 attempted == written
-manifests_complete == true
+write_failures == 0
+manifests_complete == true          (all three manifests)
 monitor_completed == true
 population.reconciled == true
 population.not_reached == 0
-population.incomplete == 0
+population.incomplete == 0          (counted by record_complete, not by label)
+population.incomplete_labelled == 0
+population.duplicate_symbols == []
+population.attempted_matches_records == true
 coverage_complete == true
 evaluated + skipped + incomplete + not_reached == open_positions_seen
 ```
+
+`incomplete` is counted by `record_complete`, **not** by the `decision` label.
+Review reproduced a record with `record_complete: false` in a cycle reporting
+`coverage_complete: true`, because a record labelled `hold` was counted as
+evaluated without checking whether it satisfied the `hold` contract. A gap
+between `incomplete` and `incomplete_labelled` means a producer claimed an
+outcome it could not substantiate.
 
 The population reconciliation is required precisely because `attempted ==
 written` is satisfiable by a cycle that recorded everything it attempted and
@@ -319,28 +508,82 @@ but no traceback appears, the recorder swallowed it: **roll back**.
 
 ### 5.3 Per-observation
 
-For each record, confirm captured: trigger price (`observed_live`), the
-`effective_stop_unrounded` **and** `effective_stop_persisted_as`, the action
-(`decision`, `exit_reason`), and the persistence outcome
-(`trailing_stop_persisted`, `peak_price_after`, `ratcheted`).
+Validate the file **line by line**, not by eyeballing the last record — a single
+malformed line is the failure mode that matters:
 
-Expect, given the current book:
+```sh
+python3 -c "
+import json,sys
+bad=0
+for i,l in enumerate(open('logs/monitor_observation_v1.jsonl'),1):
+    if not l.strip(): continue
+    try: json.loads(l)
+    except Exception as e: bad+=1; print('line',i,'invalid:',e)
+print('invalid lines:',bad); sys.exit(1 if bad else 0)"
+```
 
-- 5 records, one per open position
-- **WBD** `decision: skipped`, `skip_reason: live_price_unavailable_cause_unknown`,
-  `effective_stop_unrounded: null`, `record_complete: true`
-- the rest `hold` or `state_update`
-- no `closed` unless a stop was genuinely hit
+For each record confirm: the trigger price (`observed_live`), both stop
+precisions (`effective_stop_unrounded` and `effective_stop_rounded_2dp`), the
+state movement (`peak_price_after`, `peak_advanced`, `trail_advanced`), the
+action (`decision`, `exit_reason`), and — for a close — all four close facts
+(`close_requested`, `close_price_argument`, `close_function_completed`,
+`booked_exit_price`).
+
+Field names changed during review. `*_persisted` became `*_rounded_2dp`,
+because rounding a captured value reconstructs what `round()` would store and
+does **not** prove `save_trades` ran. Persistence is an invocation fact and
+appears in the heartbeat as `trade_state_save_attempted` /
+`trade_state_save_completed`. `ratcheted` split into `peak_advanced` and
+`trail_advanced`, because a new peak need not move the trailing stop.
+
+Expectations must be reconciled against the **actual** starting state, not a
+remembered position count:
+
+```sh
+python3 -c "
+import json
+ts=json.load(open('/root/ares/preact_virtual_trades.json'))
+op=[t['symbol'] for t in ts if t['status']=='open']
+print('open at deployment:',len(op),sorted(op))"
+```
+
+Then require one record per symbol in that list, and no others. Any symbol that
+returns no live price must appear as `decision: skipped`,
+`skip_reason: live_price_unavailable_cause_unknown`,
+`effective_stop_unrounded: null`, `record_complete: true` — a skip is complete
+evidence, not a defect. Expect no `closed` record unless a stop was genuinely
+hit.
 
 ### 5.4 No additional market-data acquisition
 
+**This cannot be confirmed from stdout, and the earlier draft's `grep` of the
+monitor log was not evidence.** The monitor does not log one line per price
+request, so a count of matching output lines measures formatting, not requests.
+The same mistake in an earlier version of control 25 matched `get_live_price`
+inside an explanatory comment.
+
+What is actually established:
+
+- **Statically**, control 25 extracts identifiers from the recorder's syntax
+  tree — `Name.id`, `Attribute.attr`, `Import`/`ImportFrom` — and confirms no
+  acquisition call is present. Docstrings and comments are not in the tree, so
+  they cannot produce a match.
+- **Structurally**, verifier negative control 05 rejects an acquisition call
+  placed inside an observation assignment.
+- **At runtime**, the observation count must equal the open-position count from
+  §5.3, so the recorder added no per-symbol work.
+
 ```sh
-grep -c "get_live_price\|reqHistoricalData" /tmp/ares_monitor.txt
+python3 -c "
+import json
+recs=[json.loads(l) for l in open('logs/monitor_observation_v1.jsonl') if l.strip()]
+print('observations:',len(recs),'symbols:',sorted(r['symbol'] for r in recs))"
 ```
 
-Price requests must equal the open-position count, unchanged from before
-activation. Control 25 proves the recorder contains no acquisition call; this
-confirms it at runtime.
+**Known limitation, accepted:** instrumenting `data_feed` to count requests
+directly would modify a shared production module and is out of scope. Until
+that is done separately, "no additional acquisition" rests on the static and
+structural evidence above, not on a runtime request count.
 
 ### 5.5 No recorder-induced production mutation
 
@@ -373,10 +616,30 @@ b=[json.loads(l) for l in open('logs/monitor_heartbeat_v1.jsonl')][-1]
 p=b['population']
 print('claims coverage:', b['coverage_complete'])
 print('residual       :', p['not_reached'], 'incomplete:', p['incomplete'])
-assert not b['coverage_complete'] or (p['not_reached']==0 and p['incomplete']==0 \
-    and b['write_failures']==0 and b['monitor_completed'])
+assert not b['coverage_complete'] or (
+    p['not_reached']==0 and p['incomplete']==0 and p['incomplete_labelled']==0
+    and not p['duplicate_symbols'] and p['attempted_matches_records']
+    and b['attempted']==b['written'] and b['write_failures']==0
+    and b['monitor_completed'] and b['manifests_complete'])
 print('coverage claim is conjunctive and consistent')"
 ```
+
+### 5.8 Observation health
+
+```sh
+ls -l logs/monitor_health_v1.jsonl 2>&1
+grep -c OBSERVATION-HEALTH /root/ares/cron.log
+```
+
+**On a healthy cycle this file must not exist and the count must be 0.** If it
+does exist, the recorder failed and the cycle is unobserved — read `reason` and
+`detail`. That is a recorder fault, not a trading fault: containment controls 52
+and 53 establish that the monitor still completes and still prints its normal
+output in both cases.
+
+A health line **without** a corresponding heartbeat is the expected shape. A
+health line *and* a heartbeat for the same `invocation_token` would mean the
+flush partially succeeded; treat that as a defect and report it.
 
 ---
 
@@ -386,11 +649,22 @@ Roll back immediately on any of:
 
 - a monitor decision differing from what the pre-activation code would have made
 - any production-state change attributable to the recorder
-- an exception that did not propagate
-- an additional price request per symbol
+- an exception that did not propagate, or a traceback absent from `cron.log` on
+  a cycle whose heartbeat says `monitor_completed: false`
 - any write to the parity evidence or heartbeat
-- `coverage_complete: true` alongside a non-zero `not_reached` or `incomplete`
-- the control suite failing on the live tree
+- `coverage_complete: true` alongside a non-zero `not_reached`, `incomplete`,
+  `incomplete_labelled`, `write_failures`, or a non-empty `duplicate_symbols`
+- `record_complete: false` on any record in a cycle claiming coverage
+- `trade_state_save_completed: true` on a cycle whose `loop_exception` shows the
+  save itself raised
+- an invocation whose `cycle_id`, `params_resolved` or `open_positions_seen`
+  matches the previous invocation's while the token advanced
+- any of the three control suites failing on the live tree
+- the isolation verifier reporting anything other than exit 0
+
+Do **not** treat a `monitor_health_v1.jsonl` line as an abort criterion on its
+own. It reports that observation failed, which is the recorder degrading exactly
+as designed; investigate it, but trading is unaffected.
 
 ---
 

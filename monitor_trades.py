@@ -2,6 +2,9 @@
 Only checks open trades using IBKR live prices.
 No signal scanning, no yfinance download.
 """
+import json as _json
+import os as _os
+import sys as _sys
 from datetime import datetime, timedelta, timezone
 from engine.data_feed import get_live_price, disconnect_ib
 
@@ -11,32 +14,96 @@ from engine.indicators import add_indicators
 
 # Observation only -- never authoritative, never read back by any decision.
 # The import is guarded because a recorder that cannot be imported must not stop
-# the monitor from managing open positions. Absence degrades evidence, not trading.
+# the monitor from managing open positions. Absence degrades evidence, not
+# trading -- but it must not look like healthy silence either, so the failure is
+# recorded and emitted through the health path below.
 try:
     from engine import monitor_observer as _obs
-except Exception:                                   # noqa: BLE001
+    _OBS_IMPORT_ERROR = None
+except Exception as _exc:                           # noqa: BLE001
     _obs = None
+    _OBS_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
 
 # Decision-site capture for the CURRENT invocation. Plain dict, mirroring
 # tracker._LAST_EVAL: the loop stores raw values and does nothing else, so every
 # derivation and write happens after the loop where it cannot reach a decision.
 # Unconditional -- no env gate, because a store that behaves differently when
 # observation is off means the observed path is not the path that runs.
-_MONITOR_EVAL = {
-    "invocation_token": None,
-    "cycle_id": None,
-    "cycle_started_at": None,
-    "params_raw": None,
-    "params_resolved": None,
-    "observations": [],
-    "attempted": 0,
-    "open_positions_seen": None,
-    "early_return_reason": None,
-    "loop_exception": None,
-    "monitor_completed": False,
-    "flushed": False,
-}
 _INVOCATION_SEQ = 0
+
+
+def _new_invocation_store(token):
+    """THE registered initialisation contract. Every invocation-owned field is
+    defined here and nowhere else.
+
+    Returned whole and swapped in, rather than selectively cleared. Selective
+    clearing left cycle_id, params_raw, params_resolved and open_positions_seen
+    holding the PREVIOUS invocation's values, so a cycle that failed early or
+    returned with zero positions could publish a fresh token above stale
+    population and configuration. A new token does not make retained metadata
+    current.
+    """
+    return {
+        "invocation_token": token,
+        # Left None deliberately: the serialiser mints one per invocation, so a
+        # retained identity cannot survive into a later cycle.
+        "cycle_id": None,
+        "cycle_started_at": datetime.now(timezone.utc).isoformat(),
+        "params_raw": None,
+        "params_resolved": None,
+        "observations": [],
+        "attempted": 0,
+        "open_positions_seen": None,
+        "early_return_reason": None,
+        "loop_exception": None,
+        "monitor_completed": False,
+        "trade_state_save_attempted": False,
+        "trade_state_save_completed": False,
+        "flushed": False,
+    }
+
+
+_MONITOR_EVAL = _new_invocation_store(None)
+
+
+def _emit_observation_health_failure(reason, detail):
+    """Record that OBSERVATION failed, on a path that needs no recorder.
+
+    Reached when the recorder could not be imported, or when its own flush could
+    not write. Uses nothing but builtins and the stdlib imported here, because
+    the condition it reports may be that `engine` is unimportable.
+
+    Distinguishes three states that are otherwise identical silence:
+      a health line and no heartbeat  -> recorder unavailable or unable to write
+      a heartbeat                     -> recorder invoked
+      neither                         -> the monitor itself never ran
+
+    Never raises. A diagnostic that can fail the cycle it describes is worse
+    than no diagnostic.
+    """
+    try:
+        path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                             "logs", "monitor_health_v1.jsonl")
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        line = _json.dumps({
+            "health_schema_version": 1,
+            "decision_path": "monitor",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "invocation_token": _MONITOR_EVAL.get("invocation_token"),
+            "observation_failed": True,
+            "reason": reason,
+            "detail": detail,
+            "monitor_completed": _MONITOR_EVAL.get("monitor_completed"),
+            "attempted": _MONITOR_EVAL.get("attempted"),
+        }, sort_keys=True, default=str)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+            fh.flush()
+        # Distinct from ordinary trading output, and on stderr so a stdout
+        # scraper cannot mistake it for a position line.
+        print(f"OBSERVATION-HEALTH: {reason}: {detail}", file=_sys.stderr)
+    except BaseException:                           # noqa: BLE001
+        pass
 
 def monitor():
     # Rotate invocation identity BEFORE anything else. Clear first, then publish
@@ -44,14 +111,8 @@ def monitor():
     # observations, which a reader validating freshness would wrongly accept.
     global _INVOCATION_SEQ
     _INVOCATION_SEQ += 1
-    _MONITOR_EVAL["observations"].clear()
-    _MONITOR_EVAL["attempted"] = 0
-    _MONITOR_EVAL["loop_exception"] = None
-    _MONITOR_EVAL["early_return_reason"] = None
-    _MONITOR_EVAL["monitor_completed"] = False
-    _MONITOR_EVAL["flushed"] = False
-    _MONITOR_EVAL["invocation_token"] = _INVOCATION_SEQ
-    _MONITOR_EVAL["cycle_started_at"] = datetime.now(timezone.utc).isoformat()
+    _MONITOR_EVAL.clear()
+    _MONITOR_EVAL.update(_new_invocation_store(_INVOCATION_SEQ))
 
     today_str = datetime.now(MYT).strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
@@ -80,7 +141,9 @@ def monitor():
     rsi_extreme = params.get('rsi_extreme_high', 90)
     updated = False
 
-    _MONITOR_EVAL["params_raw"] = params
+    # A COPY. Retaining the live mapping would let a later mutation rewrite the
+    # snapshot that was supposedly recorded at this point in the cycle.
+    _MONITOR_EVAL["params_raw"] = dict(params)
     if _obs is not None:
         try:
             _MONITOR_EVAL["params_resolved"] = _obs.effective_config(params)
@@ -114,8 +177,13 @@ def monitor():
             "trailing_stop_before": trailing_stop,
             "peak_price_before": peak_price,
             "take_profit": take_profit,
+            # The REMAINING quantity at decision time. For a scaled-out
+            # position this is not the original size, which is why the name says
+            # at_decision.
             "shares_at_decision": trade.get('shares'),
-            "ratcheted": False,
+            "peak_advanced": False,
+            "trail_advanced": False,
+            "close_requested": False,
         }
         _MONITOR_EVAL["observations"].append(obs)
         _MONITOR_EVAL["attempted"] += 1
@@ -139,12 +207,15 @@ def monitor():
         if live > peak_price:
             peak_price = live
             trade['peak_price'] = round(peak_price, 2)
+            obs["peak_advanced"] = True
             new_trailing = peak_price * (1 - trailing_pct)
             if new_trailing > trailing_stop:
                 trailing_stop = new_trailing
                 trade['trailing_stop'] = round(trailing_stop, 2)
+                # A new peak does not imply the trail moved. Collapsing these
+                # into one flag reported a ratchet that never advanced a stop.
+                obs["trail_advanced"] = True
             updated = True
-            obs["ratcheted"] = True
 
         effective_stop = max(stop_loss, trailing_stop)
         today = datetime.now().strftime("%Y-%m-%d")
@@ -160,13 +231,19 @@ def monitor():
 
         if live <= effective_stop:
             reason = 'trailing_stop' if trailing_stop > stop_loss else 'stop_loss'
-            # The position is booked at the STOP while `live` is discarded. Both
-            # are recorded separately and never reconciled here: whether the
-            # stop was executable is not a question this recorder can answer.
-            obs["decision"] = "closed"
+            # Four separate facts, in the order they become true. The ARGUMENT
+            # is not the booked price: _close_trade applies slippage and rounds,
+            # and it can raise after partially mutating the trade. So the
+            # decision is recorded as REQUESTED here, and only promoted to a
+            # completed close once the function has returned and the booked
+            # price can be read back from the trade it wrote.
+            obs["close_requested"] = True
             obs["exit_reason"] = reason
-            obs["booked_fill_price"] = effective_stop
+            obs["close_price_argument"] = effective_stop
             _close_trade(trade, today, effective_stop, reason)
+            obs["close_function_completed"] = True
+            obs["booked_exit_price"] = trade.get('exit_price')
+            obs["decision"] = "closed"
             print(f"  ❌ {symbol}: CLOSED at ${effective_stop:.2f} — {reason}")
             print(f"     P&L: {trade['pnl_pct']:+.1f}% (${trade['pnl']:+.2f})")
             updated = True
@@ -174,22 +251,30 @@ def monitor():
             # Full exit. The monitor has no scale-out branch, so a take-profit
             # here closes the whole position where the report path would sell a
             # tranche. Recorded, not reconciled.
-            obs["decision"] = "closed"
+            obs["close_requested"] = True
             obs["exit_reason"] = "take_profit"
-            obs["booked_fill_price"] = take_profit
+            obs["close_price_argument"] = take_profit
             _close_trade(trade, today, take_profit, 'take_profit')
+            obs["close_function_completed"] = True
+            obs["booked_exit_price"] = trade.get('exit_price')
+            obs["decision"] = "closed"
             print(f"  ✅ {symbol}: CLOSED at ${take_profit:.2f} — take_profit")
             print(f"     P&L: {trade['pnl_pct']:+.1f}% (${trade['pnl']:+.2f})")
             updated = True
         else:
-            obs["decision"] = "state_update" if obs["ratcheted"] else "hold"
+            obs["decision"] = "state_update" if obs["peak_advanced"] else "hold"
             days = _holding_days(trade['entry_date'])
             print(f"  📊 {symbol}: ${live:.2f} ({arrow}{unrealized:.1f}%) | "
                   f"Day {days} | SL: ${stop_loss:.2f} | TS: ${trailing_stop:.2f} | "
                   f"TP: ${take_profit if take_profit else 'N/A'}")
 
     if updated:
+        # Persistence recorded as attempted-then-completed, so a save that
+        # raised is distinguishable from a save that never ran. promote_queue
+        # failing AFTERWARDS does not retract the save.
+        _MONITOR_EVAL["trade_state_save_attempted"] = True
         save_trades(trades)
+        _MONITOR_EVAL["trade_state_save_completed"] = True
         # A close freed a slot — promote from the ranked queue rather than
         # leaving it idle until the next scan. No rescanning here.
         promote_queue(source="monitor", use_live=True)
@@ -210,5 +295,19 @@ if __name__ == "__main__":
         _MONITOR_EVAL["loop_exception"] = f"{type(exc).__name__}: {exc}"
         raise
     finally:
-        if _obs is not None:
-            _obs.flush(_MONITOR_EVAL)
+        if _obs is None:
+            _emit_observation_health_failure("recorder_import_failed",
+                                            _OBS_IMPORT_ERROR)
+        else:
+            _summary = _obs.flush(_MONITOR_EVAL)
+            # A recorder that ran but could not write its evidence must not be
+            # indistinguishable from one that wrote successfully. Checked here
+            # rather than inside flush, because flush must stay incapable of
+            # raising into this finally.
+            if (not _summary.get("heartbeat_written")
+                    or _summary.get("write_failures")
+                    or _summary.get("flush_error")):
+                _emit_observation_health_failure(
+                    "recorder_write_failed", _json.dumps(_summary,
+                                                         sort_keys=True,
+                                                         default=str))

@@ -251,13 +251,19 @@ REGISTERED_OBSERVATION_FIELDS = frozenset({
     "observed_live", "live_available", "skip_reason",
     "entry_price", "stop_loss",
     "trailing_stop_before", "trailing_stop_after_unrounded",
-    "trailing_stop_persisted", "peak_price_before", "peak_price_after",
-    "peak_price_precision_basis", "ratcheted",
-    "take_profit", "effective_stop_unrounded", "effective_stop_persisted_as",
-    "decision", "exit_reason", "booked_fill_price", "shares_at_decision",
-    "unrealized_pct_at_decision",
+    "trailing_stop_rounded_2dp", "peak_price_before", "peak_price_after",
+    "peak_price_precision_basis", "peak_advanced", "trail_advanced",
+    "take_profit", "effective_stop_unrounded", "effective_stop_rounded_2dp",
+    "decision", "exit_reason",
+    # Four separate facts about a close. Collapsing any pair of them would let a
+    # REQUESTED close read as a COMPLETED one, or a pre-slippage decision price
+    # read as a booked fill. _close_trade applies slippage, rounds, and can fail
+    # after partially mutating the trade.
+    "close_requested", "close_price_argument", "close_function_completed",
+    "booked_exit_price",
+    "shares_at_decision", "unrealized_pct_at_decision",
     "exit_date_recorded", "exit_date_basis",
-    "record_complete", "missing_fields",
+    "record_complete", "missing_fields", "contract_violations",
 })
 
 # Values the monitor can actually produce. A decision outside this set means the
@@ -265,6 +271,79 @@ REGISTERED_OBSERVATION_FIELDS = frozenset({
 DECISIONS = frozenset({
     "hold", "state_update", "closed", "skipped", "incomplete",
 })
+
+ALLOWED_EXIT_REASONS = frozenset({"stop_loss", "trailing_stop", "take_profit"})
+
+# Required of every outcome, by VALUE not by presence. Filling an absent key
+# with None and then accepting the key's presence as evidence is the exact
+# failure this replaces.
+_ALWAYS_NON_NULL = frozenset({
+    "record_schema_version", "decision_path", "timestamp", "invocation_token",
+    "cycle_id", "symbol", "entry_date", "holding_basis", "decision",
+    "entry_price", "stop_loss", "trailing_stop_before", "peak_price_before",
+    "shares_at_decision", "peak_price_precision_basis", "exit_date_basis",
+})
+
+# Legitimately null. `take_profit` may genuinely not exist on a trade;
+# `repository_commit` absence is reported separately as lineage_complete.
+_ALWAYS_NULLABLE = frozenset({"take_profit", "repository_commit"})
+
+_PRICED_FIELDS = frozenset({
+    "observed_live", "effective_stop_unrounded", "effective_stop_rounded_2dp",
+    "trailing_stop_after_unrounded", "trailing_stop_rounded_2dp",
+    "peak_price_after", "unrealized_pct_at_decision", "exit_date_recorded",
+})
+
+_CLOSE_FIELDS = frozenset({
+    "exit_reason", "close_price_argument", "booked_exit_price",
+    "close_function_completed",
+})
+
+# FROZEN OUTCOME CONTRACT.
+#
+# For each outcome: which fields must carry a real value, which must be null
+# because the outcome could not have produced them, and which booleans must hold
+# a specific value. A record satisfying none of these is `incomplete` — which is
+# a label for a defective record, never a passing outcome.
+#
+# `must_be_null` is what stops a skipped symbol from claiming a stop was
+# evaluated, and stops a hold from carrying close evidence.
+OUTCOME_CONTRACT = {
+    "skipped": {
+        "non_null": frozenset({"skip_reason"}),
+        # The monitor reaches its skip branch via `if not live`, so a price of
+        # 0.0 also skips. Falsy rather than strictly None, because 0.0 is a
+        # real captured observation and must not be rewritten to None.
+        "falsy": frozenset({"observed_live"}),
+        "null": _PRICED_FIELDS - {"observed_live"} | _CLOSE_FIELDS,
+        "false": frozenset({"live_available", "peak_advanced",
+                            "trail_advanced", "close_requested"}),
+    },
+    "hold": {
+        "non_null": _PRICED_FIELDS,
+        "null": frozenset({"skip_reason"}) | _CLOSE_FIELDS,
+        "true": frozenset({"live_available"}),
+        "false": frozenset({"peak_advanced", "trail_advanced",
+                            "close_requested"}),
+    },
+    "state_update": {
+        "non_null": _PRICED_FIELDS,
+        "null": frozenset({"skip_reason"}) | _CLOSE_FIELDS,
+        # peak_advanced is what distinguishes this from hold. trail_advanced is
+        # deliberately unconstrained: a new peak need not advance the trail.
+        "true": frozenset({"live_available", "peak_advanced"}),
+        "false": frozenset({"close_requested"}),
+    },
+    "closed": {
+        "non_null": _PRICED_FIELDS | frozenset({
+            "exit_reason", "close_price_argument", "booked_exit_price"}),
+        "null": frozenset({"skip_reason"}),
+        "true": frozenset({"live_available", "close_requested",
+                           "close_function_completed"}),
+    },
+    # No contract. `incomplete` can never be complete, by construction.
+    "incomplete": None,
+}
 
 
 def _derive(obs):
@@ -305,46 +384,91 @@ def _derive(obs):
     # stored state recovers what was used. Both are recorded.
     eff = rec.get("effective_stop_unrounded")
     try:
-        rec["effective_stop_persisted_as"] = (
+        rec["effective_stop_rounded_2dp"] = (
             None if eff is None else round(float(eff), 2))
     except Exception:                                     # noqa: BLE001
-        rec["effective_stop_persisted_as"] = None
+        rec["effective_stop_rounded_2dp"] = None
 
     try:
         ts = rec.get("trailing_stop_after_unrounded")
-        rec["trailing_stop_persisted"] = (
+        rec["trailing_stop_rounded_2dp"] = (
             None if ts is None else round(float(ts), 2))
     except Exception:                                     # noqa: BLE001
-        rec["trailing_stop_persisted"] = None
+        rec["trailing_stop_rounded_2dp"] = None
 
     # The monitor's exit date comes from datetime.now() with no timezone, i.e.
     # the process-local civil date, which is NOT the bar date the report path
     # uses. Recorded as a named basis so the two are never silently compared.
     rec.setdefault("exit_date_basis", "process_local_naive_civil_date")
 
-    if rec.get("decision") not in DECISIONS:
-        rec["decision"] = "incomplete"
-
-    # A skipped symbol has no stop evaluation to report, so the fields produced
-    # after the `continue` have no producer for this record. Requiring them
-    # would make every WBD cycle -- a position that returned no live price on
-    # all four checks across 2026-10-07/08 -- indistinguishable from a loop that
-    # died mid-trade. Completeness is judged against what this outcome can
-    # produce, and the skip itself is never reported as missing evidence.
-    required = set(REGISTERED_OBSERVATION_FIELDS)
-    if rec.get("decision") == "skipped":
-        required -= {"effective_stop_unrounded", "effective_stop_persisted_as",
-                     "trailing_stop_after_unrounded", "trailing_stop_persisted",
-                     "peak_price_after", "unrealized_pct_at_decision",
-                     "exit_date_recorded", "exit_reason", "booked_fill_price"}
-
+    # Stabilise the key set FIRST, then judge on values. Every registered key is
+    # present in the serialised record so no consumer has to handle an absent
+    # key -- but presence is never evidence, so completeness is decided below by
+    # what the values actually are.
     got = set(rec)
-    missing = sorted(required - got - {"record_complete", "missing_fields"})
     unregistered = sorted(got - REGISTERED_OBSERVATION_FIELDS)
     for key in REGISTERED_OBSERVATION_FIELDS - got:
         rec[key] = None
-    rec["missing_fields"] = missing + [f"unregistered:{k}" for k in unregistered]
-    rec["record_complete"] = not missing and not unregistered
+
+    violations = []
+    # The claim is captured BEFORE normalisation. Overwriting an unregistered
+    # decision with "incomplete" first would discard the only evidence of what
+    # the producer actually claimed.
+    claimed = rec.get("decision")
+    decision = claimed if claimed in DECISIONS else "incomplete"
+    rec["decision"] = decision
+
+    for key in sorted(_ALWAYS_NON_NULL):
+        if rec.get(key) is None:
+            violations.append(f"{key}: required for every outcome, is null")
+    for key in unregistered:
+        violations.append(f"{key}: not in the registered schema")
+
+    contract = OUTCOME_CONTRACT.get(decision)
+    if claimed not in DECISIONS:
+        violations.append(
+            f"decision: {claimed!r} is not a registered outcome; normalised to "
+            f"'incomplete'")
+    if contract is None:
+        # `incomplete` -- already a defective record. Do not add noise.
+        pass
+    else:
+        for key in sorted(contract.get("non_null", ())):
+            if rec.get(key) is None:
+                violations.append(
+                    f"{key}: required non-null for outcome {decision!r}, is null")
+        for key in sorted(contract.get("null", ())):
+            if rec.get(key) is not None:
+                violations.append(
+                    f"{key}: must be null for outcome {decision!r}, is "
+                    f"{rec.get(key)!r} -- this outcome cannot have produced it")
+        for key in sorted(contract.get("falsy", ())):
+            if rec.get(key):
+                violations.append(
+                    f"{key}: must be falsy for outcome {decision!r}, is "
+                    f"{rec.get(key)!r}")
+        for key in sorted(contract.get("true", ())):
+            if rec.get(key) is not True:
+                violations.append(
+                    f"{key}: must be True for outcome {decision!r}, is "
+                    f"{rec.get(key)!r}")
+        for key in sorted(contract.get("false", ())):
+            if rec.get(key) is not False:
+                violations.append(
+                    f"{key}: must be False for outcome {decision!r}, is "
+                    f"{rec.get(key)!r}")
+        if decision == "closed" and rec.get("exit_reason") not in ALLOWED_EXIT_REASONS:
+            violations.append(
+                f"exit_reason: {rec.get('exit_reason')!r} is not one of "
+                f"{sorted(ALLOWED_EXIT_REASONS)}")
+
+    # Retained for readability of what a producer failed to emit at all. It is
+    # NOT the completeness criterion.
+    rec["missing_fields"] = sorted(
+        k for k in REGISTERED_OBSERVATION_FIELDS - got
+        if k not in ("record_complete", "missing_fields", "contract_violations"))
+    rec["contract_violations"] = violations
+    rec["record_complete"] = bool(contract is not None and not violations)
     return rec
 
 
@@ -370,6 +494,10 @@ EVALUATED_DECISIONS = frozenset({"hold", "state_update", "closed"})
 
 
 def reconcile_population(open_positions_seen, attempted, records):
+    return _reconcile(open_positions_seen, attempted, records)
+
+
+def _reconcile(open_positions_seen, attempted, records):
     """Account for the STARTING population, not just the attempted subset.
 
     Required because `attempted == written` is satisfiable by a cycle that
@@ -384,29 +512,51 @@ def reconcile_population(open_positions_seen, attempted, records):
     under-reported by a producer that also failed to run.
     """
     seen = open_positions_seen if isinstance(open_positions_seen, int) else None
-    evaluated = sum(1 for r in records
+
+    # Counted by record_complete, NOT by the claimed decision label. A record
+    # labelled "hold" or "closed" that fails its outcome contract is incomplete
+    # evidence, and counting it as evaluated is how incomplete observations were
+    # certified as complete coverage.
+    complete = [r for r in records if r.get("record_complete") is True]
+    incomplete_records = [r for r in records if r.get("record_complete") is not True]
+
+    evaluated = sum(1 for r in complete
                     if r.get("decision") in EVALUATED_DECISIONS)
-    skipped = sum(1 for r in records if r.get("decision") == "skipped")
-    incomplete = sum(1 for r in records if r.get("decision") == "incomplete")
+    skipped = sum(1 for r in complete if r.get("decision") == "skipped")
+
+    symbols = [r.get("symbol") for r in records]
+    duplicates = sorted({s for s in symbols if symbols.count(s) > 1})
+
     pop = {
         "open_positions_seen": seen,
         "attempted": attempted,
         "evaluated": evaluated,
         "skipped": skipped,
-        "incomplete": incomplete,
+        # Two different quantities, deliberately both reported. `incomplete` is
+        # how many records failed their contract; `incomplete_labelled` is how
+        # many admitted it in their decision field. A gap between them means a
+        # producer claimed an outcome it could not substantiate.
+        "incomplete": len(incomplete_records),
+        "incomplete_labelled": sum(1 for r in records
+                                   if r.get("decision") == "incomplete"),
         "not_reached": None if seen is None else seen - attempted,
         # An attempted count that disagrees with the number of captured records
         # means the store itself is inconsistent, which is a recorder defect and
         # must not be absorbed into one of the outcome buckets.
         "attempted_matches_records": attempted == len(records),
+        # One position cannot be observed twice in one invocation. A duplicate
+        # means the loop or the store is wrong, and the buckets would otherwise
+        # sum correctly while describing the wrong population.
+        "duplicate_symbols": duplicates,
     }
     if seen is None:
         pop["reconciled"] = False
         return pop
     pop["reconciled"] = (
-        evaluated + skipped + incomplete + pop["not_reached"] == seen
+        evaluated + skipped + len(incomplete_records) + pop["not_reached"] == seen
         and pop["attempted_matches_records"]
-        and pop["not_reached"] >= 0)
+        and pop["not_reached"] >= 0
+        and not duplicates)
     return pop
 
 
@@ -483,14 +633,28 @@ def flush(store):
             # incomplete and not-reached. attempted == written alone is
             # satisfiable by a cycle that never attempted later positions.
             "population": population,
+            # Persistence is an INVOCATION fact, not a per-record one.
+            # save_trades succeeding and promote_queue then raising is not the
+            # same as the loop raising before save_trades: the first persisted
+            # trade updates despite an aborted cycle.
+            "trade_state_save_attempted": store.get(
+                "trade_state_save_attempted"),
+            "trade_state_save_completed": store.get(
+                "trade_state_save_completed"),
             # The only field a reader should consult to decide whether this
-            # cycle's monitor coverage is complete. Deliberately conjunctive: a
-            # missing observation must never be able to read as success.
+            # cycle's monitor coverage is complete. Deliberately conjunctive and
+            # fail-closed: a missing or incomplete observation must never be
+            # able to read as success, and an unverifiable manifest must not
+            # either.
             "coverage_complete": bool(
                 population.get("reconciled")
                 and population.get("not_reached") == 0
                 and population.get("incomplete") == 0
+                and population.get("attempted_matches_records")
+                and not population.get("duplicate_symbols")
+                and summary["attempted"] == summary["written"]
                 and summary["write_failures"] == 0
+                and all(m["complete"] for m in mans.values())
                 and store.get("monitor_completed") is True),
             # Set when the monitor loop raised. The monitor has no per-trade
             # try/except, so one failure aborts the loop and leaves later

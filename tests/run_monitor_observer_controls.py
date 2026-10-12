@@ -79,6 +79,46 @@ def eq(got, want, label):
         raise AssertionError(f"{label}: got {got!r}, want {want!r}")
 
 
+def complete_obs(decision, **over):
+    """A raw capture that SATISFIES the frozen outcome contract for `decision`.
+
+    Built per outcome rather than as one dict with everything filled in,
+    because the contract's whole purpose is that different outcomes must carry
+    different evidence. A single all-fields fixture would pass every outcome and
+    test nothing.
+    """
+    base = {
+        "symbol": "SYM", "entry_date": "2026-10-01",
+        "holding_basis": "entry_date_string",
+        "entry_price": 10.0, "stop_loss": 9.0,
+        "trailing_stop_before": 9.0, "peak_price_before": 10.0,
+        "take_profit": 12.0, "shares_at_decision": 5.0,
+        "peak_advanced": False, "trail_advanced": False,
+        "close_requested": False,
+        "decision": decision,
+    }
+    if decision == "skipped":
+        base.update({
+            "observed_live": None,
+            "skip_reason": "live_price_unavailable_cause_unknown"})
+    else:
+        base.update({
+            "observed_live": 10.5, "peak_price_after": 10.5,
+            "trailing_stop_after_unrounded": 9.45,
+            "effective_stop_unrounded": 9.45,
+            "unrealized_pct_at_decision": 5.0,
+            "exit_date_recorded": "2026-10-09"})
+    if decision == "state_update":
+        base["peak_advanced"] = True
+    if decision == "closed":
+        base.update({
+            "close_requested": True, "exit_reason": "trailing_stop",
+            "close_price_argument": 9.45, "close_function_completed": True,
+            "booked_exit_price": 9.44})
+    base.update(over)
+    return base
+
+
 def truthy(got, label):
     if not got:
         raise AssertionError(f"{label}: expected truthy, got {got!r}")
@@ -192,18 +232,14 @@ def control_07_partial_record_is_incomplete_not_absent():
          "WBD cycle look like a loop that died")
 def control_08_skip_is_complete_evidence():
     isolate()
-    mo.flush(store(observations=[{
-        "symbol": "WBD", "entry_date": "2026-09-22", "entry_price": 30.87,
-        "stop_loss": 29.31, "trailing_stop_before": 29.31,
-        "peak_price_before": 30.87, "take_profit": 36.42,
-        "shares_at_decision": 4.8, "ratcheted": False,
-        "holding_basis": "entry_date_string", "observed_live": None,
-        "skip_reason": "live_price_unavailable_cause_unknown",
-        "decision": "skipped"}], attempted=1))
+    mo.flush(store(observations=[complete_obs(
+        "skipped", symbol="WBD", entry_date="2026-09-22", entry_price=30.87,
+        stop_loss=29.31, trailing_stop_before=29.31, peak_price_before=30.87,
+        take_profit=36.42, shares_at_decision=4.8)], attempted=1))
     rec = lines(mo.observation_path())[-1]
     eq(rec["decision"], "skipped", "decision")
     eq(rec["record_complete"], True, "record_complete")
-    eq(rec["missing_fields"], [], "missing_fields")
+    eq(rec["contract_violations"], [], "contract_violations")
     eq(rec["effective_stop_unrounded"], None, "no stop was evaluated")
 
 
@@ -239,13 +275,22 @@ def control_10_schema_has_no_comparison_fields():
          "PCVX's real gap is permanently unanswerable")
 def control_11_live_and_booked_fill_are_separate():
     isolate()
-    mo.flush(store(observations=[{
-        "symbol": "P", "observed_live": 60.10, "stop_loss": 65.86,
-        "effective_stop_unrounded": 65.86, "booked_fill_price": 65.86,
-        "decision": "closed", "exit_reason": "stop_loss"}], attempted=1))
+    mo.flush(store(observations=[complete_obs(
+        "closed", symbol="P", observed_live=60.10, stop_loss=65.86,
+        trailing_stop_before=65.86, effective_stop_unrounded=65.86,
+        trailing_stop_after_unrounded=65.86, exit_reason="stop_loss",
+        close_price_argument=65.86, booked_exit_price=65.80)], attempted=1))
     rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], True, f"violations: {rec['contract_violations']}")
+    # Three distinct prices that a single "fill price" field would have
+    # collapsed: what the market showed, what the monitor decided against, and
+    # what was actually booked after slippage.
     eq(rec["observed_live"], 60.10, "observed_live")
-    eq(rec["booked_fill_price"], 65.86, "booked_fill_price")
+    eq(rec["close_price_argument"], 65.86, "close_price_argument")
+    eq(rec["booked_exit_price"], 65.80, "booked_exit_price")
+    if len({rec["observed_live"], rec["close_price_argument"],
+            rec["booked_exit_price"]}) != 3:
+        raise AssertionError("two of the three prices collapsed into one")
 
 
 # --- evidence identity -----------------------------------------------------
@@ -275,15 +320,18 @@ def control_13_real_manifests_are_complete():
          "persists 11.66 and leaves pre == post")
 def control_14_both_stop_precisions_preserved():
     isolate()
-    mo.flush(store(observations=[{
-        "symbol": "E", "observed_live": 12.96,
-        "trailing_stop_after_unrounded": 11.664,
-        "effective_stop_unrounded": 11.664,
-        "decision": "state_update"}], attempted=1))
+    mo.flush(store(observations=[complete_obs(
+        "state_update", symbol="E", observed_live=12.96,
+        trailing_stop_after_unrounded=11.664,
+        effective_stop_unrounded=11.664)], attempted=1))
     rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], True, "record_complete")
     eq(rec["effective_stop_unrounded"], 11.664, "unrounded")
-    eq(rec["effective_stop_persisted_as"], 11.66, "persisted")
-    eq(rec["trailing_stop_persisted"], 11.66, "trailing persisted")
+    # Named for what it IS -- a reconstruction of what round() would store --
+    # not "persisted", which would claim save_trades ran. Persistence is an
+    # invocation fact and lives in the heartbeat.
+    eq(rec["effective_stop_rounded_2dp"], 11.66, "rounded reconstruction")
+    eq(rec["trailing_stop_rounded_2dp"], 11.66, "trailing rounded")
 
 
 @control("comparing a 2dp peak against an unrounded one as a real difference")
@@ -398,9 +446,7 @@ def control_22_population_reconciliation_names_unreached():
 @control("an unreached position becoming successful coverage")
 def control_23_unreached_blocks_coverage_claim():
     isolate()
-    full = {k: None for k in mo.REGISTERED_OBSERVATION_FIELDS}
-    full.update({"symbol": "A", "observed_live": 1.0, "decision": "hold",
-                 "effective_stop_unrounded": 0.5})
+    full = complete_obs("hold", symbol="A")
     # Complete cycle: every position reached, nothing incomplete.
     mo.flush(store(observations=[dict(full)], attempted=1,
                    open_positions_seen=1, monitor_completed=True))
@@ -597,6 +643,271 @@ def control_28_deployed_entrypoint_shape():
                "    except BaseException:\n        raise\n"
                "    finally:\n        pass\n")
     eq(_entrypoint_shape(outside), (True, True, False), "no-flush variant")
+
+
+# ==========================================================================
+# Controls added by the activation review. Each names the reproduced defect it
+# exists to prevent returning.
+# ==========================================================================
+
+@control("REPRODUCED DEFECT: an incomplete observation reporting "
+         "record_complete False while the cycle reported coverage_complete True")
+def control_30_incomplete_record_blocks_coverage():
+    isolate()
+    # Exactly the reviewer's case: a record carrying only a symbol, a price and
+    # a decision label, in a cycle whose counts otherwise reconcile.
+    mo.flush(store(observations=[{"symbol": "X", "observed_live": 2.0,
+                                  "decision": "hold"}],
+                   attempted=1, open_positions_seen=1, monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(rec["record_complete"], False, "record_complete")
+    eq(beat["population"]["incomplete"], 1, "counted as incomplete")
+    eq(beat["coverage_complete"], False, "coverage must be refused")
+
+
+@control("presence of a key being treated as evidence, so a record whose "
+         "required values are all explicitly None reports complete")
+def control_31_null_values_are_not_evidence():
+    isolate()
+    nulls = {k: None for k in mo.REGISTERED_OBSERVATION_FIELDS}
+    nulls.update({"symbol": "N", "decision": "hold"})
+    mo.flush(store(observations=[nulls], attempted=1, open_positions_seen=1,
+                   monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], False, "every key present, no values")
+    if not rec["contract_violations"]:
+        raise AssertionError("no violation explained the rejection")
+
+
+@control("a skipped symbol carrying stop-evaluation evidence it could not "
+         "have produced, which would make an unpriced cycle look evaluated")
+def control_32_skip_must_not_carry_evaluation_evidence():
+    isolate()
+    bad = complete_obs("skipped", effective_stop_unrounded=9.45)
+    mo.flush(store(observations=[bad], attempted=1, open_positions_seen=1,
+                   monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], False, "skip with a stop evaluation")
+    if not any("effective_stop_unrounded" in v
+               for v in rec["contract_violations"]):
+        raise AssertionError(f"violation did not name the field: "
+                             f"{rec['contract_violations']}")
+
+
+@control("a hold carrying close evidence, which would report an exit that "
+         "never happened")
+def control_33_hold_must_not_carry_close_evidence():
+    isolate()
+    bad = complete_obs("hold", booked_exit_price=9.44, exit_reason="stop_loss")
+    mo.flush(store(observations=[bad], attempted=1, open_positions_seen=1,
+                   monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], False, "hold with close evidence")
+
+
+@control("a close REQUESTED being recorded as a close COMPLETED, so a "
+         "_close_trade that raised mid-mutation reads as a booked exit")
+def control_34_requested_close_is_not_a_completed_close():
+    isolate()
+    # _close_trade raised: the request and the argument were captured, the
+    # completion flag and the booked price were never reached, and the decision
+    # was never promoted to "closed".
+    partial = complete_obs("hold")
+    partial.update({"close_requested": True, "exit_reason": "stop_loss",
+                    "close_price_argument": 9.45,
+                    "close_function_completed": None,
+                    "booked_exit_price": None,
+                    "decision": "incomplete"})
+    mo.flush(store(observations=[partial], attempted=1, open_positions_seen=1,
+                   monitor_completed=False))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], False, "a requested close is not complete")
+    eq(rec["close_requested"], True, "the request is still recorded")
+    eq(rec["close_price_argument"], 9.45, "the argument is still recorded")
+    eq(rec["booked_exit_price"], None, "no booked price is invented")
+    eq(lines(mo.heartbeat_path())[-1]["coverage_complete"], False, "coverage")
+
+
+@control("a completed close whose booked price is absent being accepted, "
+         "which would hide a close that mutated state without booking a price")
+def control_35_completed_close_requires_a_booked_price():
+    isolate()
+    bad = complete_obs("closed", booked_exit_price=None)
+    mo.flush(store(observations=[bad], attempted=1, open_positions_seen=1,
+                   monitor_completed=True))
+    eq(lines(mo.observation_path())[-1]["record_complete"], False,
+       "closed without a booked price")
+
+
+@control("the decision price being reported as the booked fill price, which "
+         "is how slippage and rounding become invisible")
+def control_36_argument_and_booked_price_stay_separate():
+    isolate()
+    mo.flush(store(observations=[complete_obs("closed")], attempted=1,
+                   open_positions_seen=1, monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], True, "record_complete")
+    eq(rec["close_price_argument"], 9.45, "pre-slippage decision price")
+    eq(rec["booked_exit_price"], 9.44, "price _close_trade actually booked")
+    if rec["close_price_argument"] == rec["booked_exit_price"]:
+        raise AssertionError("the two prices collapsed into one field")
+
+
+@control("an exit reason outside the monitor's three branches being accepted, "
+         "so an unreviewed exit path records as a known one")
+def control_37_exit_reason_is_constrained():
+    isolate()
+    mo.flush(store(observations=[complete_obs("closed", exit_reason="manual")],
+                   attempted=1, open_positions_seen=1, monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], False, "unknown exit reason")
+    if not any("exit_reason" in v for v in rec["contract_violations"]):
+        raise AssertionError(rec["contract_violations"])
+
+
+@control("an unregistered decision label being silently normalised, "
+         "discarding the only evidence of what the producer claimed")
+def control_38_unregistered_decision_is_named_not_hidden():
+    isolate()
+    claimed = complete_obs("hold")
+    claimed["decision"] = "partial_exit"
+    mo.flush(store(observations=[claimed], attempted=1, open_positions_seen=1,
+                   monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["decision"], "incomplete", "normalised")
+    eq(rec["record_complete"], False, "record_complete")
+    if not any("partial_exit" in v for v in rec["contract_violations"]):
+        raise AssertionError(f"the original claim was lost: "
+                             f"{rec['contract_violations']}")
+
+
+@control("a peak advance being reported as a trailing-stop advance, which "
+         "would claim a stop moved when it did not")
+def control_39_peak_and_trail_advance_are_separate():
+    isolate()
+    mo.flush(store(observations=[complete_obs("state_update")], attempted=1,
+                   open_positions_seen=1, monitor_completed=True))
+    rec = lines(mo.observation_path())[-1]
+    eq(rec["record_complete"], True, "record_complete")
+    eq(rec["peak_advanced"], True, "peak advanced")
+    eq(rec["trail_advanced"], False, "a new peak need not move the trail")
+
+
+@control("one position observed twice in a cycle while the bucket counts "
+         "still sum correctly, describing the wrong population")
+def control_40_duplicate_symbols_block_reconciliation():
+    isolate()
+    mo.flush(store(observations=[complete_obs("hold", symbol="D"),
+                                 complete_obs("hold", symbol="D")],
+                   attempted=2, open_positions_seen=2, monitor_completed=True))
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(beat["population"]["duplicate_symbols"], ["D"], "duplicates named")
+    eq(beat["population"]["reconciled"], False, "reconciliation refused")
+    eq(beat["coverage_complete"], False, "coverage refused")
+
+
+@control("an unverifiable manifest fingerprint still permitting a complete "
+         "coverage claim")
+def control_41_incomplete_manifest_blocks_coverage():
+    isolate()
+    real = mo.DECISION_MANIFEST
+    try:
+        mo.DECISION_MANIFEST = tuple(list(real) + ["does_not_exist.py"])
+        mo.flush(store(observations=[complete_obs("hold")], attempted=1,
+                       open_positions_seen=1, monitor_completed=True))
+    finally:
+        mo.DECISION_MANIFEST = real
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(beat["coverage_complete"], False, "coverage refused on a bad manifest")
+
+
+@control("a save that raised being indistinguishable from a save that was "
+         "never required, and from a promotion that failed afterwards")
+def control_42_persistence_states_are_distinguishable():
+    isolate()
+    # Nothing changed: no save was required.
+    mo.flush(store(observations=[complete_obs("hold")], attempted=1,
+                   open_positions_seen=1, monitor_completed=True,
+                   trade_state_save_attempted=False,
+                   trade_state_save_completed=False))
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(beat["trade_state_save_attempted"], False, "not required")
+    eq(beat["trade_state_save_completed"], False, "not required")
+
+    # save_trades raised: attempted, never completed, cycle aborted.
+    isolate()
+    mo.flush(store(observations=[complete_obs("closed")], attempted=1,
+                   open_positions_seen=1, monitor_completed=False,
+                   loop_exception="OSError: disk full",
+                   trade_state_save_attempted=True,
+                   trade_state_save_completed=False))
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(beat["trade_state_save_attempted"], True, "attempted")
+    eq(beat["trade_state_save_completed"], False, "did not complete")
+    eq(beat["coverage_complete"], False, "aborted cycle claims no coverage")
+
+    # save_trades returned, promote_queue then raised. The save stands.
+    isolate()
+    mo.flush(store(observations=[complete_obs("closed")], attempted=1,
+                   open_positions_seen=1, monitor_completed=False,
+                   loop_exception="RuntimeError: promotion failed",
+                   trade_state_save_attempted=True,
+                   trade_state_save_completed=True))
+    beat = lines(mo.heartbeat_path())[-1]
+    eq(beat["trade_state_save_completed"], True,
+       "a later failure must not retract a completed save")
+
+
+@control("invocation-owned metadata surviving into a later cycle, so a fresh "
+         "token publishes a stale population and configuration")
+def control_43_invocation_store_is_fully_reset():
+    import ast as _ast
+    src = (Path(__file__).parent.parent / "monitor_trades.py").read_text()
+    tree = _ast.parse(src)
+    fn = next((n for n in tree.body
+               if isinstance(n, _ast.FunctionDef)
+               and n.name == "_new_invocation_store"), None)
+    if fn is None:
+        raise AssertionError("_new_invocation_store is not in the deployed file")
+
+    # Executed from the DEPLOYED source, not a copy of it written here.
+    ns = {"datetime": __import__("datetime").datetime,
+          "timezone": __import__("datetime").timezone}
+    exec(compile(_ast.Module(body=[fn], type_ignores=[]), "<deployed>", "exec"),
+         ns)
+    fresh = ns["_new_invocation_store"](7)
+
+    # Everything the previous cycle could have written must be reset, not just
+    # the counters. These four were the ones left behind.
+    for key, want in (("cycle_id", None), ("params_raw", None),
+                      ("params_resolved", None), ("open_positions_seen", None),
+                      ("observations", []), ("attempted", 0),
+                      ("early_return_reason", None), ("loop_exception", None),
+                      ("monitor_completed", False), ("flushed", False),
+                      ("trade_state_save_attempted", False),
+                      ("trade_state_save_completed", False),
+                      ("invocation_token", 7)):
+        eq(fresh.get(key), want, f"reset of {key}")
+
+    # And the contract must cover the whole store: a field the serialiser reads
+    # but the initialiser never defines would silently retain its old value.
+    eq(sorted(fresh), sorted([
+        "attempted", "cycle_id", "cycle_started_at", "early_return_reason",
+        "flushed", "invocation_token", "loop_exception", "monitor_completed",
+        "observations", "open_positions_seen", "params_raw", "params_resolved",
+        "trade_state_save_attempted", "trade_state_save_completed"]),
+       "initialisation contract covers every invocation-owned field")
+
+
+@control("the recorded configuration snapshot being a live reference, so a "
+         "later mutation rewrites what was supposedly recorded earlier")
+def control_44_params_snapshot_is_a_copy():
+    src = (Path(__file__).parent.parent / "monitor_trades.py").read_text()
+    if 'params_raw"] = dict(params)' not in src:
+        raise AssertionError(
+            "params_raw is not snapshotted with dict(params); a retained "
+            "reference can be mutated after the fact")
 
 
 def main():

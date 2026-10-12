@@ -230,8 +230,8 @@ post-`_close_trade` state; E is the skip path.
 |---|---|---|
 | **A** pre-state | loop top, before the ratchet block mutates `trade` | `state_before`: entry_price, shares, original_shares, stop_loss, trailing_stop, peak_price, take_profit, scaled_out, entry_date, strategy |
 | **B** inputs | after `live` resolves, **before** the `if not live` branch | `live_price`, `live_price_absent`, `price_source`, `trailing_pct`, `rsi_extreme`, `cycle_utc`, `session_context` |
-| **C** derived | after line 65 | `peak_after`, `trailing_stop_unrounded`, `trailing_stop_persisted`, `effective_stop_unrounded`, `ratcheted` (bool), `trigger_margin` = `live − effective_stop` |
-| **D** decision | after the branch resolves | `decision`, `exit_reason`, `exit_price_requested`, and post-close booked values: `exit_price`, `exit_slippage`, `pnl`, `pnl_pct`, `pnl_after_costs`, `total_commission`, `exit_date`, `exit_date_basis` |
+| **C** derived | after line 65 | `peak_price_after`, `trailing_stop_after_unrounded`, `trailing_stop_rounded_2dp`, `effective_stop_unrounded`, `effective_stop_rounded_2dp`, `peak_advanced`, `trail_advanced` |
+| **D** decision | after the branch resolves | `decision`, `exit_reason`, `close_requested`, `close_price_argument`, `close_function_completed`, `booked_exit_price`, `exit_date_recorded`, `exit_date_basis` |
 | **E** skip | the `if not live: continue` path | `decision: "skipped_no_live_price"`, `evaluation_performed: false`, `absence_reason: "indistinguishable"` |
 
 Point B sits **before** the absence branch deliberately: an absent packet then
@@ -1543,3 +1543,176 @@ as a separate step before any implementation diff is presented.
 Nothing in this document authorises a runtime change. In particular, the recorder
 must not quietly repair admission gating, reserve sizing, exception handling, the
 defaults divergence, or any exit-policy difference. **Observe first.**
+
+---
+
+## 13. Activation review — repairs applied, deployment still on HOLD
+
+Review placed deployment on hold and required six repairs. All six are applied.
+**This section does not constitute activation approval.**
+
+Review independently reproduced four defects. Each was reproduced again here
+before any fix was written, and each now has a standing control rather than a
+one-off patch.
+
+### 13.1 The verifier was not strictly registered
+
+It removed statements by broad rules — leftmost name is `obs`, this is the
+`if _obs is not None:` block, the `finally` body mentions flush. **Three
+defective candidates returned `IDENTICAL`, exit 0.** Reproduced:
+
+| Candidate | Evasion |
+|---|---|
+| `obs = trade["stop_loss"] = {...}` | first target was `obs`; the second, production target was never inspected |
+| `trade["stop_loss"] = 0` inside the config block | the block was removed without reading its contents |
+| `finally: return_value = "flush"; raise RuntimeError(...)` | the substring `"flush"` matched **inside a string literal** |
+
+Rewritten to carry no discretion. The two files are aligned recursively, scope by
+scope, and every difference must be an exactly registered subtree identified by
+the sha256 of its normalised `ast.unparse`. Because the alignment proves
+everything else equal, there is no separate remainder comparison to fool.
+Registration is by **whole subtree**, so an extra statement inside a registered
+block changes its digest and the block stops being registered — which is what
+closes all three candidates structurally rather than individually.
+
+The table lives in `tools/recorder_registration.py` as committed evidence.
+`--register` prints a candidate table to stdout and deliberately does not write
+it: a verifier that re-registers whatever it finds proves nothing.
+
+### 13.2 Completeness was presence-based and coverage was not fail-closed
+
+Review reproduced `record_complete: false` alongside `coverage_complete: true`.
+Two causes:
+
+- `incomplete` was counted by the `decision` **label**, so a record claiming
+  `hold` was counted as evaluated without checking it could substantiate `hold`.
+- Absent keys were filled with `None` and key **presence** was then treated as
+  evidence.
+
+Replaced with a frozen outcome contract. Per outcome, fields are required
+non-null, required null, or required to hold a specific boolean — judged by
+**value**, after key-set stabilisation, so filling with `None` cannot create
+completeness. `must_be_null` is what stops a skipped symbol claiming a stop was
+evaluated and a `hold` carrying close evidence. `coverage_complete` now also
+requires zero incomplete records, no duplicate symbols, consistent counts, and
+all three manifests complete.
+
+An unregistered decision label is normalised to `incomplete` **and named** in
+`contract_violations`, rather than silently overwritten.
+
+### 13.3 Close and persistence were conflated
+
+One `booked_fill_price` field held the stop the monitor decided against, which
+is not what `_close_trade` books — it applies slippage and rounds, and it can
+raise after partially mutating the trade. Split into four facts recorded in the
+order they become true: `close_requested`, `close_price_argument`,
+`close_function_completed`, `booked_exit_price`. `decision` is promoted to
+`closed` only after `_close_trade` returns, so a close that raised mid-mutation
+records as requested-not-completed instead of as a booked exit.
+
+Persistence is an **invocation** fact: `trade_state_save_attempted` and
+`trade_state_save_completed` in the heartbeat. A save that raised, a save that
+was never required, and a `promote_queue` that failed after a successful save are
+now three distinguishable states.
+
+`*_persisted` was renamed `*_rounded_2dp`. Rounding a captured value
+reconstructs what `round()` would store; it does not prove `save_trades` ran.
+
+`ratcheted` split into `peak_advanced` and `trail_advanced`: a new peak need not
+move the trailing stop.
+
+### 13.4 Invocation reset was partial
+
+`cycle_id`, `params_raw`, `params_resolved` and `open_positions_seen` were
+retained, so a cycle that failed early could publish a fresh token above stale
+population and configuration. Replaced with one registered initialisation
+contract, `_new_invocation_store`, returned whole and swapped in. `cycle_id` is
+left `None` and minted per invocation by the serialiser, so no identity can
+survive. `params_raw` is a `dict(params)` copy, not a live reference.
+
+### 13.5 Recorder failure was invisible, and containment was tested on a replica
+
+A failed recorder import left no trace, so an unobserved cycle looked healthy.
+Added `logs/monitor_health_v1.jsonl`, written by a path using only builtins —
+because the condition it reports may be that `engine` is unimportable — plus a
+stderr announcement. Three silences are now distinguishable: heartbeat means the
+recorder ran; health line without heartbeat means unavailable or unable to
+write; neither means the monitor never ran. A flush that cannot write also
+emits, so a recorder that ran but published nothing is not mistaken for success.
+
+Containment was previously asserted against a hand-written replica of
+`__main__`, which passed an exception-swallowing mutation the real file would
+have failed. It is now tested by executing `monitor_trades.py`'s **own bytes**
+through `runpy` with every engine dependency stubbed, after asserting the
+executed copy's sha256 equals the deployed file. The worst case is covered
+explicitly: when the monitor raises *and* the recorder cannot write, the original
+exception still propagates.
+
+### 13.6 Control inventory
+
+| Suite | Controls |
+|---|---|
+| `tests/run_monitor_observer_controls.py` | 44 |
+| `tests/run_verifier_negative_controls.py` | 14 |
+| `tests/run_entrypoint_containment_controls.py` | 13 |
+| **total** | **71** |
+
+`tests/test_monitor_observer.py` is now a pure pytest bridge over all three
+runners and restates nothing. Its previous restated copies drifted immediately:
+when fields were renamed during this review, the copies kept asserting removed
+field names and still passed, because they checked a value and never checked the
+record was valid.
+
+### 13.6a Second-round review findings
+
+Bundle review raised four scrutiny points. Two were latent defects and are
+fixed; two were answered.
+
+**Registration did not pin multiplicity.** The registry recorded the *shape* of
+each permitted addition but not how many times it may occur, so a duplicated
+registered statement matched the same key twice and was accepted. Demonstrated
+with `_MONITOR_EVAL["attempted"] += 1` doubled, which double-counts the
+population and breaks reconciliation. The registry now carries an expected
+occurrence count per key, enforced exactly in both directions — a duplicated
+*or* removed registered statement now fails. Negative controls 12 and 13.
+
+**Rollback verification was scoped to the whole repository.** Requiring
+`git diff --stat <PRE> HEAD` to be empty would have failed in practice, because
+the bot commits log files every cycle and the tree legitimately differs from
+`<PRE>` in `logs/`. Worse, it invited reverting operational state. Rollback is
+now scoped to deployment-owned paths, with `logs/` explicitly preserved —
+including any observation evidence produced before the rollback, which is the
+record of whatever prompted it. The checklist also now asserts that the
+activation commit owns no file under `logs/`, rather than assuming it.
+
+**47 accepted against 46 digests** is 46 additions, each registered and found
+exactly once, plus the one registered replacement of the bare `monitor()` call.
+There are currently no repeated occurrences. The verifier now prints both the
+found and registered counts so the arithmetic is checkable without reading the
+table.
+
+**Health-path and close/persistence coverage extended** to the cases named:
+serialization failure (58), unwritable health output (59), unwritable health
+with a production exception already in flight (60), a close that mutated the
+trade then raised (61), and a failure after a successful save (62). The health
+emitter is wrapped in `except BaseException: pass` and is therefore incapable of
+replacing an in-flight exception; 60 proves it on the deployed bytes.
+
+### 13.7 Unresolved, explicitly
+
+- **SIGKILL gap.** An OOM kill cannot be caught, so `finally` never runs and
+  nothing is written — indistinguishable from "the monitor never ran". Zero
+  occurrences in seven days. Registered as a known limitation; a cycle-open
+  record would close it and is not in v1.
+- **Runtime acquisition count.** "No additional market-data acquisition" rests on
+  static and structural evidence, not a runtime request count. Counting requests
+  requires instrumenting `data_feed`, a shared production module, and is out of
+  scope. The earlier `grep` of monitor stdout was not evidence and has been
+  removed from the checklist.
+- **Launcher exit status.** `run_monitor.sh` pipes python through `tee`, so `$?`
+  is `tee`'s. The checklist no longer relies on it. Adding `pipefail` is a change
+  to a shared production script and needs its own review.
+- Everything in §9 remains open, including the governing question of which exit
+  policy is authoritative, and the five lost monitor exits.
+
+**Deployment decision remains separate and is not taken here.**
