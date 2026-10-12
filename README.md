@@ -4,6 +4,9 @@ An automated, regime-aware stock trading signal scanner that scans the entire US
 
 > *Named after Ares, the Greek god of war — disciplined, strategic, and relentless.*
 
+> **Start with [STATUS.md](STATUS.md)**: a one-page summary of what runs, where
+> state lives, how to deploy, and what is open. This README is the full reference.
+
 ## Current Version: V3.1
 
 **V3.1 corrects the implementation. It does not change the strategy.**
@@ -251,21 +254,19 @@ Ares/
 ├── run_monitor.sh              # Monitor + Telegram
 ├── restart_gateway.sh          # IB Gateway health check + auto-restart
 ├── start_gateway.sh            # IB Gateway background launcher
-├── audit_entry_prices.py       # Measure stale-fill damage vs the true open
-├── analyze_queue_bias.py       # Test queue drift-expiry for selection bias
-├── backfill_sample_phase.py    # Label trades pre_clean / clean_v3
-├── repair_scaled_pnl.py        # One-off: rebook unbooked scale-out gains
-├── repair_stale_entries.py     # One-off: re-base open positions on true open
-├── repair_queue_stdev.py       # One-off: backfill stdev_20 into legacy queue
+├── archive/                    # Finished investigation documents (Oct 2026)
+├── STATUS.md                   # One-page current state -- read this first
 ├── Ares_Logbook.md             # Daily trading journal
 ├── ROADMAP.md                  # Phased plan + unimplemented risk controls
 └── README.md
 ```
 
-The `repair_*.py` and `audit_*.py` scripts are diagnostics and one-off repairs,
-not part of the scheduled path. All default to a dry run and back up before
-writing. They are kept in the repo rather than deleted because each documents a
-specific defect and the evidence used to establish it.
+The one-off diagnostic and repair scripts (`repair_*.py`, `backfill_*.py`,
+`audit_entry_prices.py`, `analyze_queue_bias.py`) and the disabled GitHub
+Actions workflow were removed in the 2026-10-12 cleanup. None was part of the
+scheduled path. Each documents a specific defect and the evidence used to
+establish it, so all are kept at tag `checkpoint-2026-10-12`:
+`git show checkpoint-2026-10-12:repair_scaled_pnl.py`.
 
 ## Configuration — single source of truth
 

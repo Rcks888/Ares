@@ -2548,6 +2548,40 @@ undeployed. None of the findings above is to be repaired before that audit.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
+### 2026-10-12 (later) — checkpoint, audit and cleanup
+
+**Checkpoint.**
+- Recorder repair round 2 committed to `recorder/monitor-observer-v1` as
+  `0cde474`, byte-identical to the reviewed staged diff (`a4d9c480…`), and pushed
+  to that branch only. The branch was already on origin at `2a022f4` from the VPS
+  worktree review; the earlier statement that it had never been pushed was wrong.
+  It has never been in `main` and has never run on the VPS.
+- Tag `checkpoint-2026-10-12` was created at `445a22f`, before the cleanup.
+
+**Audit** (report kept outside the repo, `Olympus/Ares_audit/`).
+- **VPS:** at `432818c`, identical to git, no local edits, recorder absent.
+- **Repo size:** trading code is 16 files and about 2,800 lines. Parity runtime
+  is about 1,750 lines, parity tests and tools about 11,400, documents about
+  9,600.
+- **Tests:** all 16 tests on `main` exit 0 (they are plain scripts, not pytest).
+- **GitHub workflow:** disabled (`if: false`) since Sep 3, so not a writer.
+- **New findings:** SSH password login is enabled, with outside attempts in the
+  log; the gateway was not running at 04:54 UTC; 38 tracebacks in `cron.log` are
+  not yet classified.
+
+**Cleanup.** No trading or parity code was changed.
+- **Removed:** the 8 one-off repair, backfill and analysis scripts, and the
+  disabled workflow. All are kept at the tag.
+- **Moved to `archive/`:** the incident, the Oct 7 reconciliation, and the
+  recorder design.
+- **Added:** `STATUS.md` as the one-page entry point.
+- **Unchanged:** the parity plans stay at the top level, because engine comments
+  point to them.
+- **Decided:** parity is kept and frozen; the recorder is shelved. Consequence:
+  the monitor's decisions remain unrecorded. WBD is still decision pending.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
