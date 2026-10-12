@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 18
+    "holding_days": 21
   },
   {
     "symbol": "WBD",
@@ -536,24 +536,65 @@
     "scale_out_price": null,
     "scale_out_date": null,
     "from_queue": true,
-    "sample_phase": "clean_v3",
-    "contaminated": false,
-    "contamination_reasons": [],
+    "sample_phase": "pre_clean",
+    "contaminated": true,
+    "contamination_reasons": [
+      "corporate_action_acquisition"
+    ],
     "fill_source": "scheduled",
     "fill_detect": "env",
     "fill_run_ts": "2026-09-22T21:00:59",
-    "status": "open",
-    "exit_date": null,
-    "exit_price": null,
-    "exit_reason": null,
-    "exit_slippage": null,
-    "exit_commission": null,
-    "total_commission": 1.0,
-    "pnl": null,
-    "pnl_pct": null,
-    "pnl_after_costs": null,
+    "status": "closed",
+    "exit_date": "2026-10-06",
+    "exit_price": 30.99,
+    "exit_reason": "acquired",
+    "exit_slippage": 0.031,
+    "exit_commission": 1.0,
+    "total_commission": 2.0,
+    "pnl": 0.56,
+    "pnl_pct": 0.37,
+    "pnl_after_costs": -1.44,
     "version": "3.0",
-    "holding_days": 17
+    "holding_days": 14,
+    "pnl_remaining": 0.56,
+    "post_mortem": {
+      "exit_reason": "acquired",
+      "max_favorable_excursion_pct": 0.36,
+      "locked_pct": 0.39,
+      "gave_back_pct": 0.0,
+      "entry_quality_pct": -0.23,
+      "scaled_out_before_exit": false,
+      "holding_days": 14,
+      "rsi_at_entry": 71.8,
+      "regime_at_entry": "uptrend",
+      "confluence": 3,
+      "verdict": "other",
+      "analysis": "Closed via acquired. Peak +0.36%.",
+      "manual_note": "Cash-acquired by Skydance (SKYD) at $31.01666668/share; WBD ceased trading on Nasdaq 2026-10-06 (last trade 2026-10-05). Booked manually 2026-10-12 via the standard _close_trade."
+    },
+    "shadow": {
+      "active": false,
+      "days_tracked": 0,
+      "max_days": 30,
+      "peak_after_exit": 31.01666668,
+      "trough_after_exit": 31.01666668,
+      "peak_date": "2026-10-06",
+      "trough_date": "2026-10-06",
+      "missed_upside_pct": 0,
+      "avoided_downside_pct": 0,
+      "latest_price": 31.01666668,
+      "inactive_reason": "delisted"
+    },
+    "exit_source": "manual",
+    "corporate_action": {
+      "type": "cash_acquisition",
+      "acquirer": "SKYD",
+      "cash_per_share": 31.01666668,
+      "effective_date": "2026-10-06",
+      "last_trade_date": "2026-10-05",
+      "source": "https://www.prnewswire.com/news-releases/paramount-completes-acquisition-of-warner-bros-discovery-creating-a-new-global-entertainment-leader-skydance-302899765.html",
+      "booked_on": "2026-10-12"
+    }
   },
   {
     "symbol": "NEOG",
@@ -753,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 10
+    "holding_days": 13
   },
   {
     "symbol": "TWST",
@@ -1105,7 +1146,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 2
+    "holding_days": 5
   },
   {
     "symbol": "ITUB",
@@ -1153,6 +1194,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 2
+    "holding_days": 5
   }
 ]
