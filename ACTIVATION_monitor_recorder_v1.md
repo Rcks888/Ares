@@ -227,7 +227,7 @@ python3 tests/run_inspection_controls.py              ; echo "EXIT=$?"
 ```
 
 **Acceptance: 44/44, 14/14 and 13/13, each exit 0. These are the 71 controls on
-the recorder itself.** In addition, **16/16** inspection controls (exit 0)
+the recorder itself.** In addition, **25/25** inspection controls (exit 0)
 establish that the §5.0 post-activation tool cannot pass a defective or
 uninspectable history.
 
@@ -452,7 +452,7 @@ python3 -c "import ast; ast.parse(open('monitor_trades.py').read()); print('pars
 python3 tests/run_monitor_observer_controls.py             # 44/44 on the live tree
 python3 tests/run_verifier_negative_controls.py            # 14/14
 python3 tests/run_entrypoint_containment_controls.py        # 13/13
-python3 tests/run_inspection_controls.py                    # 16/16 (§5.0 tool)
+python3 tests/run_inspection_controls.py                    # 25/25 (§5.0 tool)
 python3 tools/verify_recorder_isolation.py \
     tests/fixtures/monitor_trades_preactivation.py monitor_trades.py
 ```
@@ -507,8 +507,10 @@ The per-cycle checks in §5.1–§5.8 are carried out by
 `tools/inspect_monitor_cycles.py`, not by hand-run snippets. Two hand-run
 snippets in bundle v3 gave false results: one grouped cycles by the
 process-local `invocation_token`, the other printed "ok" when `git` failed.
-The tool is fail-closed and has its own controls
-(`tests/run_inspection_controls.py`, 16, with each check mutation-tested).
+The v4 tool still trusted three producer claims (see the v5 review bundle). The
+tool is fail-closed, trusts no claim the producer makes about itself, and has
+its own controls (`tests/run_inspection_controls.py`, 25, with each of its 18
+checks mutation-tested).
 
 ```sh
 cd /root/ares/Ares
@@ -527,15 +529,36 @@ venv/bin/python tools/inspect_monitor_cycles.py <R> <M1> <M2>; echo "exit $?"
 | 1, `FAIL: …` | a defect, **or the inspection could not be carried out** (bad reference, a git error, commits that do not delimit exactly one cycle) | never read as a pass. Fix the reference and rerun, or treat as a defect under §6 |
 
 Per cycle, the tool checks:
-- `<M>`'s parent is exactly the previous reference, and its subject is a monitor commit
-- the monitor commit changed neither parity file
-- the three recorder files only grew (append-only)
-- exactly one heartbeat, or a health line only; never both
-- `cycle_id` and `cycle_started_at` are present and new, compared with every earlier cycle
-- every observation carries this cycle's `cycle_id`
-- `open_positions_seen` equals the number of positions open at the previous reference
-- one record per open symbol, with no duplicates and no extras
-- the full conjunctive heartbeat state in §5.1, with every record complete
+- `<M>`'s parent is exactly the previous reference, and its subject is a monitor commit.
+- The monitor commit changed neither parity file.
+- **Append-only, by bytes.** For each recorder file, the content at the
+  previous reference must be an exact byte prefix of this cycle's content,
+  ending on a line boundary. Only the appended suffix is parsed. A "no removed
+  lines" diff check is not used: it accepts evidence inserted before existing
+  records.
+- Exactly one heartbeat, or a health line only; never both.
+- **Identity against all history.** `cycle_id` and `cycle_started_at` must be
+  absent from every heartbeat and observation already present at `<R>`, as
+  well as from earlier supplied cycles.
+- **Heartbeat schema.** The exact registered key set and population key set,
+  the schema versions, and `decision_path: monitor`.
+- **Every record validated independently.** The tool's own copy of the frozen
+  schema and outcome contract is checked: the exact key set, values that are
+  never null, types, the non-null, null, falsy, true and false rules for each
+  outcome, the allowed exit and skip reasons, and the derived values
+  (`live_available`, both `*_rounded_2dp` fields, `peak_price_precision_basis`,
+  `exit_date_basis`). The cycle's `cycle_id` and `repository_commit` must
+  also match. `record_complete: true` is required but never sufficient.
+  Inspection control 21 pins the tool's copy to the recorder's constants and to
+  a real heartbeat, so drift on either side is a FAIL.
+- `open_positions_seen` equals the number of positions open at the previous
+  reference, with one record per open symbol, no duplicates and no extras.
+- **Population recomputed.** The heartbeat's `population` must equal the
+  counts recomputed from the validated records.
+- The full conjunctive heartbeat state in §5.1.
+- In an aborted cycle, a record honestly marked `record_complete: false` is
+  allowed (INCONCLUSIVE). A record claiming completeness must still pass the
+  full contract.
 
 A cycle with **no** commit at all means the monitor wrote nothing (it never ran,
 or was SIGKILLed). The tool cannot be given such a cycle; treat it as the

@@ -12,6 +12,12 @@ exit code. Controls 1 and 2 reproduce the two review findings on bundle v3:
     1  grouping by invocation_token, which is 1 in every cron process
     2  a failed git command reported as "parity untouched"
 
+Controls 16-18 reproduce the three review findings on bundle v4:
+
+    16  evidence inserted BEFORE existing lines passed "no removed lines"
+    17  a cycle identity reused from history before <R> passed
+    18  a three-key record claiming record_complete passed
+
 Nothing is written outside a temporary directory.
 """
 
@@ -151,7 +157,7 @@ def control_01_cross_cycle_records_rejected():
         repo / "logs" / mo.OBSERVATION_NAME)}
     if tokens != {1}:
         raise AssertionError(f"fixture must reproduce token 1 everywhere: {tokens}")
-    expect(repo, [r, m1, m2], 1, "observations carry other cycle_ids")
+    expect(repo, [r, m1, m2], 1, "cycle_id differs from the cycle's heartbeat")
 
 
 @control("[finding 2] an invalid commit reference reported as "
@@ -262,7 +268,7 @@ def control_13_removed_lines_rejected():
         p = logs / mo.OBSERVATION_NAME
         write_lines(p, read_lines(p)[1:])
     m2 = run_cycle(repo, n=2, mutate=drop_first)
-    expect(repo, [r, m1, m2], 1, "removed")
+    expect(repo, [r, m1, m2], 1, "not append-only")
 
 
 @control("an incomplete record or heartbeat accepted as complete coverage")
@@ -272,13 +278,210 @@ def control_14_incomplete_rejected():
                                                 "observed_live": 10.0,
                                                 "decision": "hold"}]
     m1 = run_cycle(repo, n=1, observations=obs, attempted=2)
-    expect(repo, [r, m1], 1, "not complete and consistent")
+    expect(repo, [r, m1], 1, "record_complete is not true")
 
 
 @control("an inspection run outside a git repository")
 def control_15_not_a_repo_is_fail():
     d = scratch()
     expect(d, ["HEAD~1", "HEAD"], 1, "FAIL:")
+
+
+def edit_appended(logs, name, keep, fn):
+    p = logs / name
+    rows = read_lines(p)
+    write_lines(p, rows[:keep] + [fn(dict(x)) for x in rows[keep:]])
+
+
+@control("[v4 finding 1] new evidence inserted before existing records, which "
+         "a 'no removed lines' check accepts")
+def control_16_prepended_evidence_rejected():
+    repo, r = new_repo()
+    m1 = run_cycle(repo, n=1)
+
+    def prepend(logs):
+        for name, keep in ((mo.OBSERVATION_NAME, len(OPEN)),
+                           (mo.HEARTBEAT_NAME, 1)):
+            p = logs / name
+            rows = read_lines(p)
+            write_lines(p, rows[keep:] + rows[:keep])
+    m2 = run_cycle(repo, n=2, mutate=prepend)
+    out = subprocess.run(["git", "diff", m1, m2], cwd=repo, capture_output=True,
+                         text=True).stdout
+    if any(l.startswith("-") and not l.startswith("---")
+           for l in out.splitlines()):
+        raise AssertionError("fixture must remove no line, or it does not "
+                             "reproduce the finding")
+    expect(repo, [r, m1, m2], 1, "not append-only")
+
+
+@control("[v4 finding 2] a cycle identity reused from history before <R>")
+def control_17_identity_from_history_rejected():
+    repo, _ = new_repo()
+    run_cycle(repo, n=1, cycle_id="hist0001")
+    r2 = commit(repo, "Ares V3 report 2026-10-20_13:32")
+    m = run_cycle(repo, n=1, cycle_id="hist0001")
+    expect(repo, [r2, m], 1, "including history before the first reference")
+    repo, _ = new_repo()
+    run_cycle(repo, n=1)
+    r2 = commit(repo, "Ares V3 report 2026-10-20_13:32")
+    m = run_cycle(repo, n=1)                         # same cycle_started_at
+    expect(repo, [r2, m], 1, "including history before the first reference")
+
+
+@control("[v4 finding 3] a record carrying only symbol, cycle_id and "
+         "record_complete: true, with consistent heartbeat counters")
+def control_18_minimal_record_rejected():
+    repo, r = new_repo()
+
+    def strip(logs):
+        cid = read_lines(logs / mo.HEARTBEAT_NAME)[-1]["cycle_id"]
+        edit_appended(logs, mo.OBSERVATION_NAME, 0,
+                      lambda x: {"symbol": x["symbol"], "cycle_id": cid,
+                                 "record_complete": True})
+    m1 = run_cycle(repo, n=1, mutate=strip)
+    expect(repo, [r, m1], 1, "fails the frozen contract")
+
+
+@control("a fully keyed record that violates its outcome contract or its "
+         "derived values while claiming record_complete")
+def control_19_forged_complete_record_rejected():
+    cases = [
+        ("skip_reason", "x", "must be null for hold"),
+        ("effective_stop_rounded_2dp", 9.99, "is not round("),
+        ("live_available", False, "must be true for hold"),
+        ("entry_price", "10.0", "not a number"),
+        ("decision", "incomplete", "has no complete outcome"),
+        ("exit_date_basis", "bar_date", "exit_date_basis"),
+    ]
+    for key, value, needle in cases:
+        repo, r = new_repo()
+
+        def forge(logs, key=key, value=value):
+            def f(x):
+                x[key] = value
+                return x
+            edit_appended(logs, mo.OBSERVATION_NAME, 0, f)
+        m1 = run_cycle(repo, n=1, mutate=forge)
+        expect(repo, [r, m1], 1, needle)
+
+
+@control("heartbeat population counts that disagree with the records "
+         "(counters trusted instead of recomputed)")
+def control_20_population_recomputed():
+    repo, r = new_repo()
+
+    def forge(logs):
+        def f(h):
+            h["population"]["evaluated"] -= 1
+            h["population"]["skipped"] += 1
+            return h
+        edit_appended(logs, mo.HEARTBEAT_NAME, 0, f)
+    m1 = run_cycle(repo, n=1, mutate=forge)
+    expect(repo, [r, m1], 1, "recomputed from records")
+
+
+@control("the tool's contract copy drifting from the recorder's frozen "
+         "constants, so both could agree on a wrong schema")
+def control_21_contract_copy_pinned():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("inspect_tool", TOOL)
+    t = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(t)
+    pairs = [
+        ("RECORD_FIELDS", t.RECORD_FIELDS, mo.REGISTERED_OBSERVATION_FIELDS),
+        ("ALWAYS_NON_NULL", t.ALWAYS_NON_NULL, mo._ALWAYS_NON_NULL),
+        ("PRICED", t.PRICED, mo._PRICED_FIELDS),
+        ("CLOSE", t.CLOSE, mo._CLOSE_FIELDS),
+        ("CONTRACT", t.CONTRACT, {k: v for k, v in mo.OUTCOME_CONTRACT.items()
+                                  if v is not None}),
+        ("EVALUATED", t.EVALUATED, mo.EVALUATED_DECISIONS),
+        ("EXIT_REASONS", t.EXIT_REASONS, mo.ALLOWED_EXIT_REASONS),
+        ("decisions", set(t.CONTRACT) | {"incomplete"}, mo.DECISIONS),
+        ("RECORD_SCHEMA_VERSION", t.RECORD_SCHEMA_VERSION,
+         mo.RECORD_SCHEMA_VERSION),
+        ("HEARTBEAT_SCHEMA_VERSION", t.HEARTBEAT_SCHEMA_VERSION,
+         mo.HEARTBEAT_SCHEMA_VERSION),
+        ("DECISION_PATH", t.DECISION_PATH, mo.DECISION_PATH),
+    ]
+    repo, _ = new_repo()
+    run_cycle(repo, n=1, observations=[complete_obs("skipped", symbol="AMP"),
+                                       complete_obs("hold", symbol="TMO")])
+    hb = read_lines(repo / "logs" / mo.HEARTBEAT_NAME)[-1]
+    recs = read_lines(repo / "logs" / mo.OBSERVATION_NAME)
+    pairs += [
+        ("HEARTBEAT_FIELDS", t.HEARTBEAT_FIELDS, set(hb)),
+        ("POPULATION_FIELDS", t.POPULATION_FIELDS, set(hb["population"])),
+        ("SKIP_REASON", {t.SKIP_REASON}, {recs[0]["skip_reason"]}),
+        ("EXIT_DATE_BASIS", {t.EXIT_DATE_BASIS}, {recs[1]["exit_date_basis"]}),
+    ]
+    drift = [name for name, mine, theirs in pairs if mine != theirs]
+    if drift:
+        raise AssertionError(f"contract copy differs from the recorder: {drift}")
+    for rec in recs:
+        bad = t.record_violations(rec, hb)
+        if bad:
+            raise AssertionError(f"a real record fails the copy: {bad}")
+
+
+@control("an aborted cycle: a truthful incomplete record is INCONCLUSIVE, a "
+         "forged 'complete' record is FAIL")
+def control_22_aborted_cycle_records():
+    obs = [complete_obs("hold", symbol="AMP"),
+           {"symbol": "TMO", "observed_live": 10.0}]
+    repo, r = new_repo()
+    m1 = run_cycle(repo, n=1, observations=obs, attempted=2,
+                   monitor_completed=False, loop_exception="KeyError: x")
+    expect(repo, [r, m1], 2, "aborted cycle")
+    repo, r = new_repo()
+
+    def forge(logs):
+        cid = read_lines(logs / mo.HEARTBEAT_NAME)[-1]["cycle_id"]
+        edit_appended(logs, mo.OBSERVATION_NAME, 0,
+                      lambda x: {"symbol": x["symbol"], "cycle_id": cid,
+                                 "record_complete": True})
+    m1 = run_cycle(repo, n=1, observations=obs, attempted=2,
+                   monitor_completed=False, loop_exception="KeyError: x",
+                   mutate=forge)
+    expect(repo, [r, m1], 1, "fails the frozen contract")
+    repo, r = new_repo()
+
+    def forge_keyed(logs):
+        def f(x):
+            if x["record_complete"] is True:
+                x["skip_reason"] = "x"            # fully keyed, still claims complete
+            return x
+        edit_appended(logs, mo.OBSERVATION_NAME, 0, f)
+    m1 = run_cycle(repo, n=1, observations=obs, attempted=2,
+                   monitor_completed=False, loop_exception="KeyError: x",
+                   mutate=forge_keyed)
+    expect(repo, [r, m1], 1, "must be null for hold")
+
+
+@control("a heartbeat with a missing or unregistered key")
+def control_23_heartbeat_schema_enforced():
+    for fn, needle in ((lambda h: {k: v for k, v in h.items()
+                                   if k != "lineage_complete"}, "missing"),
+                       (lambda h: {**h, "verdict": "MATCH"}, "unregistered")):
+        repo, r = new_repo()
+        m1 = run_cycle(repo, n=1, mutate=lambda logs, fn=fn: edit_appended(
+            logs, mo.HEARTBEAT_NAME, 0, fn))
+        expect(repo, [r, m1], 1, needle)
+
+
+@control("a heartbeat admitting a write failure or an unverifiable manifest "
+         "while its records are valid")
+def control_24_heartbeat_completeness_enforced():
+    for key, value in (("write_failures", 1), ("manifests_complete", False),
+                       ("coverage_complete", False)):
+        repo, r = new_repo()
+
+        def f(h, key=key, value=value):
+            h[key] = value
+            return h
+        m1 = run_cycle(repo, n=1, mutate=lambda logs, f=f: edit_appended(
+            logs, mo.HEARTBEAT_NAME, 0, f))
+        expect(repo, [r, m1], 1, "not complete and consistent")
 
 
 def main():
