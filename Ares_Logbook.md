@@ -2434,6 +2434,120 @@ Known limitations remain labelled rather than fixed:
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
+### 2026-10-12 (later) — corrections and new findings from git, parity and VPS logs
+
+Sources: bot commits on `origin/main` up to `432818c`, `logs/tracker_parity_v1.jsonl`
+(94 records), `logs/queue_events.jsonl`, VPS `/var/log/syslog.2.gz`,
+`/root/ares/cron.log`, and `data/ohlcv/*.csv`. All reads; nothing was changed on
+the VPS or in production state.
+
+**Corrections to earlier entries.** The original text is left as written.
+
+- **Oct 7, "the only artefact is Telegram text":** wrong about stored state.
+  `run_monitor.sh` commits `logs/` whenever it changes. Commits `c3abed5`
+  (16:10) and `708e016` (17:30) record EROC's trailing stop and peak before and
+  after each write. What is genuinely unrecorded is the decision inputs (the live
+  price seen, effective stop, config) and any hold or skip, which changes no file.
+- **Oct 8, BSP "no stated reason":** dropped at 21:01 with
+  `drifted -7.5% (max ±5.0%)`. The reason is in `queue_events.jsonl`; the
+  dashboard just doesn't show it.
+- **Oct 9 session, XP:** dropped at 21:00:54 with `drifted +8.4% (max ±5.0%)`.
+- **Oct 9 session, "the monitor wrote nothing":** confirmed. There is no monitor
+  commit on Oct 8 or Oct 9.
+- **Oct 9 session, ITUB peak:** set to `10.15`, at 2dp, by the 21:00 report from
+  an after-hours IB price. See finding F.
+- **Oct 9 session, "the report path is WBD's only evaluator":** wrong. See
+  finding A.
+- **Oct 9 reconciliation, "parity 64 → 84 = 4 cycles × 5 positions":** this
+  counted records, not successful evaluations. Five of those 20 records were
+  not MATCH.
+
+**A. WBD has had no working stop since Oct 5.**
+
+| Period | Report path | Monitor |
+|---|---|---|
+| Oct 6 13:31 → Oct 7 13:31 | evaluated against a stale Oct 5 bar (30.95) | no live price |
+| Oct 7 21:01 → Oct 9 21:00 | `BOTH_EVALUATIONS_FAILED` ×5, `'NoneType' object is not subscriptable` | no live price |
+
+`data/ohlcv/WBD.csv` holds one row (Oct 5, `Open 0.0`, `Volume 40`), and
+`load_stock` returns `None` below two rows. Both price sources failed for WBD at
+about the same time, which suggests a symbol-level cause; this is unverified.
+Parity recorded the failure every cycle, while the dashboard showed WBD as a
+normal position. No current price has been compared with the $29.31 stop since
+Oct 5.
+
+**B. Parity: 94 records, 86 MATCH, 8 non-MATCH.** The 8 are WBD ×5 (A) and ITUB
+×3 `DECISION_CHANGING_MISMATCH`, on Oct 8 13:31, Oct 8 21:01 and Oct 9 13:31.
+
+The ITUB three are the dual-precision peak. Inline stored `10.120109656333922`;
+the shadow under `tracker_v3_2dp` normalised it to `10.12` and returned
+`state_update` against inline `hold`. Stops and exit decisions were identical,
+and the mismatch cleared once the peak became `10.15` (record 94). The
+classifier calls these decision-changing. Whether a representation-only
+difference counts is a review decision and has not been reclassified.
+
+**C. Oct 1: the 17:30 monitor run lasted about 3½ hours and overlapped the
+report.**
+
+| Time (UTC) | Event |
+|---|---|
+| 16:10:17 | monitor promotes GMAB from queue to pending after BCE's close |
+| 17:30:01 | cron starts `run_monitor.sh`, the only monitor start until 21:00. TMO priced at 666.07, within the session range |
+| 17:30 → ~21:01 | stalled, most likely on WBD's price request, holding IB client ID 10 |
+| 21:00:01 | `run_ares.sh` starts. Its first IB call (TMO) gets `Error 326: client id already in use` and falls back to daily data |
+| 21:01:10 | monitor exits. Telegram message and the "monitor" commit `38910a5` land in the same second |
+| 21:01:18 | report gets IB prices identical to the monitor's: WBD 30.94, AMP 494.82, TWST 187.25 |
+
+- **`38910a5` contains the report path's GMAB fill.** `execute_pending_signals`
+  is called only from `daily_report.py:54`; the monitor's `git add logs/` picked
+  it up. A commit's label identifies the launcher, not the writer.
+- **No damage occurred, by luck.** The monitor saves only `if updated:`. Had it
+  closed or ratcheted anything, it would have saved the list it loaded at about
+  17:30 and could have overwritten GMAB's fill.
+- AMP's price equalled the day's close and TWST's was below the session low, so
+  the monitor's later prices were after-hours.
+- `Error 326` appears only once in the retained `cron.log`.
+
+**D. Gateway and connection.**
+
+- Every Ares process uses `clientId=10` (`data_feed.py:27`), so the monitor and
+  the report cannot both be connected at once.
+- Only `ib.connect` has a timeout. `qualifyContracts` and `reqHistoricalData`
+  are called without one.
+- `restart_gateway.sh` restarts nothing unless `pgrep` finds no gateway process
+  at all. It never clears a gateway that is running but wedged.
+
+**E. Partial-bar daily fallback.** On Oct 1 at 21:01, TMO was evaluated at
+`672.34`, close to the open (672.39) and not the close (652.51). A bar cached
+early in the session is reused for up to `CACHE_MAX_AGE_HOURS = 20`. AMP falls
+back to daily data at almost every 13:31 cycle.
+
+**F. After-hours prices at 21:00.** `get_live_price` uses `useRTH=False`, and the
+21:00 cycle runs after the 20:00 close, so its IB prices are after-hours trades.
+
+**G. Smaller items, flagged and unverified.**
+
+- **GMAB's promotion** at 16:10:17 fell inside the monitor cycle. This is
+  circumstantial evidence of a monitor-initiated promotion; `queue_events` has
+  no source field.
+- **`"rsi": 50.0`** appears on every queue re-check examined (BSP, GMAB, XP,
+  INSM, MANE), against XP's `rsi_at_signal` of 85.5. It may be a placeholder.
+- **The five unobtainable exits** (SECZ, BCE, GMAB, TWST, PCVX) each have a
+  monitor commit holding the state before and after the close. Their status is
+  unchanged: incident §7 forbids reconstruction, and those commits can help
+  diagnosis only.
+- **VPS log retention:** the journal holds about 2 days, syslog uses ISO
+  timestamps and rotates weekly, and the bot's log is `/root/ares/cron.log`
+  (`logs/cron.log` is Hermes's).
+
+**Decision: pause, checkpoint, audit, simplify.** The work has become too heavy
+to validate with the time available. New work stops at a checkpoint, followed by
+a full audit of everything done so far, then a cleanup of the repository and VPS
+down to the code that is actually required. The recorder stays on HOLD and
+undeployed. None of the findings above is to be repaired before that audit.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
