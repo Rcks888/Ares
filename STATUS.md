@@ -11,6 +11,32 @@ The bot runs as is: paper trading only, V3.1, on the VPS (`/root/ares/Ares`).
 No code changes without an explicit decision. Phase 5, policy unification and AI
 modelling remain prohibited.
 
+## Plan and timeline
+
+The main flow (agreed Oct 9), and where things stand:
+
+```
+▶ 0. Recorder repairs accepted   ← HERE: round 2 + v3 update done; your review of bundle v3 pending
+◻ 1. Conditional recorder activation (explicit VPS deploy, rollback pre-tested)
+◻ 2. First monitor-cycle inspection (morning after; both cycles)  → CHECKPOINT
+◻ 3. Admission-source capture (separately reviewed, both routes)
+◻ 4. Evidence-informed decision on which exit policy is authoritative
+```
+
+By week (Mon–Fri). Update the "Actual" column at the end of each week, and say
+why if it differs from the plan.
+
+| Week | Planned | Actual | Change vs plan |
+|---|---|---|---|
+| Aug 27 – Sep 4 | V1, then V2/V2.1 | as planned | — |
+| Sep 7 – Sep 25 | V3, data cleaning, parity build | as planned | — |
+| Sep 28 – Oct 2 | parity (Phase 4) live; vacation from Oct 1 | parity started around Sep 29 | — |
+| Oct 5 – Oct 9 | vacation; resume | incident (Oct 7), reconciliation, recorder designed, built and reviewed | unplanned: incident work |
+| Oct 12 – Oct 16 | recorder activation, Mon 16:10 UTC | HOLD from review → repair round 2 → pause → checkpoint, audit, cleanup, WBD closed → v3 update (merge `main`; `.gitignore` and activation-doc fixes) | **slipped**; activation moves to next week |
+| Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | | |
+| Oct 26 – Oct 30 | step 3 design → review | | |
+| Nov 2 onward | evidence collection → step 4 | | no date until there is enough evidence to judge |
+
 ## What runs (cron, weekdays only)
 
 | UTC | MYT | Job | What it does |
