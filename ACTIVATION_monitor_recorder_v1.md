@@ -223,9 +223,13 @@ cd /tmp/ares_review
 python3 tests/run_monitor_observer_controls.py        ; echo "EXIT=$?"
 python3 tests/run_verifier_negative_controls.py       ; echo "EXIT=$?"
 python3 tests/run_entrypoint_containment_controls.py  ; echo "EXIT=$?"
+python3 tests/run_inspection_controls.py              ; echo "EXIT=$?"
 ```
 
-**Acceptance: 44/44, 14/14 and 13/13, each exit 0. 71 controls total.**
+**Acceptance: 44/44, 14/14 and 13/13, each exit 0. These are the 71 controls on
+the recorder itself.** In addition, **16/16** inspection controls (exit 0)
+establish that the §5.0 post-activation tool cannot pass a defective or
+uninspectable history.
 
 | Concern | Controls |
 |---|---|
@@ -353,9 +357,17 @@ git clone -q --no-hardlinks . /tmp/ares_revert_test
 cd /tmp/ares_revert_test
 git log --oneline -1                      # must show <ACTIVATION_SHA>
 
-# 1. the activation commit must own no operational state
-git show --stat --name-only <ACTIVATION_SHA> | grep '^logs/' \
-    && echo "FAIL: activation touches logs/" || echo "ok: activation owns no logs/"
+# 1. the activation commit must own no operational state.
+#    A git failure or an empty file list is a FAIL, never "ok".
+if ! files=$(git show --name-only --format= <ACTIVATION_SHA>); then
+    echo "FAIL: git show failed"
+elif [ -z "$files" ]; then
+    echo "FAIL: activation commit lists no files"
+elif grep -q '^logs/' <<<"$files"; then
+    echo "FAIL: activation touches logs/"
+else
+    echo "ok: activation owns no logs/ ($(wc -l <<<"$files") files)"
+fi
 
 # 2. the inverse must apply
 git revert --no-edit <ACTIVATION_SHA> && echo "INVERSE APPLIES CLEANLY"
@@ -440,6 +452,7 @@ python3 -c "import ast; ast.parse(open('monitor_trades.py').read()); print('pars
 python3 tests/run_monitor_observer_controls.py             # 44/44 on the live tree
 python3 tests/run_verifier_negative_controls.py            # 14/14
 python3 tests/run_entrypoint_containment_controls.py        # 13/13
+python3 tests/run_inspection_controls.py                    # 16/16 (§5.0 tool)
 python3 tools/verify_recorder_isolation.py \
     tests/fixtures/monitor_trades_preactivation.py monitor_trades.py
 ```
@@ -469,9 +482,14 @@ MYT.
   output, exception or production state; the 71 controls and the isolation
   verifier test exactly that. A second cycle risks a second bad record, not a
   trading consequence.
-- **Inspect both cycles.** Each must pass §5.1–§5.3 on its own, and the second
-  must show the per-invocation reset: a new token, and no carry-over from the
-  first.
+- **Inspect both cycles.** Each must pass §5.1–§5.3 on its own. The second
+  must show the per-invocation reset: a new `cycle_id` and `cycle_started_at`,
+  and no carry-over from the first.
+
+**Never use `invocation_token` to tell cycles apart.** It is a process-local
+counter, and every scheduled run is a new process, so every cycle carries token
+`1`. Cycles are identified by `cycle_id`, which is minted fresh by each flush,
+or by the bot commits that delimit them (`<R>`, `<M1>`, `<M2>`, §5.3).
 
 The files are JSON Lines (one record per line), so after two cycles a plain
 `json.tool` fails with "Extra data". Use `--json-lines`:
@@ -482,6 +500,46 @@ python3 -m json.tool --json-lines logs/monitor_heartbeat_v1.jsonl
 wc -l logs/monitor_observation_v1.jsonl logs/monitor_heartbeat_v1.jsonl
 python3 -m json.tool --json-lines logs/monitor_observation_v1.jsonl
 ```
+
+### 5.0 Run the inspection tool first
+
+The per-cycle checks in §5.1–§5.8 are carried out by
+`tools/inspect_monitor_cycles.py`, not by hand-run snippets. Two hand-run
+snippets in bundle v3 gave false results: one grouped cycles by the
+process-local `invocation_token`, the other printed "ok" when `git` failed.
+The tool is fail-closed and has its own controls
+(`tests/run_inspection_controls.py`, 16, with each check mutation-tested).
+
+```sh
+cd /root/ares/Ares
+git log --format='%h %p | %ci %s' -6 -- logs/
+#   <R>  = the commit immediately before the first monitor cycle (normally
+#          "Ares V3 report ..._13:3x")
+#   <M1> = the 16:10 monitor commit, whose parent must be <R>
+#   <M2> = the 17:30 monitor commit, whose parent must be <M1>
+venv/bin/python tools/inspect_monitor_cycles.py <R> <M1> <M2>; echo "exit $?"
+```
+
+| Exit | Meaning | Action |
+|---|---|---|
+| 0, `RESULT: PASS` | every cycle is complete, reconciled acceptance evidence | continue with the manual reading in §5.3 and §5.5 |
+| 2, `RESULT: INCONCLUSIVE` | truthful but not acceptance evidence: an aborted cycle (§5.2) or observation unavailable (§5.8) | read the reason; no acceptance yet; not a rollback by itself |
+| 1, `FAIL: …` | a defect, **or the inspection could not be carried out** (bad reference, a git error, commits that do not delimit exactly one cycle) | never read as a pass. Fix the reference and rerun, or treat as a defect under §6 |
+
+Per cycle, the tool checks:
+- `<M>`'s parent is exactly the previous reference, and its subject is a monitor commit
+- the monitor commit changed neither parity file
+- the three recorder files only grew (append-only)
+- exactly one heartbeat, or a health line only; never both
+- `cycle_id` and `cycle_started_at` are present and new, compared with every earlier cycle
+- every observation carries this cycle's `cycle_id`
+- `open_positions_seen` equals the number of positions open at the previous reference
+- one record per open symbol, with no duplicates and no extras
+- the full conjunctive heartbeat state in §5.1, with every record complete
+
+A cycle with **no** commit at all means the monitor wrote nothing (it never ran,
+or was SIGKILLed). The tool cannot be given such a cycle; treat it as the
+"neither" state in §5.8.
 
 ### 5.1 Heartbeat, normal completed cycle
 
@@ -566,28 +624,11 @@ not against the deployment snapshot. Two reasons:
 - Cycle 1 can close a position before cycle 2 starts.
 
 The bot's own commits delimit each cycle. Because the recorder's files are now
-re-included in `.gitignore`, every monitor cycle produces a commit:
-
-```sh
-git log --format='%h %ci %s' --since='<DEPLOY_DATE>' -- logs/
-#   R  = the 13:30 report commit ("Ares V3 report ..._13:3x")
-#   M1 = the 16:10 monitor commit ("Ares V3 monitor ..._16:1x")
-#   M2 = the 17:30 monitor commit ("Ares V3 monitor ..._17:3x")
-for c in <R> <M1>; do git show $c:logs/virtual_trades.json | python3 -c "
-import json,sys; print('$c open:',sorted(t['symbol'] for t in json.load(sys.stdin) if t['status']=='open'))"; done
-python3 -c "
-import json,collections
-hb=[json.loads(l) for l in open('logs/monitor_heartbeat_v1.jsonl') if l.strip()]
-ob=[json.loads(l) for l in open('logs/monitor_observation_v1.jsonl') if l.strip()]
-by=collections.defaultdict(list)
-for r in ob: by[r['invocation_token']].append(r['symbol'])
-for h in hb:
-    s=sorted(by.get(h['invocation_token'],[]))
-    print(h['cycle_started_at'],'open_seen',h['open_positions_seen'],'records',len(s),s)"
-```
-
-For cycle 1, require one record per symbol open at `R`, and no others. For
-cycle 2, require the same against `M1`. Any symbol that
+re-included in `.gitignore`, every monitor cycle that writes evidence produces
+a commit. The §5.0 tool requires one record per symbol open at `<R>` for
+cycle 1, and at `<M1>` for cycle 2, with no others. It groups records by
+`cycle_id` within each cycle's own commit, never by `invocation_token`. Any
+symbol that
 returns no live price must appear as `decision: skipped`,
 `skip_reason: live_price_unavailable_cause_unknown`,
 `effective_stop_unrounded: null`, `record_complete: true` — a skip is complete
@@ -612,7 +653,7 @@ What is actually established:
   placed inside an observation assignment.
 - **At runtime**, each cycle's observation count must equal that cycle's
   open-position count from §5.3, so the recorder added no per-symbol work. The
-  §5.3 script prints both, per cycle.
+  §5.0 tool enforces this per cycle.
 
 **Known limitation, accepted:** instrumenting `data_feed` to count requests
 directly would modify a shared production module and is out of scope. Until
@@ -625,9 +666,13 @@ Compare each monitor cycle against the state committed just before it, never
 against the deployment snapshot, which the 13:30 report cycle has already
 legitimately changed:
 
+Run this only after §5.0 has passed, because the tool verifies that the three
+references exist and delimit one cycle each. An empty diff is meaningful only
+then; with an unverified reference, an empty screen is not evidence.
+
 ```sh
-git diff <R>  <M1> -- logs/virtual_trades.json     # changes made by cycle 1 only
-git diff <M1> <M2> -- logs/virtual_trades.json     # changes made by cycle 2 only
+git diff --exit-code <R>  <M1> -- logs/virtual_trades.json; echo "cycle 1 diff exit $?"   # 0 none, 1 changes, >1 error
+git diff --exit-code <M1> <M2> -- logs/virtual_trades.json; echo "cycle 2 diff exit $?"
 ```
 
 Differences are expected **only** where the monitor legitimately decided:
@@ -639,31 +684,17 @@ or any change in a cycle where every decision was `hold` and
 ### 5.6 Parity evidence preserved
 
 The monitor path must never touch the parity files; only report cycles write
-them. Check the monitor commits alone:
-
-```sh
-git show --stat --format='%h %s' <M1> <M2> | grep -E 'tracker_parity_v1|parity_heartbeat_v1' \
-    && echo "FAIL: a monitor cycle changed parity evidence" || echo "ok: parity untouched by monitor"
-```
-
-Control 27 covers the same property offline.
+them. The §5.0 tool checks each monitor commit against its parent and reports a
+FAIL if either parity file changed. A git error is also a FAIL, never "ok"
+(inspection control 02). Offline, observer control 27 covers the same property.
 
 ### 5.7 Missing observations cannot become coverage
 
-```sh
-python3 -c "
-import json
-b=[json.loads(l) for l in open('logs/monitor_heartbeat_v1.jsonl')][-1]
-p=b['population']
-print('claims coverage:', b['coverage_complete'])
-print('residual       :', p['not_reached'], 'incomplete:', p['incomplete'])
-assert not b['coverage_complete'] or (
-    p['not_reached']==0 and p['incomplete']==0 and p['incomplete_labelled']==0
-    and not p['duplicate_symbols'] and p['attempted_matches_records']
-    and b['attempted']==b['written'] and b['write_failures']==0
-    and b['monitor_completed'] and b['manifests_complete'])
-print('coverage claim is conjunctive and consistent')"
-```
+Enforced per cycle by the §5.0 tool. The earlier snippet here checked only the
+**last** heartbeat (`[-1]`), so after two cycles it would never have examined
+cycle 1. A cycle claiming `coverage_complete` with any incomplete component is a
+FAIL (inspection control 14). An aborted cycle that claims coverage is also a
+FAIL.
 
 ### 5.8 Observation health
 
@@ -678,9 +709,15 @@ does exist, the recorder failed and the cycle is unobserved — read `reason` an
 and 53 establish that the monitor still completes and still prints its normal
 output in both cases.
 
-A health line **without** a corresponding heartbeat is the expected shape. A
-health line *and* a heartbeat for the same `invocation_token` would mean the
-flush partially succeeded; treat that as a defect and report it.
+A health line **without** a heartbeat in the same cycle is the expected shape
+(the tool reports it as INCONCLUSIVE). A health line *and* a heartbeat added by
+the **same monitor commit** would mean the flush partially succeeded; the tool
+reports that as a FAIL.
+
+The pairing is by commit, not by `invocation_token`. The token is `1` in every
+cron process, and the health line carries no `cycle_id` (none has been minted
+when the recorder fails to import). Token pairing would therefore pair every
+health line with every heartbeat ever written.
 
 ---
 
