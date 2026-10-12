@@ -421,6 +421,11 @@ def control_21_contract_copy_pinned():
         ("HEARTBEAT_SCHEMA_VERSION", t.HEARTBEAT_SCHEMA_VERSION,
          mo.HEARTBEAT_SCHEMA_VERSION),
         ("DECISION_PATH", t.DECISION_PATH, mo.DECISION_PATH),
+        ("MANIFEST_PATHS", t.MANIFEST_PATHS, {
+            "decision_manifest": frozenset(mo.DECISION_MANIFEST),
+            "classification_manifest": frozenset(mo.CLASSIFICATION_MANIFEST),
+            "observation_manifest": frozenset(mo.OBSERVATION_MANIFEST)}),
+        ("MANIFESTS", set(t.MANIFESTS), set(t.MANIFEST_PATHS)),
     ]
     repo, _ = new_repo()
     run_cycle(repo, n=1, observations=[complete_obs("skipped", symbol="AMP"),
@@ -428,6 +433,9 @@ def control_21_contract_copy_pinned():
     hb = read_lines(repo / "logs" / mo.HEARTBEAT_NAME)[-1]
     recs = read_lines(repo / "logs" / mo.OBSERVATION_NAME)
     pairs += [
+        ("manifest paths in a real heartbeat",
+         {m: set(hb[m]) for m in t.MANIFESTS},
+         {m: set(p) for m, p in t.MANIFEST_PATHS.items()}),
         ("HEARTBEAT_FIELDS", t.HEARTBEAT_FIELDS, set(hb)),
         ("POPULATION_FIELDS", t.POPULATION_FIELDS, set(hb["population"])),
         ("SKIP_REASON", {t.SKIP_REASON}, {recs[0]["skip_reason"]}),
@@ -628,6 +636,49 @@ def control_29_non_finite_rejected():
                                       f'"write_failures": {token}', 1))
         m1 = run_cycle(repo, n=1, mutate=inject)
         expect(repo, [r, m1], 1, "non-finite number")
+
+
+@control("[v6 finding] manifests that fingerprint none of the implementation: "
+         "every manifest holds only an unrelated file with its correct md5")
+def control_30_manifest_path_set_enforced():
+    import hashlib
+
+    def placeholder_repo():
+        repo, r = new_repo([])
+        (repo / "placeholder.txt").write_text("unrelated\n")
+        git(repo, "add", "placeholder.txt")
+        r = commit(repo, "Ares V3 report 2026-10-19_13:32")
+        return repo, r
+    digest = hashlib.md5(b"unrelated\n").hexdigest()
+    repo, r = placeholder_repo()
+
+    def only_placeholder(logs):
+        edit_appended(logs, mo.HEARTBEAT_NAME, 0, lambda h: {
+            **h, **{m: {"placeholder.txt": digest} for m in (
+                "decision_manifest", "classification_manifest",
+                "observation_manifest")}})
+    m1 = run_cycle(repo, n=1, mutate=only_placeholder, **ZERO)
+    expect(repo, [r, m1], 1, "path set is not the registered set")
+
+    def missing(h):
+        d = dict(h["decision_manifest"])
+        d.pop("engine/tracker.py")
+        return {**h, "decision_manifest": d}
+
+    def extra(h):
+        return {**h, "classification_manifest": {
+            **h["classification_manifest"], "placeholder.txt": digest}}
+
+    def swapped(h):
+        return {**h, "classification_manifest": h["observation_manifest"],
+                "observation_manifest": h["classification_manifest"]}
+    for fn, needle in ((missing, "missing ['engine/tracker.py']"),
+                       (extra, "unregistered ['placeholder.txt']"),
+                       (swapped, "path set is not the registered set")):
+        repo, r = placeholder_repo()
+        m1 = run_cycle(repo, n=1, mutate=lambda logs, fn=fn: edit_appended(
+            logs, mo.HEARTBEAT_NAME, 0, fn), **ZERO)
+        expect(repo, [r, m1], 1, needle)
 
 
 def main():

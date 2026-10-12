@@ -20,8 +20,10 @@ Nothing the producer claims about itself is trusted:
     control 21, so drift in either is a FAIL, not a silent agreement;
   - heartbeat population counts are recomputed from the validated records;
   - lineage is resolved, not just present: repository_commit must be the
-    commit the cycle ran on (the previous reference), and every manifest digest
-    must equal the md5 of that file at that commit;
+    commit the cycle ran on (the previous reference); each manifest must name
+    exactly its registered path set (this file's own copy, pinned by inspection
+    control 21), and every digest must equal the md5 of that file at that
+    commit;
   - time is parsed, not just present: timezone-aware ISO timestamps, with
     previous commit <= started <= every record <= completed <= this commit;
   - every number in the evidence is finite; NaN and +/-Infinity are rejected
@@ -136,6 +138,20 @@ HEARTBEAT_BOOLS = ("lineage_complete", "monitor_completed", "coverage_complete",
                    "trade_state_save_completed")
 MANIFESTS = ("decision_manifest", "classification_manifest",
              "observation_manifest")
+# Registered path set per manifest, independent copy. Never derived from the
+# heartbeat under inspection.
+MANIFEST_PATHS = {
+    "decision_manifest": frozenset({
+        "monitor_trades.py", "daily_report.py", "engine/tracker.py",
+        "engine/data_feed.py", "engine/indicators.py", "engine/signals.py",
+        "engine/screener.py", "config/strategy_params.json"}),
+    "classification_manifest": frozenset({"engine/sample.py"}),
+    "observation_manifest": frozenset({
+        "engine/monitor_observer.py", "engine/parity_hook.py",
+        "engine/parity_runner.py", "engine/parity_compare.py",
+        "engine/parity_eval.py", "engine/tracker_compat.py",
+        "engine/exit_policy.py"}),
+}
 SHORT_SHA = re.compile(r"[0-9a-f]{7,40}")
 MD5 = re.compile(r"[0-9a-f]{32}")
 # commit times have 1 s resolution; started/completed are microsecond-exact
@@ -364,9 +380,15 @@ def heartbeat_violations(hb):
         v.append("cycle_completed_at is earlier than cycle_started_at")
     for m in MANIFESTS:
         d = hb[m]
-        if not isinstance(d, dict) or not d:
-            v.append(f"{m}: not a non-empty mapping")
-        elif not all(isinstance(x, str) and MD5.fullmatch(x) for x in d.values()):
+        if not isinstance(d, dict):
+            v.append(f"{m}: not a mapping")
+            continue
+        want = MANIFEST_PATHS[m]
+        if set(d) != want:
+            v.append(f"{m}: path set is not the registered set: missing "
+                     f"{sorted(want - set(d))}, unregistered "
+                     f"{sorted(set(d) - want)}")
+        if not all(isinstance(x, str) and MD5.fullmatch(x) for x in d.values()):
             v.append(f"{m}: a digest is missing or not md5")
     if hb["manifest_missing"] != []:
         v.append(f"manifest_missing: {hb['manifest_missing']!r}")

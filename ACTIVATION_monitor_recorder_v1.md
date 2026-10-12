@@ -227,7 +227,7 @@ python3 tests/run_inspection_controls.py              ; echo "EXIT=$?"
 ```
 
 **Acceptance: 44/44, 14/14 and 13/13, each exit 0. These are the 71 controls on
-the recorder itself.** In addition, **30/30** inspection controls (exit 0)
+the recorder itself.** In addition, **31/31** inspection controls (exit 0)
 establish that the §5.0 post-activation tool cannot pass a defective or
 uninspectable history.
 
@@ -452,7 +452,7 @@ python3 -c "import ast; ast.parse(open('monitor_trades.py').read()); print('pars
 python3 tests/run_monitor_observer_controls.py             # 44/44 on the live tree
 python3 tests/run_verifier_negative_controls.py            # 14/14
 python3 tests/run_entrypoint_containment_controls.py        # 13/13
-python3 tests/run_inspection_controls.py                    # 30/30 (§5.0 tool)
+python3 tests/run_inspection_controls.py                    # 31/31 (§5.0 tool)
 python3 tools/verify_recorder_isolation.py \
     tests/fixtures/monitor_trades_preactivation.py monitor_trades.py
 ```
@@ -507,11 +507,11 @@ The per-cycle checks in §5.1–§5.8 are carried out by
 `tools/inspect_monitor_cycles.py`, not by hand-run snippets. Two hand-run
 snippets in bundle v3 gave false results: one grouped cycles by the
 process-local `invocation_token`, the other printed "ok" when `git` failed.
-The v4 tool still trusted three producer claims, and v5 two more (lineage and
-time, and non-finite numbers); see review bundles v5 and v6. The tool is
-fail-closed, trusts no claim the producer makes about itself, and has its own
-controls (`tests/run_inspection_controls.py`, 30, with each of its 30 checks
-mutation-tested).
+The v4 tool still trusted three producer claims, v5 two more (lineage and
+time, and non-finite numbers), and v6 one more (manifest membership); see review
+bundles v5 to v7. The tool is fail-closed, trusts no claim the producer makes
+about itself, and has its own controls (`tests/run_inspection_controls.py`, 31,
+with each of its 31 checks mutation-tested).
 
 ```sh
 cd /root/ares/Ares
@@ -546,9 +546,13 @@ Per cycle, the tool checks:
   flags, and md5 manifest digests.
 - **Lineage resolved, not just present.** `lineage_complete` must be true.
   `repository_commit` must be the commit the cycle ran on, i.e. the previous
-  reference, because the launcher commits only after the monitor exits. Every
-  manifest digest must equal the md5 of that file **at that commit**, so code
-  that differs from what is committed (an uncommitted edit on the VPS) is a FAIL.
+  reference, because the launcher commits only after the monitor exits. Each
+  manifest must name **exactly its registered path set** (the tool's own copy,
+  pinned to the recorder's manifests by inspection control 21). Missing, extra
+  or swapped paths are a FAIL; so is a manifest that fingerprints only an
+  unrelated file. Every digest must then equal the md5 of that file **at that
+  commit**, so code that differs from what is committed (an uncommitted edit on
+  the VPS) is a FAIL.
 - **Time parsed, not just present.** `cycle_started_at`, `cycle_completed_at`
   and every record `timestamp` must be timezone-aware ISO-8601, ordered as
   previous commit ≤ started ≤ each record ≤ completed ≤ this commit (with 2 s
