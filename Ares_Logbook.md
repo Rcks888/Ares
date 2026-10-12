@@ -2317,6 +2317,123 @@ called a fix for recurrence until every path is instrumented and verified.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
+### 2026-10-09 (session) — no fills, no closes; EROC $0.14 above the monitor-written stop
+
+Source: Telegram dashboards at 21:32 MYT (13:32 UTC) and 05:01 MYT Oct 10
+(21:01 UTC), plus two monitor live checks between them — 16:10 and 17:30 UTC
+according to the crontab, since the monitor messages carry no timestamp. Not
+cross-checked against `virtual_trades.json`: the laptop's cached `origin/main`
+predates the session and was not re-fetched.
+
+**Portfolio 5/5, unchanged across the session.** No admissions, no exits. Scan:
+103 screened, 0 signals on both cycles. Since nothing filled or closed, the
+booked cash of **$171.46** and the **$78.54** reserve breach still stand. That
+is inferred from no activity, not re-read.
+
+| | Entry | SL | TS | TP | Peak | Held | 16:10 | 17:30 |
+|---|---|---|---|---|---|---|---|---|
+| TMO | 654.54 | 634.25 | 634.25 | 772.36 | 4.6% | 18d | 657.18 | 659.71 |
+| WBD | 30.87 | 29.31 | 29.31 | 36.42 | 0.4% | 17d | no price | no price |
+| AMP | 492.08 | 472.99 | 472.99 | 541.29 | 1.9% | 10d | 500.47 | 500.92 |
+| EROC | 12.61 | 11.14 | 11.76 | 14.88 | 3.6% | 2d | 12.03 | 11.90 |
+| ITUB | 10.12 | 9.32 | 9.32 | 11.94 | 0.0% → 0.3% | 2d | 10.00 | 9.97 |
+
+**EROC closed the 17:30 check $0.14 (1.2%) above its effective stop.** That stop
+is $11.76, the trailing value the monitor wrote without trace on Oct 7. The
+configured stop is $11.14. Any print between those two levels would close EROC
+**only because of unobserved state**. Oct 8 came within $0.16, so this is the
+second consecutive near-miss. While the HOLD stands, a monitor exit on Monday
+would go unrecorded and add a sixth lost monitor exit. That is a factual
+consequence of the HOLD and not, on its own, a reason to lift it.
+
+**The monitor wrote no stop or peak changes on Friday.** This is inferred from
+arithmetic, not observed, because nothing records it. No live price exceeded a
+recorded peak; AMP came closest, at 500.92 against a peak of at least 501.18. No
+`live × 0.90` exceeded the current trailing stop; EROC came closest, at
+10.83 against 11.76.
+
+**ITUB's peak moved 0.0% → 0.3% at 21:00 UTC**, yet both monitor prices were
+below entry, so the monitor did not set it. The likely source is the report
+path's own bar evaluation, which is unverified. The trailing stop was
+unaffected: 10.15 × 0.90 = 9.135, below 9.32. Still to check: whether
+`peak_price` is now stored at 2dp or still holds the unrounded
+`10.120109656333922`, which is the dual-precision finding from Oct 7.
+
+**WBD returned no live price on both checks again.** By this logbook's count
+that is eight consecutive monitor checks over four sessions: Oct 7's entry
+covers four checks over two days, and Oct 8 and Oct 9 add two each. For eight
+checks the monitor has evaluated no intraday stop for WBD, leaving the report
+path as the only evaluator. The cause remains opaque: four distinct causes all
+collapse to `None`.
+
+**XP left the queue between cycles with no stated reason.** The queue went from
+3 to 2 entries. XP was at +3.7% drift at 13:30. This is the second unexplained
+departure after BSP, so it goes on the same check against
+`queue_max_drift_pct` and `queue_max_age_days`. INSM moved −1.0% → +0.1% and
+MANE −1.8% → +3.4%, both still conf3.
+
+**Sample statistics unchanged.** Clean: 6 closed, 1 win, −$57.25, expectancy
+−$9.54, PF 0.04, −6.40% ± 7.89%; the CI includes zero, so this is not evidence of
+edge. Pre-clean: 6 closed, −$21.13. All history: 12 closed, −$78.38.
+
+**System nominal.** RAM 916 → 1026 / 1967 MB; swap 318 MB with nothing paged
+out; stall 434 ms over 16.5 h, then 96 ms over 7.5 h; disk 28%; cache
+847 → 857 symbols; `cron.log` 0.5 → 0.6 MB.
+
+**The 21:00 cycle opened the 64.5 h weekend window, which lapsed unused.** The
+recorder was on HOLD pending independent review, so nothing was deployed.
+Monday's 16:10 UTC monitor cycle runs the unmodified `monitor_trades.py`.
+
+### 2026-10-12 — recorder repair round 2 staged for independent review
+
+**Correction to the 2026-10-09 entry: merging is *not* deployment.** That entry
+said a push to `main` lands on the VPS at the next cycle. Reading the launchers
+disproves it. `run_ares.sh` runs python at line 16 and its git block at
+lines 40–41; `run_monitor.sh` runs python at line 7 and its git block at the end.
+Python therefore always runs *before* any pull, so a cycle that pulls new code
+has already executed the old code. And the pull happens only when the push
+fails. A cycle with nothing to commit pushes trivially, skips the pull, and the
+code never arrives. Explicit deployment is mandatory. The branch-only discipline
+was right, but for a different reason than the one recorded.
+
+**Review returned deployment on HOLD with six required repairs.** The verifier
+had passed three defective candidates, and coverage could report complete over
+an incomplete record. All six repairs are done. Second-round scrutiny exposed
+two further latent defects:
+
+- **The registry pinned shape, not multiplicity.** A doubled
+  `_MONITOR_EVAL["attempted"] += 1`, which would corrupt population
+  reconciliation, passed. Each registered statement now carries an exact
+  occurrence count.
+- **The rollback check spanned the whole repository.** Once the bot has
+  committed logs, `git diff <PRE> HEAD` is never empty, and the check invited
+  reverting operational state. It is now scoped to deployment-owned paths, with
+  `logs/` explicitly preserved.
+
+**The bundle was not independently runnable as first built.** Rerun from the
+archive alone, it scored 42/44 and 12/13 because files named in the manifests,
+such as `signals.py` and `screener.py`, were missing. This is the same gap that
+blocked the first review. The failure was fail-closed, as designed. Every
+manifest path is now included.
+
+**Controls: 44 observation, 14 verifier-negative, 13 containment, 71/71, exit 0.**
+These ran from a fresh extraction of the bundle. The verifier reports 47
+accepted, which is 46 registered additions plus 1 registered replacement. Tests
+wrote nothing to `logs/`, and none of the three recorder output files exist.
+
+**Staged on `recorder/monitor-observer-v1`; not committed, pushed or activated.**
+Staged diff sha256 `a4d9c480…d79a36`. Bundle:
+`review_bundle_monitor_recorder_v2.tgz`. The HOLD remains until the independent
+rerun and source review are complete.
+
+Known limitations remain labelled rather than fixed:
+
+- A `SIGKILL` leaves no completion heartbeat.
+- Runtime acquisition counts are unmeasured.
+- Launcher success cannot be inferred from `tee`'s exit status.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
