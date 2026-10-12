@@ -48,8 +48,11 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
 
 ## Known issues with live consequence (unrepaired)
 
-1. **WBD has no working stop since Oct 5.** The cache has 1 row and the monitor
-   gets no live price. Decision pending.
+1. **The bot cannot detect a delisting.** WBD was cash-acquired by SKYD and
+   delisted on 2026-10-06. The bot kept holding it with no price for a week,
+   until it was closed by hand on 2026-10-12 (commit `22142a4`; see the
+   logbook). A future acquisition will look the same: "No live price", a
+   1-row cache file and a parity failure, while the position blocks a slot.
 2. **The monitor's decisions are not recorded.** Only state before and after
    appears in its commits. The recorder that would close this is shelved on
    branch `recorder/monitor-observer-v1` (`0cde474`): reviewed twice, **never

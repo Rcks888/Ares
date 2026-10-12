@@ -2582,6 +2582,65 @@ Phase 5, policy unification and AI modelling remain prohibited.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
+### 2026-10-12 (later) — WBD resolved: cash acquisition, closed by hand
+
+**The cause of finding A (Oct 12) was a delisting, not a bot fault.** WBD was
+acquired by Skydance Corporation (NYSE: SKYD, formerly Paramount Skydance). The
+company's press release of 2026-10-06 says:
+
+> "Under the terms of the agreement, WBD shareholders received an amount in cash
+> equal to $31.01666668 per share."
+>
+> "WBD shares have ceased trading on NASDAQ, effective today."
+
+stockanalysis.com shows WBD as "Inactive", last trade Oct 5 at $30.95. Yahoo
+keeps only a stub row for Oct 5 (`Open 0.0`, `Volume 40`) and has dropped WBD's
+earlier history. That explains the 1-row cache file, the parity
+`BOTH_EVALUATIONS_FAILED` records and the monitor's "No live price".
+
+**The stop was never at risk.** The $31.02 cash price is well above the $29.31
+stop, and WBD traded at about the deal price from Oct 5 onwards. The real cost
+was a blocked slot for a week.
+
+**Booking (decided 2026-10-12).** This was a one-off script run by hand
+(`close_wbd_acquired.py`, kept outside the repo under `Olympus/Ares_audit/`),
+which writes through the bot's own `_close_trade` and `save_trades`.
+
+| Field | Value |
+|---|---|
+| exit price | $31.01666668 cash, less the standard 0.1% slippage → **$30.99** |
+| exit date / reason | `2026-10-06` / `acquired` (post-mortem verdict `other`) |
+| P&L | **+$0.56** gross, **−$1.44** after $2.00 commission |
+| holding days | 14 (Sep 22 → Oct 6) |
+| sample | **excluded**: `contaminated`, reason `corporate_action_acquisition`, phase `pre_clean` |
+| shadow tracking | off (`inactive_reason: delisted`) |
+| provenance | `exit_source: manual`, plus a `corporate_action` block holding the source URL |
+
+**Verification.**
+- Before applying, the script was tested on a disposable copy of `main`: dry
+  run, apply, a second run (refused), undo (byte-exact), and the dashboard
+  render.
+- On the VPS, the file's md5 before (`e9b78e05…`) and after (`d547805f…`)
+  matched the test exactly.
+- The committed diff changes WBD (19 fields) plus only `holding_days` on the four
+  open positions. `save_trades` refreshes those on every run.
+- Backup: `/root/ares/backups/virtual_trades.json.20261012T061658.pre_wbd_close`.
+- Commit `22142a4`, pushed from the VPS.
+
+**Effect.**
+
+| | Before | After |
+|---|---|---|
+| Official clean sample | 6 closed, −$57.25 | unchanged |
+| Open positions | 5 | **4** (TMO, AMP, EROC, ITUB); one slot free |
+| Pre-clean history | 6 closed, −$21.13 | 7 closed, −$22.57 |
+| All history | 12 closed, −$78.38 | 13 closed, −$79.82 |
+
+**Registered, not repaired:** the bot has no way to detect a delisting (now on
+`STATUS.md`).
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
