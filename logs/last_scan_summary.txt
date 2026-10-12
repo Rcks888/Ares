@@ -1,3 +1,6 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:1
+signal_details:INSM | mean_reversion | conf2 | range
+  Price: $99.14 | RSI: 29.0 | Vol: 0.02x
+  Buy: $150 (1.5 shares)
+  SL: $94.06 | TP: $109.05 (+10%) | TS: 10%

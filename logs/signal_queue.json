@@ -15,22 +15,5 @@
       "unusual_volume",
       "oversold_bounce"
     ]
-  },
-  {
-    "symbol": "MANE",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 126.63,
-    "rsi_at_signal": 61.7,
-    "stdev_20": 0.0447,
-    "vol_ratio": 3.72,
-    "date_added": "2026-10-08",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
   }
 ]

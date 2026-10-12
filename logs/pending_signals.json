@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "symbol": "MANE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-10-12",
+    "price": 128.08,
+    "rsi": 61.7,
+    "vol_ratio": 3.72,
+    "stdev_20": 0.0447,
+    "strength": "unknown",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "from_queue": true
+  }
+]
