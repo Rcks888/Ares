@@ -15,5 +15,22 @@
       "unusual_volume",
       "oversold_bounce"
     ]
+  },
+  {
+    "symbol": "DHT",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 26.22,
+    "rsi_at_signal": 75.6,
+    "stdev_20": 0.0273,
+    "vol_ratio": 1.72,
+    "date_added": "2026-10-12",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
   }
 ]

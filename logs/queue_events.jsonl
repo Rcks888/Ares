@@ -87,3 +87,5 @@
 {"timestamp": "2026-10-12T13:31:13", "symbol": "INSM", "action": "kept", "queued_at": "2026-10-08", "confluence": 3, "signal_price": 100.48, "drift_pct": -1.34, "rsi": 50.0, "ema20_ok": true, "live_price": 99.14, "drop_reason": null}
 {"timestamp": "2026-10-12T13:31:13", "symbol": "MANE", "action": "kept", "queued_at": "2026-10-08", "confluence": 3, "signal_price": 126.63, "drift_pct": 1.15, "rsi": 50.0, "ema20_ok": true, "live_price": 128.08, "drop_reason": null}
 {"timestamp": "2026-10-12T13:31:14", "symbol": "MANE", "action": "promoted", "queued_at": "2026-10-08", "confluence": 3, "signal_price": 126.63, "drift_pct": 1.15, "rsi": 50.0, "ema20_ok": true, "live_price": 128.08, "drop_reason": null}
+{"timestamp": "2026-10-12T21:00:56", "symbol": "INSM", "action": "kept", "queued_at": "2026-10-08", "confluence": 3, "signal_price": 100.48, "drift_pct": -1.91, "rsi": 50.0, "ema20_ok": true, "live_price": 98.56, "drop_reason": null}
+{"timestamp": "2026-10-12T21:01:24", "symbol": "DHT", "action": "queued", "queued_at": "2026-10-12", "confluence": 3, "signal_price": 26.22, "drift_pct": null, "rsi": null, "ema20_ok": null, "live_price": null, "drop_reason": null}

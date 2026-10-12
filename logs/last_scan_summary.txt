@@ -1,6 +1,9 @@
 candidates_screened:103
-signals_found:1
-signal_details:INSM | mean_reversion | conf2 | range
-  Price: $99.14 | RSI: 29.0 | Vol: 0.02x
+signals_found:2
+signal_details:DHT | momentum_breakout | conf3 | uptrend
+  Price: $26.22 | RSI: 75.6 | Vol: 1.72x
+  Buy: $150 (5.7 shares)
+  SL: $24.79 | TP: $30.94 (+18%) | TS: 10%|||INSM | mean_reversion | conf2 | range
+  Price: $98.56 | RSI: 29.0 | Vol: 0.61x
   Buy: $150 (1.5 shares)
-  SL: $94.06 | TP: $109.05 (+10%) | TS: 10%
+  SL: $93.51 | TP: $108.42 (+10%) | TS: 10%
