@@ -2271,6 +2271,376 @@ stated reason. To check against `queue_max_drift_pct` and `queue_max_age_days`.
 Dashboard also reported "2 signals" while listing one — same count/list mismatch
 seen on Oct 7.
 
+### 2026-10-09 — reconciliation closed; recorder built and reviewed, not activated
+
+**Reconciliation.** Booked cash **$171.46**, reserve breach **$78.54**. The
+pre-cycle prediction of $171.35 was wrong by **$0.11**, caused entirely by
+`shares` being floored to 2dp: EROC `149/12.61 = 11.8160` was booked as
+**11.81**, so each fill consumes slightly less than `position_size`, which is the
+pre-flooring notional and not the outlay. Legacy basis confirmed at
+`745.1608 − 297.8905 = 447.2703`. Booked value stands; the method was not
+adjusted to recover the prediction. Recorded in
+`RECONCILIATION_2026-10-07_fill_cycle.md`.
+
+**Recorder built** on branch `recorder/monitor-observer-v1` (`7681d9c`,
+`ac73363`). `engine/monitor_observer.py` plus 120 lines in `monitor_trades.py`:
+three manifests that fail on a missing path, per-site effective configuration, an
+exact 33-field schema, a path-scoped heartbeat, and a loop that writes raw values
+only with every derivation moved after it.
+
+**Critical finding — merging is deployment.** Both launchers run
+`git pull --rebase --autostash` whenever the bare push fails, which a new `main`
+commit guarantees. Pushing code to `main` therefore lands it in the VPS working
+tree at the next cycle. There is no separate deploy step and never was; every
+documentation commit this week propagated the same way. The recorder was
+committed to a branch for exactly this reason, and activation must be a
+deliberate merge between cycles.
+
+**Controls: 22/22 laptop, 22/22 VPS, exit 0.** Run through a `git worktree` in
+`/tmp` so the live tree was never switched, then removed. A stdlib-only runner
+was written because pytest is absent from the VPS venv and installing it would
+change the production environment to test an observation-only module.
+Mutation-tested three ways; each mutation fails only its own control.
+
+**Two defects found by the recorder's own controls.** `flush` applied the
+derivation twice, so a partial record reported `record_complete: true` — the
+exact failure mode the recorder exists to prevent. And a legitimately skipped
+symbol reported incomplete, which would have made every WBD cycle
+indistinguishable from a loop that died. Both fixed and regression-guarded.
+
+**Not activated. Nothing deployed. `main` is clean and the recorder is absent
+from it.** Admission capture is still outside scope: `queue_events.jsonl` is
+empty for a direct scan admission and needs its own registered diff covering both
+routes. The governing question — which exit policy is authoritative — remains
+open, the five lost monitor exits remain blocking, and the recorder cannot be
+called a fix for recurrence until every path is instrumented and verified.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
+### 2026-10-09 (session) — no fills, no closes; EROC $0.14 above the monitor-written stop
+
+Source: Telegram dashboards at 21:32 MYT (13:32 UTC) and 05:01 MYT Oct 10
+(21:01 UTC), plus two monitor live checks between them — 16:10 and 17:30 UTC
+according to the crontab, since the monitor messages carry no timestamp. Not
+cross-checked against `virtual_trades.json`: the laptop's cached `origin/main`
+predates the session and was not re-fetched.
+
+**Portfolio 5/5, unchanged across the session.** No admissions, no exits. Scan:
+103 screened, 0 signals on both cycles. Since nothing filled or closed, the
+booked cash of **$171.46** and the **$78.54** reserve breach still stand. That
+is inferred from no activity, not re-read.
+
+| | Entry | SL | TS | TP | Peak | Held | 16:10 | 17:30 |
+|---|---|---|---|---|---|---|---|---|
+| TMO | 654.54 | 634.25 | 634.25 | 772.36 | 4.6% | 18d | 657.18 | 659.71 |
+| WBD | 30.87 | 29.31 | 29.31 | 36.42 | 0.4% | 17d | no price | no price |
+| AMP | 492.08 | 472.99 | 472.99 | 541.29 | 1.9% | 10d | 500.47 | 500.92 |
+| EROC | 12.61 | 11.14 | 11.76 | 14.88 | 3.6% | 2d | 12.03 | 11.90 |
+| ITUB | 10.12 | 9.32 | 9.32 | 11.94 | 0.0% → 0.3% | 2d | 10.00 | 9.97 |
+
+**EROC closed the 17:30 check $0.14 (1.2%) above its effective stop.** That stop
+is $11.76, the trailing value the monitor wrote without trace on Oct 7. The
+configured stop is $11.14. Any print between those two levels would close EROC
+**only because of unobserved state**. Oct 8 came within $0.16, so this is the
+second consecutive near-miss. While the HOLD stands, a monitor exit on Monday
+would go unrecorded and add a sixth lost monitor exit. That is a factual
+consequence of the HOLD and not, on its own, a reason to lift it.
+
+**The monitor wrote no stop or peak changes on Friday.** This is inferred from
+arithmetic, not observed, because nothing records it. No live price exceeded a
+recorded peak; AMP came closest, at 500.92 against a peak of at least 501.18. No
+`live × 0.90` exceeded the current trailing stop; EROC came closest, at
+10.83 against 11.76.
+
+**ITUB's peak moved 0.0% → 0.3% at 21:00 UTC**, yet both monitor prices were
+below entry, so the monitor did not set it. The likely source is the report
+path's own bar evaluation, which is unverified. The trailing stop was
+unaffected: 10.15 × 0.90 = 9.135, below 9.32. Still to check: whether
+`peak_price` is now stored at 2dp or still holds the unrounded
+`10.120109656333922`, which is the dual-precision finding from Oct 7.
+
+**WBD returned no live price on both checks again.** By this logbook's count
+that is eight consecutive monitor checks over four sessions: Oct 7's entry
+covers four checks over two days, and Oct 8 and Oct 9 add two each. For eight
+checks the monitor has evaluated no intraday stop for WBD, leaving the report
+path as the only evaluator. The cause remains opaque: four distinct causes all
+collapse to `None`.
+
+**XP left the queue between cycles with no stated reason.** The queue went from
+3 to 2 entries. XP was at +3.7% drift at 13:30. This is the second unexplained
+departure after BSP, so it goes on the same check against
+`queue_max_drift_pct` and `queue_max_age_days`. INSM moved −1.0% → +0.1% and
+MANE −1.8% → +3.4%, both still conf3.
+
+**Sample statistics unchanged.** Clean: 6 closed, 1 win, −$57.25, expectancy
+−$9.54, PF 0.04, −6.40% ± 7.89%; the CI includes zero, so this is not evidence of
+edge. Pre-clean: 6 closed, −$21.13. All history: 12 closed, −$78.38.
+
+**System nominal.** RAM 916 → 1026 / 1967 MB; swap 318 MB with nothing paged
+out; stall 434 ms over 16.5 h, then 96 ms over 7.5 h; disk 28%; cache
+847 → 857 symbols; `cron.log` 0.5 → 0.6 MB.
+
+**The 21:00 cycle opened the 64.5 h weekend window, which lapsed unused.** The
+recorder was on HOLD pending independent review, so nothing was deployed.
+Monday's 16:10 UTC monitor cycle runs the unmodified `monitor_trades.py`.
+
+### 2026-10-12 — recorder repair round 2 staged for independent review
+
+**Correction to the 2026-10-09 entry: merging is *not* deployment.** That entry
+said a push to `main` lands on the VPS at the next cycle. Reading the launchers
+disproves it. `run_ares.sh` runs python at line 16 and its git block at
+lines 40–41; `run_monitor.sh` runs python at line 7 and its git block at the end.
+Python therefore always runs *before* any pull, so a cycle that pulls new code
+has already executed the old code. And the pull happens only when the push
+fails. A cycle with nothing to commit pushes trivially, skips the pull, and the
+code never arrives. Explicit deployment is mandatory. The branch-only discipline
+was right, but for a different reason than the one recorded.
+
+**Review returned deployment on HOLD with six required repairs.** The verifier
+had passed three defective candidates, and coverage could report complete over
+an incomplete record. All six repairs are done. Second-round scrutiny exposed
+two further latent defects:
+
+- **The registry pinned shape, not multiplicity.** A doubled
+  `_MONITOR_EVAL["attempted"] += 1`, which would corrupt population
+  reconciliation, passed. Each registered statement now carries an exact
+  occurrence count.
+- **The rollback check spanned the whole repository.** Once the bot has
+  committed logs, `git diff <PRE> HEAD` is never empty, and the check invited
+  reverting operational state. It is now scoped to deployment-owned paths, with
+  `logs/` explicitly preserved.
+
+**The bundle was not independently runnable as first built.** Rerun from the
+archive alone, it scored 42/44 and 12/13 because files named in the manifests,
+such as `signals.py` and `screener.py`, were missing. This is the same gap that
+blocked the first review. The failure was fail-closed, as designed. Every
+manifest path is now included.
+
+**Controls: 44 observation, 14 verifier-negative, 13 containment, 71/71, exit 0.**
+These ran from a fresh extraction of the bundle. The verifier reports 47
+accepted, which is 46 registered additions plus 1 registered replacement. Tests
+wrote nothing to `logs/`, and none of the three recorder output files exist.
+
+**Staged on `recorder/monitor-observer-v1`; not committed, pushed or activated.**
+Staged diff sha256 `a4d9c480…d79a36`. Bundle:
+`review_bundle_monitor_recorder_v2.tgz`. The HOLD remains until the independent
+rerun and source review are complete.
+
+Known limitations remain labelled rather than fixed:
+
+- A `SIGKILL` leaves no completion heartbeat.
+- Runtime acquisition counts are unmeasured.
+- Launcher success cannot be inferred from `tee`'s exit status.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
+### 2026-10-12 (later) — corrections and new findings from git, parity and VPS logs
+
+Sources: bot commits on `origin/main` up to `432818c`, `logs/tracker_parity_v1.jsonl`
+(94 records), `logs/queue_events.jsonl`, VPS `/var/log/syslog.2.gz`,
+`/root/ares/cron.log`, and `data/ohlcv/*.csv`. All reads; nothing was changed on
+the VPS or in production state.
+
+**Corrections to earlier entries.** The original text is left as written.
+
+- **Oct 7, "the only artefact is Telegram text":** wrong about stored state.
+  `run_monitor.sh` commits `logs/` whenever it changes. Commits `c3abed5`
+  (16:10) and `708e016` (17:30) record EROC's trailing stop and peak before and
+  after each write. What is genuinely unrecorded is the decision inputs (the live
+  price seen, effective stop, config) and any hold or skip, which changes no file.
+- **Oct 8, BSP "no stated reason":** dropped at 21:01 with
+  `drifted -7.5% (max ±5.0%)`. The reason is in `queue_events.jsonl`; the
+  dashboard just doesn't show it.
+- **Oct 9 session, XP:** dropped at 21:00:54 with `drifted +8.4% (max ±5.0%)`.
+- **Oct 9 session, "the monitor wrote nothing":** confirmed. There is no monitor
+  commit on Oct 8 or Oct 9.
+- **Oct 9 session, ITUB peak:** set to `10.15`, at 2dp, by the 21:00 report from
+  an after-hours IB price. See finding F.
+- **Oct 9 session, "the report path is WBD's only evaluator":** wrong. See
+  finding A.
+- **Oct 9 reconciliation, "parity 64 → 84 = 4 cycles × 5 positions":** this
+  counted records, not successful evaluations. Five of those 20 records were
+  not MATCH.
+
+**A. WBD has had no working stop since Oct 5.**
+
+| Period | Report path | Monitor |
+|---|---|---|
+| Oct 6 13:31 → Oct 7 13:31 | evaluated against a stale Oct 5 bar (30.95) | no live price |
+| Oct 7 21:01 → Oct 9 21:00 | `BOTH_EVALUATIONS_FAILED` ×5, `'NoneType' object is not subscriptable` | no live price |
+
+`data/ohlcv/WBD.csv` holds one row (Oct 5, `Open 0.0`, `Volume 40`), and
+`load_stock` returns `None` below two rows. Both price sources failed for WBD at
+about the same time, which suggests a symbol-level cause; this is unverified.
+Parity recorded the failure every cycle, while the dashboard showed WBD as a
+normal position. No current price has been compared with the $29.31 stop since
+Oct 5.
+
+**B. Parity: 94 records, 86 MATCH, 8 non-MATCH.** The 8 are WBD ×5 (A) and ITUB
+×3 `DECISION_CHANGING_MISMATCH`, on Oct 8 13:31, Oct 8 21:01 and Oct 9 13:31.
+
+The ITUB three are the dual-precision peak. Inline stored `10.120109656333922`;
+the shadow under `tracker_v3_2dp` normalised it to `10.12` and returned
+`state_update` against inline `hold`. Stops and exit decisions were identical,
+and the mismatch cleared once the peak became `10.15` (record 94). The
+classifier calls these decision-changing. Whether a representation-only
+difference counts is a review decision and has not been reclassified.
+
+**C. Oct 1: the 17:30 monitor run lasted about 3½ hours and overlapped the
+report.**
+
+| Time (UTC) | Event |
+|---|---|
+| 16:10:17 | monitor promotes GMAB from queue to pending after BCE's close |
+| 17:30:01 | cron starts `run_monitor.sh`, the only monitor start until 21:00. TMO priced at 666.07, within the session range |
+| 17:30 → ~21:01 | stalled, most likely on WBD's price request, holding IB client ID 10 |
+| 21:00:01 | `run_ares.sh` starts. Its first IB call (TMO) gets `Error 326: client id already in use` and falls back to daily data |
+| 21:01:10 | monitor exits. Telegram message and the "monitor" commit `38910a5` land in the same second |
+| 21:01:18 | report gets IB prices identical to the monitor's: WBD 30.94, AMP 494.82, TWST 187.25 |
+
+- **`38910a5` contains the report path's GMAB fill.** `execute_pending_signals`
+  is called only from `daily_report.py:54`; the monitor's `git add logs/` picked
+  it up. A commit's label identifies the launcher, not the writer.
+- **No damage occurred, by luck.** The monitor saves only `if updated:`. Had it
+  closed or ratcheted anything, it would have saved the list it loaded at about
+  17:30 and could have overwritten GMAB's fill.
+- AMP's price equalled the day's close and TWST's was below the session low, so
+  the monitor's later prices were after-hours.
+- `Error 326` appears only once in the retained `cron.log`.
+
+**D. Gateway and connection.**
+
+- Every Ares process uses `clientId=10` (`data_feed.py:27`), so the monitor and
+  the report cannot both be connected at once.
+- Only `ib.connect` has a timeout. `qualifyContracts` and `reqHistoricalData`
+  are called without one.
+- `restart_gateway.sh` restarts nothing unless `pgrep` finds no gateway process
+  at all. It never clears a gateway that is running but wedged.
+
+**E. Partial-bar daily fallback.** On Oct 1 at 21:01, TMO was evaluated at
+`672.34`, close to the open (672.39) and not the close (652.51). A bar cached
+early in the session is reused for up to `CACHE_MAX_AGE_HOURS = 20`. AMP falls
+back to daily data at almost every 13:31 cycle.
+
+**F. After-hours prices at 21:00.** `get_live_price` uses `useRTH=False`, and the
+21:00 cycle runs after the 20:00 close, so its IB prices are after-hours trades.
+
+**G. Smaller items, flagged and unverified.**
+
+- **GMAB's promotion** at 16:10:17 fell inside the monitor cycle. This is
+  circumstantial evidence of a monitor-initiated promotion; `queue_events` has
+  no source field.
+- **`"rsi": 50.0`** appears on every queue re-check examined (BSP, GMAB, XP,
+  INSM, MANE), against XP's `rsi_at_signal` of 85.5. It may be a placeholder.
+- **The five unobtainable exits** (SECZ, BCE, GMAB, TWST, PCVX) each have a
+  monitor commit holding the state before and after the close. Their status is
+  unchanged: incident §7 forbids reconstruction, and those commits can help
+  diagnosis only.
+- **VPS log retention:** the journal holds about 2 days, syslog uses ISO
+  timestamps and rotates weekly, and the bot's log is `/root/ares/cron.log`
+  (`logs/cron.log` is Hermes's).
+
+**Decision: pause, checkpoint, audit, simplify.** The work has become too heavy
+to validate with the time available. New work stops at a checkpoint, followed by
+a full audit of everything done so far, then a cleanup of the repository and VPS
+down to the code that is actually required. The recorder stays on HOLD and
+undeployed. None of the findings above is to be repaired before that audit.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
+### 2026-10-12 (later) — checkpoint, audit and cleanup
+
+**Checkpoint.**
+- Recorder repair round 2 committed to `recorder/monitor-observer-v1` as
+  `0cde474`, byte-identical to the reviewed staged diff (`a4d9c480…`), and pushed
+  to that branch only. The branch was already on origin at `2a022f4` from the VPS
+  worktree review; the earlier statement that it had never been pushed was wrong.
+  It has never been in `main` and has never run on the VPS.
+- Tag `checkpoint-2026-10-12` was created at `445a22f`, before the cleanup.
+
+**Audit** (report kept outside the repo, `Olympus/Ares_audit/`).
+- **VPS:** at `432818c`, identical to git, no local edits, recorder absent.
+- **Repo size:** trading code is 16 files and about 2,800 lines. Parity runtime
+  is about 1,750 lines, parity tests and tools about 11,400, documents about
+  9,600.
+- **Tests:** all 16 tests on `main` exit 0 (they are plain scripts, not pytest).
+- **GitHub workflow:** disabled (`if: false`) since Sep 3, so not a writer.
+- **New findings:** SSH password login is enabled, with outside attempts in the
+  log; the gateway was not running at 04:54 UTC; 38 tracebacks in `cron.log` are
+  not yet classified.
+
+**Cleanup.** No trading or parity code was changed.
+- **Removed:** the 8 one-off repair, backfill and analysis scripts, and the
+  disabled workflow. All are kept at the tag.
+- **Moved to `archive/`:** the incident, the Oct 7 reconciliation, and the
+  recorder design.
+- **Added:** `STATUS.md` as the one-page entry point.
+- **Unchanged:** the parity plans stay at the top level, because engine comments
+  point to them.
+- **Decided:** parity is kept and frozen; the recorder is shelved. Consequence:
+  the monitor's decisions remain unrecorded. WBD is still decision pending.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
+### 2026-10-12 (later) — WBD resolved: cash acquisition, closed by hand
+
+**The cause of finding A (Oct 12) was a delisting, not a bot fault.** WBD was
+acquired by Skydance Corporation (NYSE: SKYD, formerly Paramount Skydance). The
+company's press release of 2026-10-06 says:
+
+> "Under the terms of the agreement, WBD shareholders received an amount in cash
+> equal to $31.01666668 per share."
+>
+> "WBD shares have ceased trading on NASDAQ, effective today."
+
+stockanalysis.com shows WBD as "Inactive", last trade Oct 5 at $30.95. Yahoo
+keeps only a stub row for Oct 5 (`Open 0.0`, `Volume 40`) and has dropped WBD's
+earlier history. That explains the 1-row cache file, the parity
+`BOTH_EVALUATIONS_FAILED` records and the monitor's "No live price".
+
+**The stop was never at risk.** The $31.02 cash price is well above the $29.31
+stop, and WBD traded at about the deal price from Oct 5 onwards. The real cost
+was a blocked slot for a week.
+
+**Booking (decided 2026-10-12).** This was a one-off script run by hand
+(`close_wbd_acquired.py`, kept outside the repo under `Olympus/Ares_audit/`),
+which writes through the bot's own `_close_trade` and `save_trades`.
+
+| Field | Value |
+|---|---|
+| exit price | $31.01666668 cash, less the standard 0.1% slippage → **$30.99** |
+| exit date / reason | `2026-10-06` / `acquired` (post-mortem verdict `other`) |
+| P&L | **+$0.56** gross, **−$1.44** after $2.00 commission |
+| holding days | 14 (Sep 22 → Oct 6) |
+| sample | **excluded**: `contaminated`, reason `corporate_action_acquisition`, phase `pre_clean` |
+| shadow tracking | off (`inactive_reason: delisted`) |
+| provenance | `exit_source: manual`, plus a `corporate_action` block holding the source URL |
+
+**Verification.**
+- Before applying, the script was tested on a disposable copy of `main`: dry
+  run, apply, a second run (refused), undo (byte-exact), and the dashboard
+  render.
+- On the VPS, the file's md5 before (`e9b78e05…`) and after (`d547805f…`)
+  matched the test exactly.
+- The committed diff changes WBD (19 fields) plus only `holding_days` on the four
+  open positions. `save_trades` refreshes those on every run.
+- Backup: `/root/ares/backups/virtual_trades.json.20261012T061658.pre_wbd_close`.
+- Commit `22142a4`, pushed from the VPS.
+
+**Effect.**
+
+| | Before | After |
+|---|---|---|
+| Official clean sample | 6 closed, −$57.25 | unchanged |
+| Open positions | 5 | **4** (TMO, AMP, EROC, ITUB); one slot free |
+| Pre-clean history | 6 closed, −$21.13 | 7 closed, −$22.57 |
+| All history | 12 closed, −$78.38 | 13 closed, −$79.82 |
+
+**Registered, not repaired:** the bot has no way to detect a delisting (now on
+`STATUS.md`).
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)

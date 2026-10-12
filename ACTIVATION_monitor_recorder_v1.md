@@ -52,6 +52,11 @@ first monitor cycle observed
 
 ## 2. Window
 
+**Any weekday gap from the completion of the 21:00 UTC cycle to the next 13:30
+UTC cycle (16.5 hours; 05:00 → 21:30 MYT) qualifies.** No scheduled Ares process
+runs inside it. The 64.5-hour weekend window below was the one reserved for the
+original Mon 12 Oct activation, which was put on HOLD. It is kept as history.
+
 **64.5 hours**, from the completion of the Friday 21:00 UTC cycle to the start of
 the Monday 13:30 UTC cycle.
 
@@ -328,6 +333,7 @@ evidence must be **preserved**:
 | `tools/verify_recorder_isolation.py`, `tools/recorder_registration.py` | restored / removed |
 | `tests/` recorder suites, fixtures, driver | restored / removed |
 | `*.md` activation and design documents | restored |
+| `.gitignore` (the three recorder re-includes) | restored. Evidence files already committed stay tracked, because ignore rules do not untrack files |
 | `logs/` **— all of it** | **untouched. Never reverted.** |
 
 `logs/` includes `virtual_trades.json` (authoritative position state),
@@ -355,7 +361,7 @@ git show --stat --name-only <ACTIVATION_SHA> | grep '^logs/' \
 git revert --no-edit <ACTIVATION_SHA> && echo "INVERSE APPLIES CLEANLY"
 
 # 3. deployment-owned paths must be restored EXACTLY
-git diff --stat <PRE> HEAD -- monitor_trades.py engine/ tools/ tests/ '*.md'
+git diff --stat <PRE> HEAD -- monitor_trades.py engine/ tools/ tests/ '*.md' .gitignore
 #    must be EMPTY
 
 # 4. operational state must NOT have been reverted
@@ -452,13 +458,29 @@ Changing the launcher — adding `set -o pipefail`, or capturing
 
 ## 5. First monitor cycle inspection
 
-The first cycle is 16:10 UTC. Inspect **before** 17:30.
+The first cycles are 16:10 and 17:30 UTC (00:10 and 01:30 MYT).
+
+**Decided 2026-10-12: inspect the next morning (MYT), after both cycles.** That
+replaces "inspect before 17:30", which would have meant staying up past 00:10
+MYT.
+- **Accepted cost:** a recorder defect present in the first cycle repeats in
+  the second before anyone looks.
+- **Why that is acceptable:** the recorder cannot change a monitor decision,
+  output, exception or production state; the 71 controls and the isolation
+  verifier test exactly that. A second cycle risks a second bad record, not a
+  trading consequence.
+- **Inspect both cycles.** Each must pass §5.1–§5.3 on its own, and the second
+  must show the per-invocation reset: a new token, and no carry-over from the
+  first.
+
+The files are JSON Lines (one record per line), so after two cycles a plain
+`json.tool` fails with "Extra data". Use `--json-lines`:
 
 ```sh
 cd /root/ares/Ares
-cat logs/monitor_heartbeat_v1.jsonl | python3 -m json.tool
-wc -l logs/monitor_observation_v1.jsonl
-cat logs/monitor_observation_v1.jsonl | python3 -m json.tool
+python3 -m json.tool --json-lines logs/monitor_heartbeat_v1.jsonl
+wc -l logs/monitor_observation_v1.jsonl logs/monitor_heartbeat_v1.jsonl
+python3 -m json.tool --json-lines logs/monitor_observation_v1.jsonl
 ```
 
 ### 5.1 Heartbeat, normal completed cycle
@@ -536,18 +558,36 @@ appears in the heartbeat as `trade_state_save_attempted` /
 `trade_state_save_completed`. `ratcheted` split into `peak_advanced` and
 `trail_advanced`, because a new peak need not move the trailing stop.
 
-Expectations must be reconciled against the **actual** starting state, not a
-remembered position count:
+Reconcile expectations against the **actual** starting state of **each** cycle,
+not against the deployment snapshot. Two reasons:
+
+- The 13:30 UTC report cycle runs *before* the first monitor cycle and can
+  legitimately open, close or ratchet positions.
+- Cycle 1 can close a position before cycle 2 starts.
+
+The bot's own commits delimit each cycle. Because the recorder's files are now
+re-included in `.gitignore`, every monitor cycle produces a commit:
 
 ```sh
+git log --format='%h %ci %s' --since='<DEPLOY_DATE>' -- logs/
+#   R  = the 13:30 report commit ("Ares V3 report ..._13:3x")
+#   M1 = the 16:10 monitor commit ("Ares V3 monitor ..._16:1x")
+#   M2 = the 17:30 monitor commit ("Ares V3 monitor ..._17:3x")
+for c in <R> <M1>; do git show $c:logs/virtual_trades.json | python3 -c "
+import json,sys; print('$c open:',sorted(t['symbol'] for t in json.load(sys.stdin) if t['status']=='open'))"; done
 python3 -c "
-import json
-ts=json.load(open('/root/ares/preact_virtual_trades.json'))
-op=[t['symbol'] for t in ts if t['status']=='open']
-print('open at deployment:',len(op),sorted(op))"
+import json,collections
+hb=[json.loads(l) for l in open('logs/monitor_heartbeat_v1.jsonl') if l.strip()]
+ob=[json.loads(l) for l in open('logs/monitor_observation_v1.jsonl') if l.strip()]
+by=collections.defaultdict(list)
+for r in ob: by[r['invocation_token']].append(r['symbol'])
+for h in hb:
+    s=sorted(by.get(h['invocation_token'],[]))
+    print(h['cycle_started_at'],'open_seen',h['open_positions_seen'],'records',len(s),s)"
 ```
 
-Then require one record per symbol in that list, and no others. Any symbol that
+For cycle 1, require one record per symbol open at `R`, and no others. For
+cycle 2, require the same against `M1`. Any symbol that
 returns no live price must appear as `decision: skipped`,
 `skip_reason: live_price_unavailable_cause_unknown`,
 `effective_stop_unrounded: null`, `record_complete: true` — a skip is complete
@@ -570,15 +610,9 @@ What is actually established:
   they cannot produce a match.
 - **Structurally**, verifier negative control 05 rejects an acquisition call
   placed inside an observation assignment.
-- **At runtime**, the observation count must equal the open-position count from
-  §5.3, so the recorder added no per-symbol work.
-
-```sh
-python3 -c "
-import json
-recs=[json.loads(l) for l in open('logs/monitor_observation_v1.jsonl') if l.strip()]
-print('observations:',len(recs),'symbols:',sorted(r['symbol'] for r in recs))"
-```
+- **At runtime**, each cycle's observation count must equal that cycle's
+  open-position count from §5.3, so the recorder added no per-symbol work. The
+  §5.3 script prints both, per cycle.
 
 **Known limitation, accepted:** instrumenting `data_feed` to count requests
 directly would modify a shared production module and is out of scope. Until
@@ -587,25 +621,32 @@ structural evidence above, not on a runtime request count.
 
 ### 5.5 No recorder-induced production mutation
 
+Compare each monitor cycle against the state committed just before it, never
+against the deployment snapshot, which the 13:30 report cycle has already
+legitimately changed:
+
 ```sh
-diff <(python3 -m json.tool /root/ares/preact_virtual_trades.json) \
-     <(python3 -m json.tool logs/virtual_trades.json)
+git diff <R>  <M1> -- logs/virtual_trades.json     # changes made by cycle 1 only
+git diff <M1> <M2> -- logs/virtual_trades.json     # changes made by cycle 2 only
 ```
 
-Differences are expected **only** where the monitor legitimately decided —
-`peak_price`, `trailing_stop`, or a close. Any change to a position the recorder
-merely observed, or any change on a cycle where every decision was `hold`, is a
-mutation and means **roll back**.
+Differences are expected **only** where the monitor legitimately decided:
+`peak_price`, `trailing_stop`, a close, and `holding_days` (which `save_trades`
+refreshes on open positions whenever it saves). Any other change to a position,
+or any change in a cycle where every decision was `hold` and
+`trade_state_save_attempted` is false, is a mutation and means **roll back**.
 
 ### 5.6 Parity evidence preserved
 
+The monitor path must never touch the parity files; only report cycles write
+them. Check the monitor commits alone:
+
 ```sh
-wc -l logs/tracker_parity_v1.jsonl logs/parity_heartbeat_v1.jsonl
-md5sum logs/tracker_parity_v1.jsonl logs/parity_heartbeat_v1.jsonl
+git show --stat --format='%h %s' <M1> <M2> | grep -E 'tracker_parity_v1|parity_heartbeat_v1' \
+    && echo "FAIL: a monitor cycle changed parity evidence" || echo "ok: parity untouched by monitor"
 ```
 
-The monitor path must not have touched either. Digests must equal §3.1 until the
-next **report** cycle runs. Control 27 covers this.
+Control 27 covers the same property offline.
 
 ### 5.7 Missing observations cannot become coverage
 
@@ -657,8 +698,10 @@ Roll back immediately on any of:
 - `record_complete: false` on any record in a cycle claiming coverage
 - `trade_state_save_completed: true` on a cycle whose `loop_exception` shows the
   save itself raised
-- an invocation whose `cycle_id`, `params_resolved` or `open_positions_seen`
-  matches the previous invocation's while the token advanced
+- an invocation whose `cycle_id` or `cycle_started_at` equals the previous
+  invocation's (a reset failure). `params_resolved` and `open_positions_seen`
+  legitimately repeat between consecutive cycles, so on their own they are not
+  evidence of anything
 - any of the three control suites failing on the live tree
 - the isolation verifier reporting anything other than exit 0
 

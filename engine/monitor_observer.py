@@ -3,8 +3,8 @@
 Records what monitor_trades.py decided, using the values the monitor itself
 used. Covers the second decision path discovered on 2026-10-07, which writes
 production state with no durable evidence. See
-INCIDENT_2026-10-07_monitor_decision_path.md and
-DESIGN_monitor_recorder_v1.md.
+archive/INCIDENT_2026-10-07_monitor_decision_path.md and
+archive/DESIGN_monitor_recorder_v1.md.
 
 MEASUREMENT ONLY. This module must not change a monitor decision, the operator
 output, exception propagation, or production state.
@@ -23,8 +23,10 @@ date, and opaque get_live_price failures are all RECORDED here and fixed
 nowhere. A recorder that silently corrected them would destroy the evidence it
 exists to collect.
 
-Not a merge. Monitor observation is a separate stream from report-path parity
-(logs/tracker_parity_v1.jsonl). One combined "latest heartbeat" is insufficient
+Not a merge. Monitor observation is a separate stream from the report-path
+parity output, and never reads it. The parity file is deliberately not named
+here: tests/test_output_path.py treats any string naming it, docstrings
+included, as a potential consumer. One combined "latest heartbeat" is insufficient
 because a report cycle at 13:30 UTC would otherwise satisfy a freshness check
 for a monitor cycle at 16:10 that never ran.
 
