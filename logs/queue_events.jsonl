@@ -92,3 +92,4 @@
 {"timestamp": "2026-10-13T13:31:27", "symbol": "INSM", "action": "kept", "queued_at": "2026-10-08", "confluence": 3, "signal_price": 100.48, "drift_pct": -2.35, "rsi": 50.0, "ema20_ok": true, "live_price": 98.11, "drop_reason": null}
 {"timestamp": "2026-10-13T13:31:28", "symbol": "DHT", "action": "kept", "queued_at": "2026-10-12", "confluence": 3, "signal_price": 26.22, "drift_pct": -0.71, "rsi": 50.0, "ema20_ok": true, "live_price": 26.03, "drop_reason": null}
 {"timestamp": "2026-10-13T13:31:28", "symbol": "DHT", "action": "promoted", "queued_at": "2026-10-12", "confluence": 3, "signal_price": 26.22, "drift_pct": -0.71, "rsi": 50.0, "ema20_ok": true, "live_price": 26.03, "drop_reason": null}
+{"timestamp": "2026-10-13T16:10:16", "symbol": "INSM", "action": "promoted", "queued_at": "2026-10-08", "confluence": 3, "signal_price": 100.48, "drift_pct": -2.27, "rsi": 50.0, "ema20_ok": true, "live_price": 98.2, "drop_reason": null}
