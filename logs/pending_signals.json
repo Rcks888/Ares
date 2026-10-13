@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "symbol": "DHT",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-10-13",
+    "price": 26.03,
+    "rsi": 75.6,
+    "vol_ratio": 1.72,
+    "stdev_20": 0.0273,
+    "strength": "unknown",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "from_queue": true
+  }
+]

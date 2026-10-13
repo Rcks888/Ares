@@ -15,10 +15,10 @@
       "unusual_volume",
       "oversold_bounce"
     ],
-    "checked_at": "2026-10-12T21:00:56",
-    "drift_pct": -1.91,
+    "checked_at": "2026-10-13T13:31:27",
+    "drift_pct": -2.35,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 98.56
+    "live_price": 98.11
   }
 ]
