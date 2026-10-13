@@ -1,3 +1,6 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:1
+signal_details:IFF | momentum_breakout | conf3 | uptrend
+  Price: $88.20 | RSI: 61.3 | Vol: 1.59x
+  Buy: $150 (1.7 shares)
+  SL: $85.91 | TP: $104.08 (+18%) | TS: 10%

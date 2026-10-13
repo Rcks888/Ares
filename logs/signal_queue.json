@@ -1,1 +1,19 @@
-[]
+[
+  {
+    "symbol": "IFF",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 88.2,
+    "rsi_at_signal": 61.3,
+    "stdev_20": 0.013,
+    "vol_ratio": 1.59,
+    "date_added": "2026-10-13",
+    "screens": [
+      "near_52w_high",
+      "big_movers_up"
+    ]
+  }
+]
