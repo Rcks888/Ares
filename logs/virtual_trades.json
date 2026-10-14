@@ -383,7 +383,7 @@
       "trough_date": "2026-09-22",
       "missed_upside_pct": 26.42,
       "avoided_downside_pct": 0.81,
-      "latest_price": 98.82
+      "latest_price": 95.66
     }
   },
   {
@@ -1168,12 +1168,12 @@
       "days_tracked": 1,
       "max_days": 30,
       "peak_after_exit": 11.76,
-      "trough_after_exit": 10.98,
+      "trough_after_exit": 9.93,
       "peak_date": "2026-10-13",
       "trough_date": "2026-10-14",
       "missed_upside_pct": 0.09,
-      "avoided_downside_pct": 6.55,
-      "latest_price": 10.98
+      "avoided_downside_pct": 15.49,
+      "latest_price": 9.93
     }
   },
   {
@@ -1292,12 +1292,12 @@
       "days_tracked": 1,
       "max_days": 30,
       "peak_after_exit": 118.49,
-      "trough_after_exit": 116.26,
+      "trough_after_exit": 113.47,
       "peak_date": "2026-10-13",
-      "trough_date": "2026-10-13",
+      "trough_date": "2026-10-14",
       "missed_upside_pct": 0.1,
-      "avoided_downside_pct": 1.78,
-      "latest_price": 116.26
+      "avoided_downside_pct": 4.14,
+      "latest_price": 113.47
     }
   },
   {

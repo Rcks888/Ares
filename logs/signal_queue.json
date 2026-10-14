@@ -15,5 +15,40 @@
       "near_52w_high",
       "big_movers_up"
     ]
+  },
+  {
+    "symbol": "SKYD",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 7.06,
+    "rsi_at_signal": 26.5,
+    "stdev_20": 0.063,
+    "vol_ratio": 2.41,
+    "date_added": "2026-10-14",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce",
+      "big_movers_down"
+    ]
+  },
+  {
+    "symbol": "BSP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 53.46,
+    "rsi_at_signal": 73.9,
+    "stdev_20": 0.1122,
+    "vol_ratio": 4.88,
+    "date_added": "2026-10-14",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
   }
 ]
