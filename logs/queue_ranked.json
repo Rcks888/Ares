@@ -15,11 +15,11 @@
       "near_52w_high",
       "big_movers_up"
     ],
-    "checked_at": "2026-10-15T13:31:39",
-    "drift_pct": 2.79,
+    "checked_at": "2026-10-15T21:01:24",
+    "drift_pct": 2.37,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 90.67
+    "live_price": 90.29
   },
   {
     "symbol": "BSP",
@@ -37,10 +37,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-10-15T13:31:40",
-    "drift_pct": -4.68,
+    "checked_at": "2026-10-15T21:01:24",
+    "drift_pct": 4.32,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 50.96
+    "live_price": 55.77
   }
 ]

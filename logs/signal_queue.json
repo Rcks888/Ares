@@ -32,23 +32,5 @@
       "unusual_volume",
       "big_movers_up"
     ]
-  },
-  {
-    "symbol": "SKHY",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 2,
-    "price_at_signal": 138.59,
-    "rsi_at_signal": 29.9,
-    "stdev_20": 0.0348,
-    "vol_ratio": 0.26,
-    "date_added": "2026-10-15",
-    "screens": [
-      "unusual_volume",
-      "oversold_bounce",
-      "big_movers_down"
-    ]
   }
 ]
