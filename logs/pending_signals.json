@@ -1,1 +1,22 @@
-[]
+[
+  {
+    "symbol": "SKYD",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "date": "2026-10-15",
+    "price": 6.99,
+    "rsi": 26.5,
+    "vol_ratio": 2.41,
+    "stdev_20": 0.063,
+    "strength": "unknown",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce",
+      "big_movers_down"
+    ],
+    "from_queue": true
+  }
+]

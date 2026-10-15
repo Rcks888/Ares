@@ -66,7 +66,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 21,
+      "days_tracked": 22,
       "max_days": 30,
       "peak_after_exit": 11.02,
       "trough_after_exit": 8.43,
@@ -74,7 +74,7 @@
       "trough_date": "2026-09-24",
       "missed_upside_pct": 20.31,
       "avoided_downside_pct": 7.97,
-      "latest_price": 10.8
+      "latest_price": 10.27
     }
   },
   {
@@ -132,7 +132,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 26,
+      "days_tracked": 27,
       "max_days": 30,
       "peak_after_exit": 18.09,
       "trough_after_exit": 15.19,
@@ -140,7 +140,7 @@
       "trough_date": "2026-10-14",
       "missed_upside_pct": 4.87,
       "avoided_downside_pct": 11.94,
-      "latest_price": 15.19
+      "latest_price": 15.27
     },
     "scale_out_shares": 4.36,
     "scale_out_pnl": 9.07,
@@ -224,15 +224,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 15,
+      "days_tracked": 16,
       "max_days": 30,
-      "peak_after_exit": 50.69,
+      "peak_after_exit": 51.39,
       "trough_after_exit": 47.91,
-      "peak_date": "2026-10-13",
+      "peak_date": "2026-10-15",
       "trough_date": "2026-10-01",
-      "missed_upside_pct": 4.26,
+      "missed_upside_pct": 5.7,
       "avoided_downside_pct": 1.46,
-      "latest_price": 50.69
+      "latest_price": 51.39
     }
   },
   {
@@ -276,7 +276,7 @@
     "holding_days": 7,
     "shadow": {
       "active": true,
-      "days_tracked": 28,
+      "days_tracked": 29,
       "max_days": 30,
       "peak_after_exit": 22.05,
       "trough_after_exit": 18.24,
@@ -284,7 +284,7 @@
       "trough_date": "2026-09-23",
       "missed_upside_pct": 17.22,
       "avoided_downside_pct": 3.03,
-      "latest_price": 22.05
+      "latest_price": 21.78
     },
     "post_mortem": {
       "exit_reason": "stop_loss",
@@ -375,7 +375,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 22,
+      "days_tracked": 23,
       "max_days": 30,
       "peak_after_exit": 98.82,
       "trough_after_exit": 77.54,
@@ -383,7 +383,7 @@
       "trough_date": "2026-09-22",
       "missed_upside_pct": 26.42,
       "avoided_downside_pct": 0.81,
-      "latest_price": 95.66
+      "latest_price": 91.93
     }
   },
   {
@@ -450,15 +450,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 16,
+      "days_tracked": 17,
       "max_days": 30,
       "peak_after_exit": 32.6,
-      "trough_after_exit": 25.26,
+      "trough_after_exit": 24.35,
       "peak_date": "2026-10-05",
-      "trough_date": "2026-10-14",
+      "trough_date": "2026-10-15",
       "missed_upside_pct": 15.6,
-      "avoided_downside_pct": 10.43,
-      "latest_price": 25.26
+      "avoided_downside_pct": 13.65,
+      "latest_price": 24.35
     }
   },
   {
@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 23
+    "holding_days": 24
   },
   {
     "symbol": "WBD",
@@ -661,7 +661,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 20,
+      "days_tracked": 21,
       "max_days": 30,
       "peak_after_exit": 13.76,
       "trough_after_exit": 11.68,
@@ -669,7 +669,7 @@
       "trough_date": "2026-10-07",
       "missed_upside_pct": 0.15,
       "avoided_downside_pct": 14.99,
-      "latest_price": 11.71
+      "latest_price": 12.07
     }
   },
   {
@@ -737,15 +737,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 14,
+      "days_tracked": 15,
       "max_days": 30,
       "peak_after_exit": 15.79,
-      "trough_after_exit": 10.57,
+      "trough_after_exit": 10.1,
       "peak_date": "2026-09-30",
-      "trough_date": "2026-10-14",
+      "trough_date": "2026-10-15",
       "missed_upside_pct": 4.5,
-      "avoided_downside_pct": 30.05,
-      "latest_price": 10.57
+      "avoided_downside_pct": 33.16,
+      "latest_price": 10.1
     }
   },
   {
@@ -794,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 15
+    "holding_days": 16
   },
   {
     "symbol": "TWST",
@@ -861,15 +861,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 8,
+      "days_tracked": 9,
       "max_days": 30,
       "peak_after_exit": 188.1,
-      "trough_after_exit": 147.01,
+      "trough_after_exit": 136.91,
       "peak_date": "2026-10-06",
-      "trough_date": "2026-10-14",
+      "trough_date": "2026-10-15",
       "missed_upside_pct": 0.1,
-      "avoided_downside_pct": 21.77,
-      "latest_price": 147.01
+      "avoided_downside_pct": 27.14,
+      "latest_price": 136.91
     }
   },
   {
@@ -937,7 +937,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 13,
+      "days_tracked": 14,
       "max_days": 30,
       "peak_after_exit": 20.34,
       "trough_after_exit": 18.78,
@@ -945,7 +945,7 @@
       "trough_date": "2026-10-09",
       "missed_upside_pct": 2.52,
       "avoided_downside_pct": 5.34,
-      "latest_price": 19.57
+      "latest_price": 20.07
     }
   },
   {
@@ -1013,7 +1013,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 12,
+      "days_tracked": 13,
       "max_days": 30,
       "peak_after_exit": 38.48,
       "trough_after_exit": 34.16,
@@ -1021,7 +1021,7 @@
       "trough_date": "2026-10-02",
       "missed_upside_pct": 12.75,
       "avoided_downside_pct": -0.09,
-      "latest_price": 36.33
+      "latest_price": 37.53
     }
   },
   {
@@ -1089,7 +1089,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 8,
+      "days_tracked": 9,
       "max_days": 30,
       "peak_after_exit": 71.38,
       "trough_after_exit": 65.01,
@@ -1097,7 +1097,7 @@
       "trough_date": "2026-10-08",
       "missed_upside_pct": 8.38,
       "avoided_downside_pct": 1.29,
-      "latest_price": 67.53
+      "latest_price": 67.39
     }
   },
   {
@@ -1165,7 +1165,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 1,
+      "days_tracked": 2,
       "max_days": 30,
       "peak_after_exit": 11.76,
       "trough_after_exit": 9.93,
@@ -1222,7 +1222,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 7
+    "holding_days": 8
   },
   {
     "symbol": "MANE",
@@ -1289,7 +1289,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 1,
+      "days_tracked": 2,
       "max_days": 30,
       "peak_after_exit": 118.49,
       "trough_after_exit": 113.47,
@@ -1335,18 +1335,46 @@
     "fill_source": "scheduled",
     "fill_detect": "env",
     "fill_run_ts": "2026-10-13T21:00:43",
-    "status": "open",
-    "exit_date": null,
-    "exit_price": null,
-    "exit_reason": null,
-    "exit_slippage": null,
-    "exit_commission": null,
-    "total_commission": 1.0,
-    "pnl": null,
-    "pnl_pct": null,
-    "pnl_after_costs": null,
+    "status": "closed",
+    "exit_date": "2026-10-14",
+    "exit_price": 24.72,
+    "exit_reason": "stop_loss",
+    "exit_slippage": 0.0247,
+    "exit_commission": 1.0,
+    "total_commission": 2.0,
+    "pnl": -8.28,
+    "pnl_pct": -5.56,
+    "pnl_after_costs": -10.28,
     "version": "3.0",
-    "holding_days": 1
+    "holding_days": 2,
+    "pnl_remaining": -8.28,
+    "post_mortem": {
+      "exit_reason": "stop_loss",
+      "max_favorable_excursion_pct": -0.01,
+      "locked_pct": -5.54,
+      "gave_back_pct": 0.0,
+      "entry_quality_pct": -0.54,
+      "scaled_out_before_exit": false,
+      "holding_days": 2,
+      "rsi_at_entry": 75.6,
+      "regime_at_entry": "uptrend",
+      "confluence": 3,
+      "verdict": "signal_failed",
+      "analysis": "Never traded above entry. Signal was wrong from the start. RSI 75.6, regime uptrend, confluence 3.",
+      "manual_note": ""
+    },
+    "shadow": {
+      "active": true,
+      "days_tracked": 1,
+      "max_days": 30,
+      "peak_after_exit": 24.95,
+      "trough_after_exit": 24.74,
+      "peak_date": "2026-10-14",
+      "trough_date": "2026-10-14",
+      "missed_upside_pct": 0.93,
+      "avoided_downside_pct": -0.08,
+      "latest_price": 24.95
+    }
   },
   {
     "symbol": "INSM",
@@ -1394,6 +1422,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 1
+    "holding_days": 2
   }
 ]

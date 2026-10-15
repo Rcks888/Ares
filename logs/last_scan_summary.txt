@@ -1,9 +1,6 @@
 candidates_screened:103
-signals_found:2
-signal_details:SKYD | mean_reversion | conf3 | range
-  Price: $7.06 | RSI: 26.5 | Vol: 2.41x
-  Buy: $150 (21.2 shares)
-  SL: $6.17 | TP: $7.77 (+10%) | TS: 10%|||BSP | momentum_breakout | conf3 | uptrend
-  Price: $53.46 | RSI: 73.9 | Vol: 4.88x
-  Buy: $150 (2.8 shares)
-  SL: $41.46 | TP: $63.08 (+18%) | TS: 10%
+signals_found:1
+signal_details:SKHY | mean_reversion | conf2 | range
+  Price: $138.59 | RSI: 29.9 | Vol: 0.26x
+  Buy: $150 (1.1 shares)
+  SL: $128.94 | TP: $152.45 (+10%) | TS: 10%
