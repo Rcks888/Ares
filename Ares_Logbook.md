@@ -2641,6 +2641,181 @@ which writes through the bot's own `_close_trade` and `save_trades`.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
+### 2026-10-12 → 13 — recorder accepted (v3 → v7); MANE in, 5/5 slots
+
+**Trading (the bot ran unchanged, all four cycles).**
+- **21:32 MYT report** (`138ccf0`): 4/5 slots, MANE pending for the next open,
+  INSM queued (conf 3), 103 screened.
+- **00:10 / 01:30 MYT monitor** (`00e35c9`, `879d7d8`): no exits.
+  - EROC −5.0% / −4.8% at $11.98 / $12.01, against a $11.76 trailing stop.
+  - AMP's peak rose to 2.2%.
+- **05:01 MYT report** (`0fe8f3b`):
+  - MANE filled at **$130.12** (1.15 shares, entry 2026-10-12), SL $118.49,
+    TP $153.54. **5/5 slots.**
+  - INSM is still queued; it cannot enter while the slots are full. New signal:
+    DHT, momentum_breakout, conf 3.
+- Official clean sample unchanged: 6 closed, −$57.25, CI includes zero.
+- System:
+  - swap 171 → 250 MB (79 MB paged out in 7.5 h; still labelled "inert")
+  - stall 402 ms. Monday's ⚠️ 1200 ms covered the 64.5 h weekend gap.
+
+**Recorder review: accepted after five delta rounds.** Every finding was in the
+inspection tool or the procedure, never in the recorder. Recorder code is
+unchanged since v2.
+
+| Round | Finding (reviewer) | Fix |
+|---|---|---|
+| v3 | cycles grouped by `invocation_token` (1 in every process); `&& … \|\| echo ok` checks pass on git errors | `tools/inspect_monitor_cycles.py`: commit-delimited cycles, matched by `cycle_id`, fail-closed |
+| v4 | prepended evidence accepted; identity reused from history accepted; minimal forged record accepted | byte-prefix append check; identity seeded from full history; independent record contract |
+| v5 | null lineage / bad timestamps PASS on a zero-position cycle; `inf` accepted | lineage = ran-on commit, digests = committed files; timestamps parsed and ordered; non-finite rejected |
+| v6 | manifests holding only an unrelated file PASS | exact registered path set per manifest, pinned to the recorder |
+| v7 | **accepted**: "no additional blocker found" | — |
+
+- **Evidence at acceptance:**
+  - inspection controls 31/31, with each of the tool's 31 checks
+    mutation-tested and none missed
+  - observer 44/44, verifier 14/14, containment 13/13; isolation verifier
+    47 accepted
+  - `main` 16/16
+  - bundles in `Olympus/review_bundle_monitor_recorder_v3…v7`
+- **Producer limitation (open, non-blocking):** the recorder itself writes
+  `Infinity` with `record_complete: true`. The inspection rejects it.
+
+**Activation (main-flow step 1), 2026-10-13 ~13:40 MYT, inside the window.**
+- **Laptop:**
+  - `main` fast-forwarded to `0fe8f3b` (= PRE)
+  - `git merge --squash recorder/monitor-observer-v1` → **`5fd13e9`**: one
+    parent, 15 files, +5554 / −3, no `logs/`
+  - its tree `9336de7` equals the dry run; the recorder files equal the
+    accepted `28ae5f0`
+- **Rollback pre-test (§3.5), in a throwaway clone:**
+  - the inverse applies cleanly
+  - deployment-owned paths restored exactly
+  - `monitor_trades.py` back to `1f81383a…`
+  - the test revert was not pushed
+- **VPS:**
+  - clean, `--ff-only` `0fe8f3b..5fd13e9`, HEAD = `5fd13e9`
+  - md5 `monitor_trades.py` `22a9da16…`, `engine/monitor_observer.py` `059f3f82…`
+  - Python 3.12.3
+  - on the live tree: 44/44, 14/14, 13/13, 31/31, isolation rc 0
+  - tree still clean afterwards
+- **Rollback (VPS):**
+  `git checkout 0fe8f3b -- monitor_trades.py && rm -f engine/monitor_observer.py`
+- **First recorder cycles:** 00:10 and 01:30 MYT, Oct 14 (16:10 and 17:30 UTC,
+  Oct 13). Inspect in the morning with
+  `tools/inspect_monitor_cycles.py <R> <M1> <M2>`, where `<R>` is the 21:30 MYT
+  report commit.
+- **Nothing is to be pushed to `main` until that inspection is done.** A push
+  makes the bot's `pull --rebase` re-parent its monitor commits, which breaks
+  the commit chain the inspection checks.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
+### 2026-10-13 → 14 — EROC and MANE closed; DHT and INSM in; first recorder night
+
+**21:32 MYT report (Oct 13).**
+- **EROC closed by the report path: trailing_stop, −6.8%** (peak 3.65%,
+  reversal). The TS was $11.76; the last monitor reading was $12.01.
+  - Clean sample: −$57.25 → −$69.43 (−$12.18).
+  - This happened before the first recorder cycle, so EROC is correctly absent
+    from recorder evidence.
+- 4/5 slots, with DHT pending for the next open. INSM queued (conf 3, drift
+  −2.4%). Scan: 103 screened, 0 signals.
+- Clean sample: 7 closed, W 1/7, −$69.43, net/trade −6.66% ± 6.69%, CI includes
+  zero.
+
+**00:10 / 01:30 MYT monitor: the first two cycles with the recorder active.**
+- **MANE closed by the monitor at $118.49, stop_loss (−9.0%)**, one day after
+  entry at $130.12 (peak −0.0%, signal_failed).
+  - Clean sample: −$69.43 → −$84.94 (−$15.51).
+  - The booked −9.0% versus the stop's −8.94% suggests costs on top of the stop.
+    The recorder's `close_price_argument` / `booked_exit_price` /
+    `live_price_at_decision` will show the actual split.
+  - **The first recorded close, so the inspection will check the close path,
+    not just holds.**
+- One Live Check message was received (TMO $663.35 +1.3%, AMP $492.69 +0.1%,
+  ITUB $9.88 −2.4%). Which cycle closed MANE is for the inspection to show.
+
+**05:01 MYT report (Oct 14).**
+- **DHT** entered at $26.17 (5.7 shares), SL $24.74, TP $30.88.
+- **INSM** entered at $98.28 (1.5 shares), SL $93.05, TP $108.11.
+- **5/5 slots.** IFF queued (momentum_breakout, conf 3, uptrend).
+- Clean sample: **8 closed, W 1/8 (12%), −$84.94**, expectancy −$10.62, PF 0.03.
+- Net/trade **−7.13% ± 5.86%**, i.e. about −13.0% to −1.3%.
+  - **The CI no longer includes zero, and the dashboard dropped its CI line
+    instead of saying so.**
+  - That is a wording gap; register it, don't repair it (FROZEN). At n=8 this is
+    not a conclusion about edge.
+- All history: 15 closed, W 3/15, −$107.51.
+- System:
+  - RAM 873/1967 MB
+  - ⚠️ swap 295 → **457 MB** (168 MB paged out in 7.5 h); stall 744 ms
+  - Earlier in the 16.5 h to 21:32: swap 295 MB, 51 MB paged out, stall 935 ms
+  - The swap rise overlaps the first recorder cycles and the Hermes soak on the
+    VPS.
+
+**Recorder inspection, run 2026-10-15 on the VPS: PASS, rc 0.**
+- Command: `inspect_monitor_cycles.py d654695 4e0458c 1a1dd73`
+- Cycle 1 (`4e0458c`, 16:10 UTC): 4 records (AMP, ITUB, MANE, TMO),
+  `cycle_id b8495edb`. **MANE was closed in this cycle.**
+- Cycle 2 (`1a1dd73`, 17:30 UTC): 3 records (AMP, ITUB, TMO),
+  `cycle_id e0752c44`. Its population is correctly anchored on cycle 1's
+  result, without MANE.
+- The first live close passed the full close-path contract (requested,
+  completed, booked price present, save attempted and completed).
+
+### 2026-10-14 → 15 — quiet; DHT and ITUB near their stops; swap recovered
+
+**21:32 MYT report (Oct 14).**
+- 5/5 slots, no closes. IFF ranked (conf 3, drift −0.1%). Scan: 103 screened,
+  0 signals.
+- Clean sample unchanged: 8 closed, −$84.94, −7.13% ± 5.86%.
+- System:
+  - RAM 1014 MB
+  - **swap 457 → 175 MB** (inert, 0 MB paged out in 16.5 h). This coincides
+    with `swappiness=10` being applied on 14 Oct (Hermes work).
+  - ⚠️ stall **1253 ms in 16.5 h**, flagged as a "memory pressure event" even
+    though swap was inert.
+  - Disk 12/47 GB.
+
+**00:10 / 01:30 MYT monitor (recorder cycles 3 and 4).** No exits.
+
+| | 00:10 | 01:30 | stop | gap to stop at 01:30 |
+|---|---|---|---|---|
+| TMO | $673.78 (+2.9%) | $673.26 (+2.9%) | $634.25 | 5.8% |
+| AMP | $492.54 (+0.1%) | $491.72 (−0.1%) | $472.99 | 3.8% |
+| ITUB | $9.64 (−4.7%) | $9.74 (−3.8%) | $9.32 | 4.3% |
+| DHT | $25.12 (−4.0%) | $25.06 (−4.2%) | $24.74 | **1.3%** |
+| INSM | $97.67 (−0.6%) | $97.14 (−1.2%) | $93.05 | 4.2% |
+
+- TMO's live +2.9% is below its recorded 4.6% peak, so no ratchet and no peak
+  advance.
+- DHT is the nearest to its stop.
+
+**05:01 MYT report (Oct 15).**
+- 5/5 slots, no closes. IFF still ranked (drift +1.6%).
+- Scan: 103 screened, 2 signals; SKYD shown (mean_reversion, conf 3, range).
+- Clean sample unchanged. All history: 15 closed, −$107.51.
+- System: RAM 1089 MB, swap 210 MB (inert, 35 MB in 7.5 h), stall 410 ms.
+
+**Recorder inspection, run 2026-10-15 on the VPS: PASS, rc 0.**
+- Command: `inspect_monitor_cycles.py 00f80af 79aa70a eea639d`
+- Cycle 1 (`79aa70a`): 5 records (AMP, DHT, INSM, ITUB, TMO), `cycle_id ca5e4cb5`.
+- Cycle 2 (`eea639d`): 5 records, the same five, `cycle_id fb769ed7`.
+
+**Main-flow step 2 done: CHECKPOINT.**
+- History since activation is one linear chain:
+  `5fd13e9 → d654695 → 4e0458c → 1a1dd73 → f75731b → 00f80af → 79aa70a → eea639d → 3e45d03`,
+  with no rebases and no manual commits.
+- Four recorder cycles, 16 records, one close and 15 holds, all PASS.
+- **Still open:**
+  - the producer can write non-finite values marked complete (the inspection
+    rejects them)
+  - the inspection checks consistency, not price correctness
+  - a cycle without a commit cannot be inspected
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
