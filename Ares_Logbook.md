@@ -2728,9 +2728,20 @@ Phase 5, policy unification and AI modelling remain prohibited.
 - **MANE closed by the monitor at $118.49, stop_loss (−9.0%)**, one day after
   entry at $130.12 (peak −0.0%, signal_failed).
   - Clean sample: −$69.43 → −$84.94 (−$15.51).
-  - The booked −9.0% versus the stop's −8.94% suggests costs on top of the stop.
-    The recorder's `close_price_argument` / `booked_exit_price` /
-    `live_price_at_decision` will show the actual split.
+  - **Recorded split (first real evidence):**
+
+    | Field | Value |
+    |---|---|
+    | `observed_live` | **$118.29** (−9.09%) |
+    | `close_price_argument` | $118.49 (the stop) |
+    | `booked_exit_price` | **$118.37** (= stop × (1 − 0.1%)) |
+
+    - The price had already gone $0.20 through the stop when observed.
+    - The booked fill is $0.08 per share *better* than the observed price,
+      because slippage is applied to the stop, not to the live price.
+    - Here the effect is about $0.09, but for a gap-through it is unbounded
+      (the PCVX question).
+    - Realized −$15.51 = (118.37 − 130.12) × 1.15 − $2.00 in costs.
   - **The first recorded close, so the inspection will check the close path,
     not just holds.**
 - One Live Check message was received (TMO $663.35 +1.3%, AMP $492.69 +0.1%,
@@ -2772,8 +2783,12 @@ Phase 5, policy unification and AI modelling remain prohibited.
 - Clean sample unchanged: 8 closed, −$84.94, −7.13% ± 5.86%.
 - System:
   - RAM 1014 MB
-  - **swap 457 → 175 MB** (inert, 0 MB paged out in 16.5 h). This coincides
-    with `swappiness=10` being applied on 14 Oct (Hermes work).
+  - **swap 457 → 175 MB** (inert, 0 MB paged out in 16.5 h).
+    - *Corrected 15 Oct:* this was **not** swappiness. Swappiness does not
+      drain swap, and the Hermes snapshot at 08:37 UTC already showed 174 MB.
+    - A ~280 MB drop means a process that held swapped-out pages exited. It is
+      consistent with the 265 MB `main` process started at ~06:22 UTC (see the
+      host note below).
   - ⚠️ stall **1253 ms in 16.5 h**, flagged as a "memory pressure event" even
     though swap was inert.
   - Disk 12/47 GB.
@@ -2813,6 +2828,76 @@ Phase 5, policy unification and AI modelling remain prohibited.
     rejects them)
   - the inspection checks consistency, not price correctness
   - a cycle without a commit cannot be inspected
+
+**Host note: swap and stall, 12–14 Oct** (from the Hermes thread's analysis).
+- **Swap-out bursts:** 25k pages on 12 Oct and 43k pages on 13 Oct, both within
+  20:52–21:07 UTC.
+  - Both overlap `run_ares.sh` at 21:00 UTC (21:00:01–21:01:29).
+  - They were eviction bursts, not thrashing: very few pages came back in,
+    about 1 GB stayed free, and load was 0.06.
+- **The Ares dashboard samples inside that burst.** `build_dashboard.py` runs at
+  the end of the 21:00 run, so:
+  - the 05:01 MYT reading of 457 MB / ⚠️ is mid-burst
+  - the tail of the burst lands in the next window, a likely source of the
+    21:32 MYT ⚠️ stall (1253 ms)
+- **The "Stall" figure** is the PSI `full` total delta against
+  `STALL_WARN_MS = 1000`. 1.25 s in 16.5 h is about 0.002% of wall time, so
+  "memory pressure event" overstates it, like the word "thrashing". Register,
+  don't repair (FROZEN).
+- **Environment change, 14 Oct:** `vm.swappiness` 60 → 10, persisted in
+  `/etc/sysctl.d/99-swappiness.conf`, applied by the Hermes thread.
+  - It is host-wide and touches no Ares code or config, so the freeze holds.
+  - **Swap and stall readings before and after 14 Oct are not comparable.**
+- **The 265 MB `main` process is identified (15 Oct): it belongs to Hermes, not
+  Ares.**
+  - PID 876512: exe `/usr/lib/wine/wine64`, cwd `/root/Hermes`,
+    cgroup `cron.service`.
+  - Launched by a Hermes cron job at 06:22:17 UTC on 14 Oct, now reparented to
+    PID 1, RSS 227 MB.
+  - It has its own `Xvfb` (PID 876392, started 06:21:58).
+  - The Ares gateway is not involved: its `Xvfb` (PID 1241) has been up since
+    11 Sep, and `pgrep -f ibgateway` does not match PID 876512.
+  - Only two Xvfb exist, so there is no display leak.
+  - The ~280 MB swap release is consistent with the previous wine/MT5
+    instance exiting at that restart.
+  - Root cause (Hermes, 15 Oct): unattended-upgrades updated libx11 at
+    06:21:57, and needrestart restarted `cron.service` and `xvfb.service`
+    (Hermes :99). At its next connection the MT5 terminal installed build
+    6259 and relaunched itself. This has happened 6 of 6 times since 11 Sep,
+    always in the 05:40–07:00 UTC upgrade window, outside every Ares cron time.
+  - Ares exposure: none. `cron.service` has `KillMode=process`, so the
+    cron-launched gateway survives a cron restart. Ares :1 is not a systemd
+    unit, so needrestart only flags its old libx11 and never restarts it.
+- **swappiness=10, first night (14 Oct 21:07 UTC):** swap was flat at 210 MB
+  and there was no alert. Hermes confirms this over the week.
+- **Pending host reboot** (kernel 6.8.0-139 running; libc6 and kernels
+  142/146/147 installed). It is not automatic. A joint weekend test is
+  planned; Ares owns choosing the slot.
+  - There is no `@reboot` entry or systemd unit for Ares. The only automatic
+    recovery is `restart_gateway.sh` on weekdays at 13:00 UTC, which starts
+    `Xvfb :1` and the gateway 30 minutes before the first `run_ares.sh`.
+- **Restart-path check (15 Oct 05:07 UTC, no reboot): PASS.**
+  - The gateway was down, which is normal at that hour. `restart_gateway.sh`
+    started it, it listened on `*:4002` within minutes, and the redundant
+    `Xvfb :1` launch exited harmlessly (only PID 1241 remains).
+  - Gateway JRE: `/opt/i4j_jres/.../17.0.16.0.101-zulu/bin/java`, the IB
+    install4j bundle. It is neither the system openjdk nor
+    `/root/jdk-17.0.12`, so the 23 Sep openjdk-17/21 upgrade does not
+    affect it.
+  - The gateway was stopped again at about 05:10 UTC, restoring the normal
+    state for the 13:00 UTC cron. Both Xvfb (:1 and :99) were untouched.
+  - The VPS fast-forwarded to `abfb784` (checkpoint-2026-10-15) and the tree
+    is clean.
+  - Side effect: the manual start overwrote `/root/ares/gateway.log`
+    (`start_gateway.sh` uses `>`), so the log from the 14 Oct instance is
+    lost.
+  - The weekend reboot test stays open. Use the same checks, then stop the
+    gateway again afterwards.
+- **Next week, only if the 21:07 UTC swap-out persists at swappiness 10:**
+  observe the memory peak of the 21:00 run with a host-side sampler outside
+  the repo (Ares stays frozen).
+  - One hypothesis to test: the price cache grew from 866 to 943 symbols in
+    four days.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
