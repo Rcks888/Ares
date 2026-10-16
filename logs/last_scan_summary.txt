@@ -1,3 +1,6 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:1
+signal_details:AVTR | momentum_breakout | conf3 | uptrend
+  Price: $16.42 | RSI: 67.3 | Vol: 3.23x
+  Buy: $150 (9.1 shares)
+  SL: $15.82 | TP: $19.38 (+18%) | TS: 10%

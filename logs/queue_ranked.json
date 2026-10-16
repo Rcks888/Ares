@@ -15,10 +15,10 @@
       "near_52w_high",
       "big_movers_up"
     ],
-    "checked_at": "2026-10-16T13:31:02",
-    "drift_pct": 2.37,
+    "checked_at": "2026-10-16T21:01:04",
+    "drift_pct": 2.81,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 90.29
+    "live_price": 90.68
   }
 ]
