@@ -3010,9 +3010,9 @@ Phase 5, policy unification and AI modelling remain prohibited.
 - **SKYD TS $6.18 → $6.44**, its first trail lift: the 10% trail from a peak
   of about $7.15 is $6.44, above the $6.18 SL. This shows the trail has no
   activation level (same as EROC's 11.76 at a 3.6% peak).
-- Queue: IFF only (drift +2.4%). **BSP has left the queue** (it was #2 at
-  05:01, drift +4.3%); the dashboard gives no reason. Scan: 103 screened,
-  0 signals.
+- Queue: IFF only (drift +2.4%). **BSP was dropped by design**:
+  `queue_events.jsonl` 13:31:03 UTC, "drifted +7.3% (max ±5.0%)" (signal
+  $53.46, live $57.38). Scan: 103 screened, 0 signals.
 - System: RAM 996 MB, swap 205 MB (inert, 3 MB in 16.5 h), stall 449 ms,
   cache 1008 symbols.
 
@@ -3037,10 +3037,17 @@ Phase 5, policy unification and AI modelling remain prohibited.
 **05:01 MYT report (Oct 17).**
 - 5/5 slots, no fills, no closes. Clean sample unchanged.
 - Queue: IFF (drift +2.8%). Scan: 103 screened, 1 signal, **AVTR**
-  (momentum_breakout, conf 3, uptrend), which **does not appear in the
-  queue**. Earlier nights' conf-3 signals (IFF 14 Oct, BSP 16 Oct) did.
-  - Registered, with the BSP removal, for a read-only check of
-    `logs/queue_events.jsonl`. Not a repair (FROZEN).
+  (momentum_breakout, conf 3, uptrend), not shown in the queue.
+  - **Display lag, not a defect.** AVTR *was* queued (`queue_events.jsonl`
+    21:01:26 UTC; in `signal_queue.json` at `f83d400`).
+  - The dashboard shows only the ranked queue, `queue_ranked.json`, which is
+    rebuilt at the next report. At `f83d400` it holds IFF alone.
+  - The same thing happened on 15 Oct at 05:01 MYT. BSP and SKYD were in
+    `signal_queue.json` at `3e45d03` but not on the dashboard; BSP showed up
+    ranked at the next report.
+  - Expect AVTR in the ranked queue at Mon 19 Oct 21:30 MYT. The dashboard
+    wording gap (unranked additions not shown) is registered, not repaired
+    (FROZEN).
 - System:
   - RAM 1049 MB, swap 205 → **296 MB (95 MB paged out in 7.5 h)**
   - stall 445 ms (no flag)
