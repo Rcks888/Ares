@@ -2893,11 +2893,218 @@ Phase 5, policy unification and AI modelling remain prohibited.
     lost.
   - The weekend reboot test stays open. Use the same checks, then stop the
     gateway again afterwards.
+- **Reboot test agreed with Hermes: Sat 17 Oct, 00:00–04:00 UTC (08:00–12:00
+  MYT).** Fallback is Sat 24 Oct.
+  - Final plan (Hermes, 15 Oct): reboot at 01:00 UTC (09:00 MYT). Both
+    stacks' checks should be done by about 01:30 UTC. Ares's steps were
+    accepted as written.
+  - The swappiness decision now uses the post-reboot 21:07 UTC samples from
+    19–23 Oct. The 14–16 Oct samples are supporting evidence only.
+  - Hermes-owned, no Ares sign-off needed: excluding `xvfb.service` from
+    needrestart, and a soak alert for MT5 connects over 10 s or a build
+    change.
+  - Hermes-side artefact: the manual Saturday soak record shows a meaningless
+    negative swap/stall delta and raises no alert. Its Mon 00:07 UTC reading
+    is valid.
+  - Run the Ares gateway check before about 03:30 UTC, ahead of IB's nightly
+    reset at about 23:45 ET (03:45 UTC).
+  - Known artefact: the reboot resets `/proc` PSI and vmstat counters.
+    `build_dashboard.py` clamps the negative delta to 0, so Monday 19 Oct's
+    21:30 MYT dashboard will falsely show 0 ms stall and 0 MB paged out over a
+    window of about 64 h. The next reading (Tue 05:01 MYT) is valid again.
+  - Final confirmation: inspect Monday's monitor cycles with
+    `tools/inspect_monitor_cycles.py`. The expected result is PASS.
 - **Next week, only if the 21:07 UTC swap-out persists at swappiness 10:**
   observe the memory peak of the 21:00 run with a host-side sampler outside
   the repo (Ares stays frozen).
   - One hypothesis to test: the price cache grew from 866 to 943 symbols in
     four days.
+
+### 2026-10-15 → 16 — DHT stopped out; SKYD in; small 21:00 swap burst returns
+
+**21:32 MYT report (Oct 15).**
+- **DHT closed by the report path: stop_loss, −5.6%** (peak −0.01%,
+  signal_failed), one day after entry at $26.17.
+  - The last monitor reading was $25.06, 1.3% above the $24.74 stop.
+  - Clean sample: −$84.94 → −$95.22 (−$10.28). This matches
+    (24.74 × 0.999 − 26.17) × 5.7 − $2.00 = −$10.29.
+  - It closed before the night's monitor cycles, so DHT is correctly absent
+    from recorder cycles 5 and 6.
+- 4/5 slots, SKYD pending for the next open. Ranked queue: IFF (conf 3, drift
+  +2.8%), BSP (conf 3, drift −4.7%). Scan: 103 screened, 1 signal (SKHY,
+  mean_reversion, conf 2).
+- Clean sample: **9 closed, W 1/9 (11%), −$95.22**, expectancy −$10.58, PF 0.02.
+  Net/trade −7.10% ± 5.17% (about −12.3% to −1.9%); the CI line is still
+  missing (the wording gap registered on 14 Oct).
+- All history: 16 closed, W 3/16, −$117.79.
+- System: RAM 1049 MB, swap 160 MB (inert, 4 MB in 16.5 h), stall 925 ms
+  (below the 1000 ms flag). This window held the 05:40–07:00 UTC upgrade
+  window and the 05:07 UTC manual gateway start.
+
+**00:10 / 01:30 MYT monitor (recorder cycles 5 and 6).** No exits.
+
+| | 00:10 | 01:30 | stop | gap to stop at 01:30 |
+|---|---|---|---|---|
+| TMO | $691.29 (+5.6%) | $692.88 (+5.9%) | $634.25 | 8.5% |
+| AMP | $495.62 (+0.7%) | $495.82 (+0.8%) | $472.99 | 4.6% |
+| ITUB | $9.62 (−4.9%) | $9.58 (−5.3%) | $9.32 | **2.7%** |
+| INSM | $99.13 (+0.9%) | $98.12 (−0.2%) | $93.05 | 5.2% |
+
+- TMO's peak advanced (live $692.88), but the 10% trail from it is $623.59,
+  below the $634.25 SL, so the TS stays at the SL. The trail only lifts the
+  TS once the peak passes $704.72 (+7.67% over entry).
+- ITUB is now the nearest to its stop.
+- Not inspected; the next required inspection is Monday's cycles after the
+  reboot.
+
+**05:01 MYT report (Oct 16).**
+- **SKYD** entered at $7.07 (21.1 shares), SL $6.18, TP $7.77.
+  - The TP is +9.9% but the SL is −12.6%, so reward:risk is below 1 at entry.
+    Register, don't repair (FROZEN).
+- **5/5 slots.** Peaks: TMO 4.6% → 6.4%, INSM −0.0% → 0.9%; TS unchanged.
+- Ranked queue: IFF (drift +2.4%), BSP (drift +4.3%). Scan: 103 screened,
+  2 signals; BSP shown (momentum_breakout, conf 3, uptrend).
+- Clean sample unchanged: 9 closed, −$95.22.
+- System:
+  - RAM 1074 MB, swap 160 → **202 MB (42 MB paged out in 7.5 h)**
+  - ⚠️ stall **1055 ms in 7.5 h**, just over the 1000 ms flag
+  - cache 987 symbols (866 on 12 Oct)
+- **Attribution: the 21:00 UTC Ares run, not a Hermes restart.**
+  - The window is 13:32–21:01 UTC on 15 Oct. It does not contain the
+    05:40–07:00 UTC upgrade window, where every needrestart/MT5 restart has
+    occurred.
+  - It ends with `run_ares.sh` at 21:00 UTC, and `build_dashboard.py` samples
+    inside that run, the same pattern as 12 and 13 Oct.
+  - **Hermes event, 15 Oct 19:07 MYT (11:07 UTC):** "MT5 connection lost,
+    skipping cycle (1st failure)". The terminal restarted at the next Hermes
+    cycle. This was not the upgrade-window restart.
+    - It falls in the *previous* window (21:01–13:32 UTC, read at 21:32 MYT):
+      stall 925 ms, 4 MB paged out, no flag. It is not inside the flagged
+      window.
+    - Possible indirect link, unproven: a freshly relaunched terminal has
+      idle pages that the kernel evicts at the 21:00 run peak. Hermes's
+      15 Oct 21:07 UTC soak sample can show whether those pages were MT5's.
+    - This is the second MT5 connection loss in 3 days (13 Oct 11:52 UTC,
+      15 Oct 11:07 UTC). Hermes's "a single occurrence needs no action" no
+      longer applies. The item belongs to Hermes; Ares has no exposure.
+    - *Checked 17 Oct 00:5x UTC, before the reboot:* Hermes Xvfb :99 is PID
+      937657, `ActiveEnterTimestamp` Thu 15 Oct 06:07:53 UTC, NRestarts=0.
+      - So a 7th upgrade-window `xvfb.service` restart happened on 15 Oct.
+        It is the usual needrestart pattern, five hours **before** the
+        11:07 UTC connection loss. The connection loss is a separate event,
+        like 13 Oct's.
+      - `journalctl -u xvfb.service` shows no entries, so the journal cannot
+        confirm what triggered it. The Hermes upgrade logs can.
+- **swappiness=10, second night:** the burst returned but was smaller,
+  +42 MB against +99 MB (12 Oct) and +163 MB (13 Oct); 14 Oct was flat.
+  - Two nights, mixed. Hermes's 15 Oct 21:07 UTC soak sample gives the page
+    count.
+  - No action. The decision stays with the post-reboot 19–23 Oct samples.
+  - The cache-growth hypothesis is still open (+121 symbols in four days).
+
+### 2026-10-16 → 17 — no exits; ITUB within 1% of its stop; swap burst +95 MB
+
+**21:31 MYT report (Oct 16).**
+- 5/5 slots, no closes. Clean sample unchanged: **9 closed, W 1/9, −$95.22**.
+- Peaks: TMO 6.4% → 6.5%, INSM 0.9% → 1.1%, SKYD −0.0% → 1.1%.
+- **SKYD TS $6.18 → $6.44**, its first trail lift: the 10% trail from a peak
+  of about $7.15 is $6.44, above the $6.18 SL. This shows the trail has no
+  activation level (same as EROC's 11.76 at a 3.6% peak).
+- Queue: IFF only (drift +2.4%). **BSP has left the queue** (it was #2 at
+  05:01, drift +4.3%); the dashboard gives no reason. Scan: 103 screened,
+  0 signals.
+- System: RAM 996 MB, swap 205 MB (inert, 3 MB in 16.5 h), stall 449 ms,
+  cache 1008 symbols.
+
+**00:10 / 01:30 MYT monitor (recorder cycles 7 and 8).** No exits.
+
+| | 00:10 | 01:30 | stop (TS) | gap to stop at 01:30 |
+|---|---|---|---|---|
+| TMO | $684.98 (+4.7%) | $687.90 (+5.1%) | $634.25 | 7.8% |
+| AMP | $502.80 (+2.2%) | $497.92 (+1.2%) | $472.99 | 5.0% |
+| ITUB | $9.46 (−6.5%) | $9.41 (−7.0%) | $9.32 | **1.0%** |
+| INSM | $97.17 (−1.1%) | $96.64 (−1.7%) | $93.05 | 3.7% |
+| SKYD | $7.19 (+1.7%) | $6.86 (−3.0%) | $6.47 | 5.7% |
+
+- The monitor ratcheted SKYD: a new peak of $7.19 × 0.9 = $6.47 (TS $6.44 →
+  $6.47). This is the known monitor-writes-state behaviour; the morning report
+  carried it through (peak 1.7%, TS $6.47).
+- ITUB at $9.41 is the closest any open position has come to its stop this
+  week, $0.09 above it.
+- Cycles 7 and 8 have not been inspected (not required; the next required
+  inspection is Monday's cycles).
+
+**05:01 MYT report (Oct 17).**
+- 5/5 slots, no fills, no closes. Clean sample unchanged.
+- Queue: IFF (drift +2.8%). Scan: 103 screened, 1 signal, **AVTR**
+  (momentum_breakout, conf 3, uptrend), which **does not appear in the
+  queue**. Earlier nights' conf-3 signals (IFF 14 Oct, BSP 16 Oct) did.
+  - Registered, with the BSP removal, for a read-only check of
+    `logs/queue_events.jsonl`. Not a repair (FROZEN).
+- System:
+  - RAM 1049 MB, swap 205 → **296 MB (95 MB paged out in 7.5 h)**
+  - stall 445 ms (no flag)
+  - cache 1029 symbols (+163 since 12 Oct)
+- **swappiness=10, third night:** the 21:00 UTC burst is back at about the
+  pre-change size. The nights so far: 14 Oct flat, 15 Oct +42 MB, 16 Oct
+  +95 MB, against +99 MB (12 Oct) and +163 MB (13 Oct) at swappiness 60.
+  - Low stall each night (≤ 449 ms) means it is still eviction, not pressure.
+  - No action. The reboot reset swap, so the deciding 19–23 Oct samples are
+    a clean baseline. The cache-growth hypothesis stays open.
+
+### 2026-10-17 (Sat) — joint host reboot test: Ares PASS
+
+**Before the reboot (00:49 UTC).**
+- Kernel 6.8.0-139, up 35 days. HEAD `f83d400` (Ares V3 report
+  2026-10-16_21:01), clean tree.
+- crontab md5 `cb91ed9c51ee0ca9eb83388df640347c`.
+- Gateway stopped. Xvfb :1 PID 1241, Hermes :99 PID 937657.
+
+**Reboot at about 01:02 UTC (09:02 MYT)**, run once by the user.
+
+**After the reboot (01:05 UTC).**
+- Kernel **6.8.0-147-generic**, so the pending kernel and libc6 are now active.
+- cron is active, and the crontab md5 is unchanged.
+- The clock is synchronized and NTP is active, so the inspection tool's 2 s
+  clock slack holds.
+- HEAD `f83d400` is unchanged and the tree is clean.
+- Only Xvfb :99 came back (PID 778, systemd). Ares :1 was absent, as
+  expected, because Ares has no boot autostart.
+
+**Gateway start test (01:06–01:07 UTC): PASS.**
+- `restart_gateway.sh` reported "DOWN — restarting...", then "restarted
+  successfully" at 01:07:26.
+- java (PID 1419) is listening on `*:4002`. Xvfb :1 was started by the script
+  (PID 1382).
+- The gateway was then stopped with `pkill -f ibgateway`, which confirmed
+  "gateway stopped". Both Xvfb (:1 PID 1382, :99 PID 778) stay up, and the
+  tree is still clean.
+- This is the normal weekend state for the Mon 13:00 UTC cron.
+
+**Hermes side (reported by the Hermes thread): FAIL, then PASS after a fix.**
+- xvfb.service and the rpyc bridge recovered by themselves.
+- The MT5 terminal installed pending build 6271, which refused to start on
+  Wine 9.0 ("A debugger has been found running in your system"). Any terminal
+  restart would have hit this; the reboot only triggered it.
+- Fix: Ubuntu wine packages removed, WineHQ repo added, winehq-stable 11.0
+  installed. The terminal connected at 01:50 UTC.
+  - The install pulled in avahi-daemon; it is disabled and stopped, and UDP
+    5353 is closed.
+  - WineHQ is not in the unattended-upgrades origins, so Wine won't upgrade
+    itself.
+  - Prefix backup: `/root/wine_prefix_backup_20261017.tgz`.
+- **Ares exposure: none.** No Ares code, config, Java, gateway or Xvfb :1 was
+  touched. Wine is Hermes-only.
+
+**Still to confirm:**
+- Mon 19 Oct, 13:00 UTC: the cron gateway start.
+- Mon 19 Oct, 21:30 MYT dashboard (window starts at the reboot):
+  - paged-out should be about 0;
+  - stall may show ⚠️, because the window holds about 2.7 s of stall from the
+    Hermes maintenance (01:32–01:50 UTC: tar, apt, wineboot).
+  - Either way it is a reboot/maintenance artefact, not a reading.
+- Tue 20 Oct: run `inspect_monitor_cycles.py` on Monday's two monitor cycles;
+  expect PASS.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
