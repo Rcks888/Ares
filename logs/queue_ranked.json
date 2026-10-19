@@ -1,24 +1,23 @@
 [
   {
-    "symbol": "IFF",
+    "symbol": "AVTR",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
-    "category": "momentum_candidate",
+    "category": "volume_spike",
     "confluence": 3,
-    "price_at_signal": 88.2,
-    "rsi_at_signal": 61.3,
-    "stdev_20": 0.013,
-    "vol_ratio": 1.59,
-    "date_added": "2026-10-13",
+    "price_at_signal": 16.42,
+    "rsi_at_signal": 67.3,
+    "stdev_20": 0.0184,
+    "vol_ratio": 3.23,
+    "date_added": "2026-10-16",
     "screens": [
-      "near_52w_high",
-      "big_movers_up"
+      "unusual_volume"
     ],
-    "checked_at": "2026-10-16T21:01:04",
-    "drift_pct": 2.81,
+    "checked_at": "2026-10-19T13:30:43",
+    "drift_pct": -0.18,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 90.68
+    "live_price": 16.39
   }
 ]
