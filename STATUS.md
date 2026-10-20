@@ -1,6 +1,6 @@
 # Ares: current status
 
-Last updated: 2026-10-15. This page is the entry point. History is in
+Last updated: 2026-10-20. This page is the entry point. History is in
 `Ares_Logbook.md`, full reference in `README.md`, finished investigations in
 `archive/`. Everything removed in the cleanup is kept at tag
 `checkpoint-2026-10-12`.
@@ -95,6 +95,15 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
    timeout.** A stalled monitor can block the report (Oct 1).
 5. **SSH password login is enabled on the VPS**, and outsiders are trying
    passwords.
+6. **The Finviz screener returns nothing (since Mon 19 Oct 13:32 UTC).**
+   - Finviz moved and redesigned its screener page: `/screener/stocks`, no
+     HTML tables.
+   - `finvizfinance` 1.5.0, the newest version, silently returns `None`.
+   - Every report screens only SPY/QQQ/IWM ("3 screened"), so no new signals
+     come in. The fixed-watchlist fallback never fires, and the dashboard
+     gives no warning.
+   - Decision 2026-10-20: **wait, no change** (FROZEN). Revisit at the weekly
+     checkpoint. Details are in the logbook.
 
 ## Open questions (not being worked on)
 

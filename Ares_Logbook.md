@@ -3115,6 +3115,102 @@ Phase 5, policy unification and AI modelling remain prohibited.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
+### 2026-10-19 → 20 — Finviz screener broken (0 candidates); reboot confirmed; swap burst +171 MB
+
+**Reboot test closed.**
+- Mon 13:00 UTC: the cron gateway start worked. Both reports ran, and both
+  monitor cycles got live prices.
+- The 21:32 MYT dashboard showed "0 MB paged out, 0 ms stall in 64.5 h". This
+  is **not a reading**:
+  - `build_dashboard.py` clamps negative deltas to zero
+    (`max(0, now − prev)`).
+  - The reboot reset the kernel counters, so the delta against Friday's
+    baseline was negative.
+  - The ~2.7 s Hermes maintenance stall was hidden, not absent.
+  - The 05:01 window (both readings after the reboot) is the first valid one.
+
+**21:32 MYT report (Oct 19).**
+- 5/5 slots, no fills, no closes. Clean sample unchanged: **9 closed, W 1/9,
+  −$95.22**. Peaks unchanged.
+- Queue: **AVTR ranked #1** (drift −0.2%), as predicted on 17 Oct.
+- **Scan: 3 screened, 0 signals** (normally about 103). See the Finviz entry
+  below.
+- System: RAM 965 MB, swap 138 MB, cache 1074 symbols.
+
+**00:10 / 01:30 MYT monitor (recorder cycles 9 and 10).** No exits, no
+ratchets.
+
+| | 00:10 | 01:30 | stop (TS) | gap to stop at 01:30 |
+|---|---|---|---|---|
+| TMO | $677.09 (+3.4%) | $677.60 (+3.5%) | $634.25 | 6.4% |
+| AMP | $484.46 (−1.5%) | $483.36 (−1.8%) | $472.99 | 2.1% |
+| ITUB | $9.46 (−6.5%) | $9.41 (−7.0%) | $9.32 | **1.0%** |
+| INSM | $95.78 (−2.5%) | $96.02 (−2.3%) | $93.05 | 3.1% |
+| SKYD | $6.71 (−5.1%) | $6.71 (−5.1%) | $6.47 | 3.6% |
+
+- **Inspection: PASS, rc 0.** Command:
+  `inspect_monitor_cycles.py 59c71c6 63b1b4f ff5b3cb`.
+  - Cycle `dbd6fc0c` (`63b1b4f`) and cycle `0d0c4c97` (`ff5b3cb`).
+  - 5 records each: AMP, INSM, ITUB, SKYD, TMO.
+  - The recorder is unaffected by the reboot.
+
+**05:01 MYT report (Oct 20).**
+- 5/5 slots, no changes. AVTR still ranked #1 (drift −0.8%). Scan: 3 screened,
+  0 signals.
+- **Cache flat at 1074 symbols**, the first night without growth. This is a
+  second symptom of the empty screener.
+- System:
+  - RAM 972 MB, swap 138 → **308 MB (171 MB paged out in 7.5 h)**
+  - ⚠️ **stall 1386 ms**, above the 1000 ms flag
+- **swappiness=10, first deciding sample (19 Oct 21:07 UTC):** the largest
+  burst so far.
+  - The setting survived the reboot: `vm.swappiness = 10` and
+    `/etc/sysctl.d/99-swappiness.conf` both confirmed.
+  - This night's Ares 21:00 run did *less* work than usual: 3 symbols
+    screened, cache flat. That weakens the hypothesis that Ares's price cache
+    growth drives the burst.
+  - Hermes owns the swappiness decision (19–23 Oct samples). Ares only
+    supplies these figures.
+
+**Finviz screener broken, cause found (read-only diagnosis, 20 Oct).**
+- `cron.log`:
+  - Fri 13:32 and 21:01 UTC worked (102 and 455 unique candidates).
+  - Mon 13:32 and 21:01 UTC: all five screens returned `0 stocks` with **no
+    `error` line**.
+  - "3 screened" is just SPY/QQQ/IWM, which `daily_report.py` always appends.
+- `last_scan_summary.txt`: `candidates_screened:3`, `signals_found:0`.
+- Library: `finvizfinance` **1.5.0** in `venv`, which is also the newest on
+  PyPI, so no upgrade fixes it. `Overview().screener_view()` returns `None`.
+- Cause: **Finviz changed its site over the weekend.**
+  - `/screener.ashx` now gives 301 → `/screener` → `/screener/stocks`.
+  - The final page is a real screener page (HTTP 200, 357 KB, title "Stock
+    Screener - Overview").
+  - The page has 0 `quote.ashx?t=` links; ticker links are now `/quote?t=`
+    (40 on the page).
+  - The page has **no `<table>` elements**. The library parses a table, finds
+    none and returns `None` silently.
+- **Not reboot-related.** It broke between Fri 21:01 and Mon 13:32 UTC, and
+  the reboot falls in that window only by coincidence.
+- Impact:
+  - No new candidates or signals until it is fixed, so the clean sample stops
+    growing. It is not contaminated: no trade was made on a wrong universe.
+  - Still normal: open positions, stops (report path and the monitor's live
+    IB prices), queue validation (AVTR), the cache (prune only > 30 days) and
+    the recorder.
+- **Registered gap (silent failure):**
+  - `_run_screen` turns an empty or `None` result into `[]` without raising.
+  - So the fixed-watchlist fallback in `daily_report.py` never fires, and the
+    dashboard shows no warning; "3 screened" is the only visible sign.
+- **Decision (user, 20 Oct): Option A, wait.**
+  - No code, config or venv change while FROZEN.
+  - Rejected for now:
+    - fixed-watchlist fallback: changes the universe and the sample
+      definition
+    - own parser for the new page: a code change that needs review
+  - Revisit at the weekly checkpoint if upstream has not fixed it.
+
+Phase 5, policy unification and AI modelling remain prohibited.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
