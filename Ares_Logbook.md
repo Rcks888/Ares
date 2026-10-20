@@ -29,6 +29,7 @@ Direct links to the significant defects, newest first.
 
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
+| [Oct 20](#fill-before-decision) | 🔴 | Intra-session admissions filled at that session's open, which preceded the decision | **11 of 21 fills** booked at an unattainable price; 9 of 14 `clean_v3` entries affected (−0.79% to +3.49% against the decision price). Recorded, not fixed (FROZEN) |
 | [Sep 21](#tmo-nearmiss) | 🟠 | Missing `stdev_20` silently replaced by 0.05 | TMO would have opened trade #1 of `clean_v3` at **3.2x intended risk** under a clean label. Caught before the fill |
 | [Sep 24](#b-postmortem) | 🟠 | `_build_post_mortem` reads `rsi_extreme`; producer emits `emotional_extreme` | 2 of 5 branches unreachable; `emotional_extreme` and `mean_reversion_complete` recorded as `other` with no diagnostics. **4th string-mismatch defect** |
 | [Sep 24](#b-postmortem) | 📐 | `gave_back_pct` unguarded for trades that never rose | PINS reported +5.90% "giveback" equal to its loss. Would have inflated any average — same shape as the Sep 21 scale-out bias |
@@ -3287,6 +3288,99 @@ Only Hermes's sysstat and soak data can place swap growth in time.
 - The 14 Oct 06:22 UTC MT5 relaunch was unattended-upgrades → needrestart →
   `xvfb.service`. This matches the 15 Oct entry.
 - swappiness stays at 10. No host changes proposed.
+
+<a id="fill-before-decision"></a>
+### 2026-10-20 — step 3 started: admission routes audited; 11 of 21 fills booked at an open that preceded the decision
+
+No action. Recorded, not fixed; Ares stays FROZEN. Full audit:
+`archive/AUDIT_2026-10-20_admission_routes.md` (input to step 3,
+`DESIGN_admission_capture_v1.md`).
+
+**Admission routes, all 21 trades reconstructed.** Method: the first commit
+whose `logs/pending_signals.json` holds the trade's symbol and `signal_date`,
+cross-checked against `queue_events` `promoted` timestamps.
+
+| Route | Call site | Trades |
+|---|---|---|
+| R1 direct scan | `daily_report.py:119` `open_trade(s)` | 10: HAFN, DYN, ABM, PINS, ECO, SDGR, SECZ, PCVX, EROC, ITUB |
+| R2 queue → scan | `daily_report.py:64` `promote_queue(source="scan")` | 6: TMO, AMP, TWST, MANE, DHT, SKYD |
+| R3 queue → monitor | `monitor_trades.py:280` `promote_queue(source="monitor")` | 5: WBD, NEOG, BCE, GMAB, INSM |
+
+For the 11 queue trades, the commit subject and the `promoted` timestamp agree
+11/11. **EROC and ITUB were R1, admitted by the 10-06 21:01 report.** That
+closes `initiating_source: unknown` in the 10-07 reconciliation (§2 item 6).
+
+This was reconstructed by inference, not read from evidence. It works only because
+every cron run commits the pending file, and R1 shows up only as the absence
+of queue events. The admission recorder is still needed.
+
+**🔴 Finding: same-session fill at a pre-decision open.**
+`execute_pending_signals` fills at `df.iloc[-1]['Open']` as soon as the last bar
+is today's (`tracker.py:120-130`). A pending created *during* a session is
+therefore filled by the 21:00 run at **that same session's open**, which
+happened before the admission decision. The intended rule is next-bar
+execution, "signal day N → buy at day N+1 open" (Sep 8–12 entry;
+`daily_report.py:121`, `tracker.py:629`).
+
+The Sep 18 fix (fill after refresh, plus the bar-date guard) stopped fills
+using **yesterday's** open. It did not check that the bar's open came
+**after** the admission. Both defects come from one missing check: nothing
+compares the fill bar's time with the decision time.
+
+| Admitted by | Trades | Decision after the open by |
+|---|---|---|
+| 13:3x UTC report | DYN, TMO, PCVX, MANE, DHT, SKYD | ~1–2 min |
+| 16:10 UTC monitor | NEOG, BCE, GMAB, INSM | ~2 h 40 min |
+| 17:30 UTC monitor | WBD | ~4 h |
+
+Unaffected (admitted at 21:01 or pre-market, filled next session): HAFN,
+ABM, PINS, ECO, SDGR, SECZ, AMP, TWST, EROC, ITUB.
+
+Booked entry against the price the decision saw (queue trades, where
+`queue_events` holds the decision price):
+
+| Trade | Decision price | Booked entry | Diff |
+|---|---|---|---|
+| NEOG | 13.74 | 14.22 | +3.49% |
+| GMAB | 34.70 | 35.29 | +1.70% |
+| MANE | 128.08 | 130.12 | +1.59% |
+| SKYD | 6.99 | 7.07 | +1.14% |
+| DHT | 26.03 | 26.17 | +0.54% |
+| WBD | 30.80 | 30.87 | +0.23% |
+| INSM | 98.20 | 98.28 | +0.08% |
+| TMO | 655.46 | 654.54 | −0.14% |
+| BCE | 20.38 | 20.22 | −0.79% |
+
+- The booked price was not attainable when the decision was made.
+- 7 of 9 are *worse* (higher), so the defect does not flatter the sample.
+- Scope: **9 of the 14 `clean_v3` trades** (TMO, NEOG, BCE, GMAB, PCVX, MANE,
+  DHT, INSM, SKYD), plus pre-clean DYN and WBD. Every official clean-sample
+  figure includes these entries.
+- DST: after US DST ends (1 Nov), 13:30 UTC is 08:30 ET, pre-market. The
+  bar-date guard will then defer 13:30 admissions to the 21:00 run, at that
+  session's open. The R3 cases (16:10 / 17:30) are unaffected by DST.
+- Decision deferred to the unfreeze review. The admission design will record
+  the decision time and price, plus the fill bar and open, so the gap is measured
+  per trade, not reconstructed.
+
+**Smaller findings from the same audit:**
+- Queue promotion re-bases the signal: `signal_date` / `signal_price` hold
+  the promotion date and validation price (`tracker.py:588-589`). The scan's
+  date survives only as `queued_at` in `queue_events`.
+- `strength` is lost on the queue route: all 11 `from_queue` trades are
+  `unknown`.
+- AMP was admitted by a manual 05:35 UTC run and filled by the scheduled
+  13:30 run. It is `clean_v3`, because contamination is judged at the fill
+  only. Policy question for the design.
+- R3 runs after any monitor state save, including a peak advance with no close
+  (`monitor_trades.py:218`). It is not close-only, as the comment at `:278`
+  implies.
+- The two `queued` producers (scan with slots full; pending demoted at fill)
+  are indistinguishable. `duplicate` outcomes are never logged.
+  `_log_queue_event` drops write errors silently.
+- `promote_queue` falls back to the unranked queue when `queue_ranked.json` is
+  empty (`tracker.py:543-544`). Promotion still re-validates, but this bypasses
+  ranking.
 
 ### [DATE TEMPLATE — Copy for new days]
 

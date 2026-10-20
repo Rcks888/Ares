@@ -104,6 +104,14 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      gives no warning.
    - Decision 2026-10-20: **wait, no change** (FROZEN). Revisit at the weekly
      checkpoint. Details are in the logbook.
+7. **Intra-session admissions fill at that session's open, which came before
+   the decision** (found 2026-10-20). 11 of 21 fills, including 9 of 14
+   `clean_v3` entries, are booked at a price that wasn't available when the
+   decision was made (−0.79% to +3.49% against the decision price).
+   - Recorded, not fixed (FROZEN). Audit:
+     `archive/AUDIT_2026-10-20_admission_routes.md`.
+   - Step 3 will record the decision time and price, plus the fill bar, so
+     the gap is measured on every trade.
 
 ## Open questions (not being worked on)
 
