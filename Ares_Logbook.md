@@ -3115,7 +3115,7 @@ Phase 5, policy unification and AI modelling remain prohibited.
 
 Phase 5, policy unification and AI modelling remain prohibited.
 
-### 2026-10-19 → 20 — Finviz screener broken (0 candidates); reboot confirmed; swap burst +171 MB
+### 2026-10-19 → 20 — Finviz screener broken (0 candidates); reboot confirmed; swap +171 MB (7.5 h window total)
 
 **Reboot test closed.**
 - Mon 13:00 UTC: the cron gateway start worked. Both reports ran, and both
@@ -3163,7 +3163,8 @@ ratchets.
   - RAM 972 MB, swap 138 → **308 MB (171 MB paged out in 7.5 h)**
   - ⚠️ **stall 1386 ms**, above the 1000 ms flag
 - **swappiness=10, first deciding sample (19 Oct 21:07 UTC):** the largest
-  burst so far.
+  burst so far. *(Corrected 20 Oct: this is a 13:31–21:01 UTC window total,
+  not a 21:00 burst. See the next entry.)*
   - The setting survived the reboot: `vm.swappiness = 10` and
     `/etc/sysctl.d/99-swappiness.conf` both confirmed.
   - This night's Ares 21:00 run did *less* work than usual: 3 symbols
@@ -3210,6 +3211,82 @@ ratchets.
   - Revisit at the weekly checkpoint if upstream has not fixed it.
 
 Phase 5, policy unification and AI modelling remain prohibited.
+
+### 2026-10-20 — Hermes host data (sysstat): swap growth is in the gateway windows, not 21:00; dashboard window clarified
+
+No action. Observation only; Ares stays FROZEN.
+
+**What the dashboard swap/stall figures cover** (answer to Hermes Q4, from
+`build_dashboard.py` `memory_pressure()`):
+- Each value is a delta between two consecutive `build_dashboard.py` runs:
+  `pswpout` from `/proc/vmstat` and PSI `full total` from
+  `/proc/pressure/memory`. Negative deltas are clamped to 0. The baseline is
+  `logs/psi_state.json`, rewritten on every run.
+- Only `run_ares.sh` calls it (`run_monitor.sh` does not). So the windows are:
+  - 05:01 MYT dashboard: 13:31 → 21:01 UTC (7.5 h)
+  - 21:3x MYT dashboard, Tue–Fri: 21:01 → 13:31 UTC (16.5 h)
+  - 21:3x MYT dashboard, Mon: Fri 21:01 → Mon 13:31 UTC (64.5 h)
+- So the 20 Oct 05:01 figures (171 MB paged out, 1386 ms stall) are **totals
+  for 13:31–21:01 UTC Monday**. That window contains the 16:00–17:30 UTC
+  gateway session and the tail of the 13:30 run. The dashboard cannot place
+  an event within its window.
+
+**Correction to earlier entries.** The figures logged as "21:00 burst" were all
+7.5 h window totals, never 21:00-slot measurements:
+- 15→16 Oct: +42 MB
+- 16→17 Oct: +95 MB
+- 19→20 Oct: +171 MB
+
+Only Hermes's sysstat and soak data can place swap growth in time.
+
+**Hermes sysstat, Mon 19 Oct (UTC):**
+- 21:00–21:10 slot: flat (316 MB from 20:40 to 21:20). The 21:07 soak stall
+  was 113 ms.
+- Swap growth that day (38 → 316 MB):
+  - 13:30–13:40: +105 MB (Ares 13:30 run, gateway up)
+  - 16:00–17:30: +167 MB (gateway up, heaviest 17:10–17:30)
+- Largest stall: 309 ms per 15 min, about 1 GB RAM free. No impact.
+- The 21:00–21:10 slot over time:
+
+| Night | swappiness | 21:00–21:10 swap |
+|---|---|---|
+| 13 Oct | 60 | +163 MB |
+| 14 Oct | 10 | +36 MB |
+| 19 Oct | 10 | ~0 (only 3 symbols screened) |
+
+**Consistency check on Hermes's figures:**
+- **171 MB:** agrees. Hermes's soak swap-outs for 16:07–21:07 total about
+  168 MB, and the dashboard window covers that span.
+- **1386 ms:** by the code this is a delta from the Mon 13:31 UTC baseline,
+  not a total since the reboot. Hermes's reading, "≈ cumulative since reboot
+  (~1.45 s)", fits only if boot → Mon 13:31 had about 65 ms of full stall.
+  That conflicts with Hermes's 17 Oct note of ~2.7 s of maintenance stall
+  (01:32–01:50 UTC). Most likely one of the figures is a different PSI line
+  (`some` or `full`) or a different counter. **Asked Hermes which.**
+- **14 Oct:** the table gives +36 MB for 21:00–21:10. Hermes's 15 Oct summary
+  said swap was "unchanged at 210 MB" at the 14 Oct 21:07 soak. These could
+  be sysstat versus soak point samples. **Asked Hermes to reconcile.**
+
+**What this changes:**
+- Hypothesis update: Monday's growth followed the **gateway-up windows**
+  (Java), not the Ares 21:00 run or price-cache growth. The earlier
+  hypothesis that the 866 → 1074 symbol cache drives the burst is weakened
+  further.
+- **Swappiness verdict: still open, and blocked under Option A.** Separating
+  swappiness from workload needs a 21:00 run with normal screening. While
+  Finviz is broken there is no such night, so the 19–23 Oct samples will be
+  confounded the same way as 19 Oct.
+- If host sampling is ever needed (observation only), target 13:25–13:45
+  and 16:00–17:35 UTC, not 21:00.
+
+**Hermes-side items, no Ares impact:**
+- 19 Oct 19:19–19:25 UTC: a 5.8 min MetaQuotes broker outage caused the
+  19:22 UTC alert. Not host-related.
+- Hermes `d288a0f` fixes its own alert state: the failure count now persists
+  across cron runs.
+- The 14 Oct 06:22 UTC MT5 relaunch was unattended-upgrades → needrestart →
+  `xvfb.service`. This matches the 15 Oct entry.
+- swappiness stays at 10. No host changes proposed.
 
 ### [DATE TEMPLATE — Copy for new days]
 
