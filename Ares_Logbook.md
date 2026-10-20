@@ -3382,6 +3382,38 @@ Booked entry against the price the decision saw (queue trades, where
   empty (`tracker.py:543-544`). Promotion still re-validates, but this bypasses
   ranking.
 
+### 2026-10-20 (later) — admission capture design drafted; review bundle v1 built
+
+No code. Ares stays FROZEN. Design: `archive/DESIGN_admission_capture_v1.md`
+(DRAFT, not authorised).
+
+- **Records.** Three kinds go to a new `logs/admission_v1.jsonl`, plus one
+  heartbeat per run:
+  - `admission`: one per `open_trade` call.
+  - `promotion_pass`: one per `promote_queue` call, early returns included.
+    It keeps the original queue date and price.
+  - `fill`: one per pending checked, nine explicit outcomes, with the bar
+    date and open, so A2 is measured per trade.
+- **Linkage:** natural key `(symbol, signal_date)`. No id is written into
+  production state.
+- **Inspection:** a new tool reconciles git state diffs (pendings added and
+  removed, trades added) against the records, independently of the recorder's
+  own claims.
+- **New defect, recorded only:** two silent pending discards at fill time
+  (`tracker.py:88-91` already open; `:82-86` slots full and already queued).
+  They contradict the docstring at `:63`.
+- **Cost:** registration grows to `tracker.py`, `daily_report.py` and
+  `monitor_trades.py`. The accepted monitor diff gains additions; its existing
+  digests are unchanged.
+- **Review bundle:** `review_bundle_admission_capture_v1` (+ `.tgz`, sha256
+  `9e5596d9…`). The reproduction script reruns the audit from the extracted
+  evidence and agrees: 21/21, 11/11, 11/21, 9/14.
+- **Method correction found while building it:** run time must be the commit
+  **author** date. `run_ares.sh` rebases before pushing, which rewrites the
+  committer date (4 commits, including TMO's admission).
+- **Housekeeping:** the completed monitor-recorder bundles v2–v7 were deleted
+  from `~/Olympus`. The final state is on `main` (`5fd13e9`).
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
