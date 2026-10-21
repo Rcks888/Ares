@@ -3500,7 +3500,7 @@ Bundle: `review_bundle_admission_capture_v4` (+ `.tgz`, sha256
 `93843d34…`), `attach/` with 19 files (the upload limit is 20; diffs and
 results are merged into one file each).
 
-### 2026-10-22 — design review r4: HOLD; design r5 accepted for implementation review
+### 2026-10-21 (evening) — design review r4: HOLD; design r5 accepted for implementation review
 
 **Verdict r4: DRAFT/HOLD**, two source-to-contract findings. Results were not
 rerun because several attachments arrived as file-not-found placeholders.

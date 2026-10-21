@@ -1,6 +1,6 @@
 # Ares: current status
 
-Last updated: 2026-10-22. This page is the entry point. History is in
+Last updated: 2026-10-21. This page is the entry point. History is in
 `Ares_Logbook.md`, full reference in `README.md`, finished investigations in
 `archive/`. Everything removed in the cleanup is kept at tag
 `checkpoint-2026-10-12`.
@@ -19,7 +19,7 @@ The main flow (agreed Oct 9), and where things stand:
 ✔ 0. Recorder repairs accepted   (v7 accepted 2026-10-12, branch 28ae5f0)
 ✔ 1. Conditional recorder activation   (5fd13e9 on the VPS, 2026-10-13; rollback pre-tested)
 ✔ 2. First monitor-cycle inspection  → CHECKPOINT   (2026-10-15: both nights, 4 cycles, PASS)
-▶ 3. Admission-source capture (separately reviewed, both routes)   ← HERE: design r5 accepted 2026-10-22; next: implementation on recorder/admission-v1
+▶ 3. Admission-source capture (separately reviewed, both routes)   ← HERE: design r5 accepted 2026-10-21; next: implementation on recorder/admission-v1
 ◻ 4. Evidence-informed decision on which exit policy is authoritative
 ```
 
@@ -33,7 +33,7 @@ why if it differs from the plan.
 | Sep 28 – Oct 2 | parity (Phase 4) live; vacation from Oct 1 | parity started around Sep 29 | — |
 | Oct 5 – Oct 9 | vacation; resume | incident (Oct 7), reconciliation, recorder designed, built and reviewed | unplanned: incident work |
 | Oct 12 – Oct 16 | recorder activation, Mon 16:10 UTC | HOLD from review → repair round 2 → pause → checkpoint, audit, cleanup, WBD closed → v3 update → inspection-tool rounds v4–v7 → **accepted Mon** → **activated Tue 13 Oct** (`5fd13e9`) → **inspection Thu 15 Oct: PASS, both nights** → checkpoint | one day late against the original Mon date, a week early against the replan |
-| Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | (steps 0–2 done the week before) route audit, step 3 design r1–r5, **r5 accepted for implementation review Thu 22 Oct** | pulled forward; step 3 design done a week early |
+| Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | (steps 0–2 done the week before) route audit, step 3 design r1–r5, **r5 accepted for implementation review Wed 21 Oct** | pulled forward; step 3 design done a week early |
 | Oct 26 – Oct 30 | step 3 design → review | | |
 | Nov 2 onward | evidence collection → step 4 | | no date until there is enough evidence to judge |
 

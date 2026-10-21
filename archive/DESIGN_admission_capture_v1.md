@@ -1,6 +1,6 @@
 # Admission capture v1 — design (r5, accepted for implementation review)
 
-Status: **r5 accepted for implementation review (2026-10-22); not authorised
+Status: **r5 accepted for implementation review (2026-10-21); not authorised
 for activation.** No code exists. Ares stays FROZEN. Review history: r1–r4
 DRAFT/HOLD, r5 accepted; bundles `review_bundle_admission_capture_v1`–`v5`. This
 is step 3 of the plan in `STATUS.md`. The evidence behind it is
@@ -50,7 +50,7 @@ read by the inspection from the committed state files.**
 | 3. Queue outcomes overlap on self-eviction plus save failure | Split into `queue_memory` (`kept` \| `inserted_then_evicted` \| `already_queued`, from memory facts only) and observed queue membership from the commit. `save_failed` is no longer an outcome value. A non-completed owning save is the only admissible explanation of a mismatch, and only when the observed file equals the baseline | §3.5, §4.2 |
 | Audit: a cron launch near the commit does not identify the producing process | Audit v4: a cron match changes the lower-bound **basis** to `cron_matched`, with `run_association: assumed`. It never yields `yes_established`, which is removed. Historical A2 is bounded and conditional, whatever the cron log shows | audit correction block |
 
-### Revision r5 — response to the r4 review (2026-10-22)
+### Revision r5 — response to the r4 review (2026-10-21)
 
 Both findings were checked against `e4dd97c`. Finding 1 was probed with the
 unmodified `expire_queue` and `maintain_queue` bodies
@@ -1132,7 +1132,7 @@ Plus:
 ## 10. Sequence
 
 1. ✔ External review of this draft: r5 accepted for implementation review
-   (2026-10-22). Pack reproduced independently; not an activation approval.
+   (2026-10-21). Pack reproduced independently; not an activation approval.
 2. Implement on branch `recorder/admission-v1`: fixtures first, then
    capture, observer, controls, inspection tool and mutation test.
 3. Review bundle (same structure as monitor recorder v7).
