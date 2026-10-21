@@ -4,6 +4,48 @@ Input to `DESIGN_admission_capture_v1.md` (step 3). Read-only: no code, config
 or VPS change. Repository state `b810a21`. All times UTC (VPS clock); the US
 regular session opens 13:30 UTC while EDT holds (until 1 Nov).
 
+> **Corrected r2 (2026-10-20, after external review).** The original text
+> below is kept as written; corrections are marked in place. The review found
+> that the v1 reproduction was not fail-closed and classified A2 by commit
+> time even where a decision-event time existed. The fail-closed v2 script
+> (review bundle v2, `repro/audit_routes.py`, 21 controls, 15 mutations)
+> gives:
+>
+> | Claim | v1 text | r2 result |
+> |---|---|---|
+> | Routes resolved | 21/21 | **20/21.** HAFN has two pending episodes for one key: V2 admission 09-07 13:31 (`866eed2`), removed at 21:01, then re-created by a manual V3-migration run 09-08 01:32 (`4e4fa5e`). Its admitting run is ambiguous. Route R1 by `from_queue` either way |
+> | Queue trades: one decision event in the run window | 11/11 "agree" | **11/11**, now as the decision time itself |
+> | A2 same-session fill at a pre-decision open | 11/21; 9 of 14 `clean_v3` | **9 established** from decision-event times (TMO, WBD, NEOG, BCE, GMAB, MANE, DHT, INSM, SKYD; 8 `clean_v3`) **+ 2 bounded** (DYN, PCVX: R1, no decision event; decision between the 13:30 cron start and the commit; 1 `clean_v3`). 0 unknown |
+>
+> "11 of 21" stands only as 9 established plus 2 inferred from the cron
+> schedule. The bounded cases depend on the run starting at its scheduled
+> time.
+>
+> **Corrected r3 (2026-10-21, after the source review).** The r2 row above
+> is itself overstated. The `promoted` event is written **after**
+> `open_trade` returns (`tracker.py:595-599`), so it is an upper bound on the
+> admission, not its time. An event after the open does not show the
+> admission was after the open. Commit proximity to a cron slot does not show
+> the run was cron-started either. Audit v3 (31 controls, 22 mutations):
+>
+> | Claim | r3 result |
+> |---|---|
+> | A2 | **11 bounded, 0 established**: DYN, TMO, WBD, NEOG, BCE, GMAB, PCVX, MANE, DHT, INSM, SKYD (9 `clean_v3`). Each holds **if** its admitting run was started by cron at the slot. Margins: monitor slots 2 h 40 min to 4 h after the open; 13:30 report slots at the open itself |
+> | Lower-bound basis | 19 `schedule_assumed`, 1 none (AMP, 05:35 off-schedule), 0 verified |
+> | Routes | unchanged: 20/21, HAFN ambiguous; exit 1 |
+>
+> The assumption can be discharged by the VPS cron log (`cron_starts.txt`,
+> optional input to v3). Until then nothing in A2 is established.
+>
+> **Correction (21 Oct, r3 review).** The last sentence above is wrong. A cron
+> launch near the commit does not show which process made the commit: a
+> concurrent manual run could have. Audit v4 (32 controls, 25 mutations): a
+> cron match changes only the basis, to `cron_matched`, with the assumption
+> `run_association`. It never yields an established A2, and that category is
+> removed. The historical A2 is **11 bounded, 0 established** (9 `clean_v3`),
+> with or without the cron log. Real-data result unchanged: 20/21, HAFN
+> ambiguous, exit 1.
+
 ---
 
 ## 1. Code map
@@ -72,7 +114,7 @@ cross-checked against `queue_events` `promoted` timestamps where they exist.
 
 | Trade | `from_queue` | Admitting run (commit) | Route | Fill run | Same-session fill |
 |---|---|---|---|---|---|
-| HAFN | F | 09-07 13:31 report V2 (`866eed2`) | R1 | 09-08 | no |
+| HAFN | F | 09-07 13:31 report V2 (`866eed2`) — *r2: ambiguous, a second episode starts 09-08 01:32 manual (`4e4fa5e`)* | R1 | 09-08 | no |
 | DYN | F | 09-08 13:31 report (`c116e8f`) | R1 | 09-08 | **yes** |
 | ABM | F | 09-08 21:01 report (`5f5b59b`) | R1 | 09-09 | no |
 | PINS | F | 09-09 21:01 report (`d0bb8b1`) | R1 | 09-10 | no |
@@ -95,7 +137,8 @@ cross-checked against `queue_events` `promoted` timestamps where they exist.
 | SKYD | T | 10-15 13:32 report (`3b89a9a`) | R2 | 10-15 21:01 | **yes** |
 
 Totals: **R1 10, R2 6, R3 5.** For the 11 queue trades, the commit subject and
-the `promoted` timestamp agree 11/11.
+the `promoted` timestamp agree 11/11. *(r2: 20/21 admitting runs resolved
+unambiguously; HAFN's is ambiguous.)*
 
 Non-trade: RVTY was promoted 09-17 13:31 (R2) and lost in the fill path with no
 event. This is the known Sep 18 incident; `fill_dropped` now covers it.
@@ -106,7 +149,8 @@ event. This is the known Sep 18 incident; `fill_dropped` now covers it.
 
 ### A1 — every route can be reconstructed today, but only from git
 
-All 21 routes are recovered. **EROC and ITUB were R1, admitted by the
+All 21 routes are recovered *(r2: 20 admitting runs unambiguously; HAFN's
+route is R1 but its admitting run is ambiguous)*. **EROC and ITUB were R1, admitted by the
 10-06 21:01 report.** That closes `initiating_source: unknown` in
 `RECONCILIATION_2026-10-07_fill_cycle.md` §2 item 6.
 
@@ -117,6 +161,9 @@ removed within one run) leaves no trace. The design should therefore record
 admissions explicitly, not because the route is unknowable today.
 
 ### A2 — 11 of 21 fills are booked at an open that preceded the admission decision
+
+*r2: 9 established from decision-event times, 2 (DYN, PCVX) bounded by the
+cron schedule. See the correction at the top.*
 
 `execute_pending_signals` fills at `df.iloc[-1]['Open']` once the last bar is
 today's (`tracker.py:120-130`). A pending created *during* a session is filled
@@ -148,7 +195,7 @@ The booked price was not attainable when the decision was made. In 7 of 9
 cases here it is *worse* (higher) than the decision price, so it does not
 flatter the sample. It is still a fill-model defect that touches **9 of the 14
 `clean_v3` trades** (TMO, NEOG, BCE, GMAB, PCVX, MANE, DHT, INSM, SKYD), plus
-pre-clean WBD and DYN.
+pre-clean WBD and DYN. *(r2: 8 established + PCVX bounded.)*
 
 At the 13:30 run the gap is about a minute. After US DST ends (1 Nov), 13:30
 UTC is 08:30 ET, pre-market, and the bar-date guard defers those fills to

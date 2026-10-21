@@ -3414,6 +3414,164 @@ No code. Ares stays FROZEN. Design: `archive/DESIGN_admission_capture_v1.md`
 - **Housekeeping:** the completed monitor-recorder bundles v2–v7 were deleted
   from `~/Olympus`. The final state is on `main` (`5fd13e9`).
 
+### 2026-10-20 (later) — design review r1: HOLD; design r2 and bundle v2
+
+**Verdict r1: not implementation-ready, DRAFT/HOLD.** Scope accepted. Five
+contract gaps were found; I reproduced the two audit-script probes first.
+
+| r1 finding | r2 resolution |
+|---|---|
+| Natural key not unique; "latest earlier" hides ambiguity; `demoted_to_queue` not terminal | Pending **episodes**; exactly-one match or FAIL; explicit terminals |
+| Decision timestamp had no mechanism under "no calls" | Enforced statement whitelist with one clock read; decision time is a **bracket**; A2 is three-valued |
+| `queue_signal_logged` conflated insertion and logging | Queue insertion, queue save and event-write outcome captured separately; success recorded after the write |
+| No persistence semantics | selected → mutated → save attempted → save completed, on every record |
+| Coverage by count equality | expected / reached / completed captured on both sides of each call; call-site inventory in the verifier |
+| Q2: digests alone insufficient | The monitor `__main__` replacement is re-registered and its change shown |
+
+**Audit correction (the review was right).**
+- The v1 script used commit time for A2, exited 0 on missing history, and
+  did not check subjects, `from_queue` types or timezone conversion. Both
+  probes reproduced: false YES; rc 0 on missing history.
+- The v2 script is fail-closed: 21 controls, 15 mutations, 0 missed.
+- On the real evidence it **found an ambiguity v1 hid**: HAFN has two pending
+  episodes for one key (V2 09-07 13:31, then a manual V3-migration run
+  09-08 01:32).
+- Result: routes 20/21 unambiguous. A2 is **9 established** (8 `clean_v3`)
+  **+ 2 bounded** (DYN, PCVX, via the cron start). "11 of 21" stands only in
+  that form. The audit, STATUS #7 and this logbook are corrected in place,
+  with the originals kept.
+
+**New, recorded only:** two non-atomic saves.
+- Fill pass: `save_pending` before `save_trades`. A failure between them
+  makes a fill vanish.
+- Promotion: the pending is saved before `save_queue`. A failure leaves the
+  symbol both pending and queued.
+
+Bundle: `review_bundle_admission_capture_v2` (+ `.tgz`).
+
+### 2026-10-21 — design review r2: HOLD; source review; design r3 and bundle v3
+
+**Verdict r2: DRAFT/HOLD**, directionally sound. The source review reproduced
+two new partial outcomes with controlled probes. I confirmed both against
+`e4dd97c` before revising.
+
+| r2 / source finding | r3 resolution |
+|---|---|
+| Cross-recorder cycle pairing undefined | Own `cycle_id` each; pair on the monitor store's `cycle_started_at`, read-only; missing peer = INCONCLUSIVE |
+| Admission "completed" = branch marker | `branch`, save facts and `returned` separate; completion = `returned` |
+| Episode closure conflated with trade persistence | Two facts per episode: pending end and trade link |
+| A2 bracket not tied to one event | Named events `E_obs` and `E_adm`, each with its owner record |
+| Fill exception after `trades.append` books the trade and keeps the pending | New finding; `trade_appended` and `executed_marked` captured |
+| A queued candidate can be evicted by its own insertion | `evicted[]` drives `queue_outcome`; `inserted_then_evicted` |
+| `promoted` event is post-admission; slot proximity is not a start | Audit v3: event = upper bound; lower bound = process start, verified by cron log or labelled `schedule_assumed` |
+
+**Second audit correction.** A2 is now **11 bounded, 0 established** (9
+`clean_v3`). Every case depends on the run having been cron-started at its
+slot. The VPS cron log can verify that. *(Corrected the same day, r3
+review: it cannot. A cron launch does not identify the process that made the
+commit. See the next entry.)*
+
+Bundle: `review_bundle_admission_capture_v3`, with individual files for
+attaching.
+
+### 2026-10-21 (later) — design review r3: HOLD on persistence; design r4 and bundle v4
+
+**Verdict r3: DRAFT/HOLD.** The reviewer independently reran the hashes,
+31/31 controls and 22 mutations, and got the same HAFN FAIL. The previous
+findings are closed. Three persistence gaps remain, all confirmed against
+`e4dd97c`. The truncation was reproduced on a scratch file: `save_pending`
+raised `TypeError` and left an unparseable prefix.
+
+| r3 finding | r4 resolution |
+|---|---|
+| A failed save does not mean `unchanged_on_disk` (`open('w')` truncates first) | The recorder records only memory facts and save status (`not_attempted` / `completed` / `raised`). Disk effects are read from the run's commit. The wrappers commit `logs/` whatever Python's exit status; an unparseable file is INCONCLUSIVE |
+| Trade-effect table not exhaustive | Two independent per-file checks, each a total function over (intent, baseline, observed, owning save). C-ENUM enumerates every tuple |
+| Queue outcomes overlap (self-eviction + failed save) | `queue_memory` (memory only) checked against observed queue membership |
+| A cron match does not identify the producing process | Audit v4: basis `cron_matched`, assumption `run_association`; `yes_established` removed (32 controls, 25 mutations) |
+
+**Consequence for the planned VPS cron-log check:** it can no longer upgrade
+A2 from bounded to established. It would only confirm the cron starts. Not
+needed for this review.
+
+Real-data audit unchanged: 20/21, HAFN ambiguous, A2 **11 bounded,
+0 established** (9 `clean_v3`), exit 1.
+
+Bundle: `review_bundle_admission_capture_v4` (+ `.tgz`, sha256
+`93843d34…`), `attach/` with 19 files (the upload limit is 20; diffs and
+results are merged into one file each).
+
+### 2026-10-22 — design review r4: HOLD; design r5 accepted for implementation review
+
+**Verdict r4: DRAFT/HOLD**, two source-to-contract findings. Results were not
+rerun because several attachments arrived as file-not-found placeholders.
+
+| r4 finding | r5 resolution |
+|---|---|
+| "Only the owning save persists a mutation" is false: `maintain_queue` saves `expire_queue`'s returned list (`:434` → `:485`) | Statement accepted as false. The claimed failure path is **not reachable**: `save_queue(active)` (`:379`) is outside the per-entry `try`, so its exception propagates before `:485` (probe `probe_queue_handoff.py` on the unmodified bodies). r5 uses a registered **save chain** (owner + one carrier); the verifier checks the data flow of every save site and fails on a new hand-off or a `try` around `:379` |
+| Existing trade membership counted as a new link (same-date `booked_pending_retained` then `discarded_already_open`) | Accepted. Trade baseline read from the parent commit, membership is a count, a link is an increment of exactly one |
+| Results not reproducible from the attachments | `repro_pack.py`: one file with all inputs and per-file SHA-256; extracts and runs all four commands |
+
+Also found while checking: `expire_queue`'s `except: pass` (`:376-377`)
+removes an entry with a malformed `date_added` with no event (design
+§2.2.3, recorded and captured, not fixed). The writer inventory has 13 save
+sites, not 7; the extra six change no membership.
+
+**Verdict r5: accepted for implementation review, not activation.** The
+reviewer reran the pack: 8/8 hashes, 32/32 controls, 25/25 mutations, probe
+PASS, HAFN FAIL as expected. They retracted their expiry failure path. This
+verifies the audit and the source probe only; the recorder implementation
+and its isolation controls are the next review gate (design §10).
+
+The VPS cron-log check is dropped: since audit v4 it cannot upgrade A2.
+
+Bundle: `review_bundle_admission_capture_v5` (+ `.tgz`, sha256
+`572595e5…`), `attach/` with 18 files. Design r5 copied to
+`archive/DESIGN_admission_capture_v1.md`.
+
+### 2026-10-20 → 21 — no exits; ITUB back to 4.5% above its stop; INSM now closest; swap flat
+
+**21:32 MYT report (Oct 20, `9d85ac8`).**
+- 5/5 slots, no fills, no closes. Clean sample unchanged: **9 closed, W 1/9,
+  −$95.22**. Peaks unchanged.
+- Queue: AVTR ranked #1 (drift 0.0%).
+- **Scan: 3 screened, 0 signals.** Finviz is still broken (second weekday).
+- System:
+  - RAM 869 MB, swap 304 MB (6 MB paged out in 16.5 h)
+  - stall 513 ms
+  - cache 1074 symbols (flat)
+
+**00:10 / 01:30 MYT monitor (recorder cycles 11 and 12).** No exits, no
+ratchets. No live price exceeded a recorded peak (`peak_price`: TMO $697.23,
+SKYD $7.19), so the monitor's `promote_queue` was not triggered (A5). Slots were
+full anyway.
+
+| | 00:10 | 01:30 | stop (TS) | gap to stop at 01:30 |
+|---|---|---|---|---|
+| TMO | $683.71 (+4.5%) | $685.84 (+4.8%) | $634.25 | 7.5% |
+| AMP | $485.30 (−1.4%) | $485.14 (−1.4%) | $472.99 | 2.5% |
+| ITUB | $9.77 (−3.5%) | $9.76 (−3.6%) | $9.32 | 4.5% (was 1.0%) |
+| INSM | $95.49 (−2.8%) | $95.07 (−3.3%) | $93.05 | **2.1%** |
+| SKYD | $7.08 (+0.1%) | $7.13 (+0.8%) | $6.47 | 9.3% |
+
+- Trailing stops match `peak × 0.90` (`exit_policy.py`, Policy A).
+  - SKYD: $7.19 × 0.9 = $6.47.
+  - TMO: $697.23 × 0.9 = $627.51, which is below the SL, so TS = SL $634.25.
+- **Inspection: PASS, rc 0.** Command:
+  `inspect_monitor_cycles.py 9d85ac8 0ae2cfc 6ad8d0a`.
+  - Cycle `0f2dbc85` (`0ae2cfc`) and cycle `f0730983` (`6ad8d0a`).
+  - 5 records each: AMP, INSM, ITUB, SKYD, TMO.
+
+**05:01 MYT report (Oct 21, `2668bdc`).**
+- 5/5 slots, no changes; `virtual_trades.json` unchanged.
+- Queue: AVTR `kept` at 21:00:20, drift 1.22% (live $16.62 against signal
+  $16.42). Scan: 3 screened, 0 signals.
+- System:
+  - RAM 1007 MB, swap 304 → **306 MB (2 MB paged out in 7.5 h)**
+  - stall 334 ms
+- For Hermes's swappiness decision: this 13:31–21:01 UTC window is quiet,
+  against 171 MB the night before. It is still confounded by the 3-symbol
+  Finviz runs, so it is not the normal night Hermes needs.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
