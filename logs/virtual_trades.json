@@ -1495,13 +1495,13 @@
       "active": true,
       "days_tracked": 0,
       "max_days": 30,
-      "peak_after_exit": 7.77,
+      "peak_after_exit": 7.81,
       "trough_after_exit": 7.77,
       "peak_date": "2026-10-22",
       "trough_date": "2026-10-22",
-      "missed_upside_pct": 0,
-      "avoided_downside_pct": 0,
-      "latest_price": 7.77
+      "missed_upside_pct": 0.64,
+      "avoided_downside_pct": -0.13,
+      "latest_price": 7.81
     }
   }
 ]
