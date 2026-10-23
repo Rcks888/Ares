@@ -3744,6 +3744,22 @@ Ares process uses that JDK. Low priority.
   - Swap 38 MB (1 MB paged out in 7.5 h), stall 140 ms, back to quiet
   - Cache 1043 symbols
 
+### 2026-10-23 (Fri) — weekly checkpoint, week 19–23 Oct
+
+| Item | Result |
+|---|---|
+| Week target: step-3 design accepted | ✅ r5 accepted for implementation review, Wed 21 Oct (`81aecd1`, `b85244c`). Not activated. |
+| Monitor-cycle inspections | ✅ Mon–Thu, 4 nights, 8 cycles, all PASS (`59c71c6…`, `9d85ac8…`, `49c3254…`, `d1958af…`). Fri cycles to be inspected on Mon. |
+| Hermes swappiness | No Ares evidence either way. Ares windows were 0, 9 and 1 MB paged out. The 2284 MB window is the 22 Oct Hermes host lock-up. All are confounded by the 3-symbol Finviz runs (a normal-screening 21:00 run is needed). Hermes owns the decision; swappiness stays at 10. |
+| Finviz | Still broken, 5 weekdays, 10 reports, 0 signals. 1 slot idle since the SKYD close, queue empty. **Decision:** hold. If the 23 Oct 21:32 MYT dashboard still says 3 screened, Finviz is next week's first target: cause, then a reviewed fix in a joint session with the reviewer. |
+| Unplanned | eMudhra response (A/B/C), all verified. Known issue 8 (AMP cache regression) recorded. |
+| STATUS | "Actual" column filled; next week replanned; known issues 5, 6 and 8 updated. |
+
+**Next week (26–30 Oct), one target with a fallback:**
+- **First:** Finviz, if still broken. Done when the cause is identified and a minimal fix design has been reviewed.
+- **Second, only if time:** step 3 implementation on `recorder/admission-v1`, not activated.
+- If Finviz takes the week, step 3 and later checkpoints move one week.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)

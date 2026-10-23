@@ -1,6 +1,6 @@
 # Ares: current status
 
-Last updated: 2026-10-21. This page is the entry point. History is in
+Last updated: 2026-10-23 (weekly checkpoint). This page is the entry point. History is in
 `Ares_Logbook.md`, full reference in `README.md`, finished investigations in
 `archive/`. Everything removed in the cleanup is kept at tag
 `checkpoint-2026-10-12`.
@@ -33,8 +33,8 @@ why if it differs from the plan.
 | Sep 28 – Oct 2 | parity (Phase 4) live; vacation from Oct 1 | parity started around Sep 29 | — |
 | Oct 5 – Oct 9 | vacation; resume | incident (Oct 7), reconciliation, recorder designed, built and reviewed | unplanned: incident work |
 | Oct 12 – Oct 16 | recorder activation, Mon 16:10 UTC | HOLD from review → repair round 2 → pause → checkpoint, audit, cleanup, WBD closed → v3 update → inspection-tool rounds v4–v7 → **accepted Mon** → **activated Tue 13 Oct** (`5fd13e9`) → **inspection Thu 15 Oct: PASS, both nights** → checkpoint | one day late against the original Mon date, a week early against the replan |
-| Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | (steps 0–2 done the week before) route audit, step 3 design r1–r5, **r5 accepted for implementation review Wed 21 Oct** | pulled forward; step 3 design done a week early |
-| Oct 26 – Oct 30 | step 3 design → review | | |
+| Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | (steps 0–2 done the week before) route audit, step 3 design r1–r5, **r5 accepted for implementation review Wed 21 Oct**. Monitor inspections Mon–Thu: 8 cycles, all PASS. Unplanned, Thu 22 Oct: eMudhra CA response, environment only (venv certifi 2026.10.19, emSign roots removed from the gateway JRE, DigitalOcean firewall inbound 22 only), all three verified 23 Oct. SKYD closed at TP (clean sample 10, W 2/10). Finding: AMP cache regression (known issue 8) | pulled forward; step 3 design done a week early; security work unplanned, no code change |
+| Oct 26 – Oct 30 | **1st: Finviz** (if still broken on 23 Oct night): identify the cause, design and review a minimal fix with the reviewer. **2nd, if time:** step 3 implementation on `recorder/admission-v1` (not activated) | | replanned 23 Oct: step 3 design finished early. If the Finviz work takes the week, step 3 implementation and later checkpoints move one week (not a rushed project) |
 | Nov 2 onward | evidence collection → step 4 | | no date until there is enough evidence to judge |
 
 ## What runs (cron, weekdays only)
@@ -94,7 +94,9 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
 4. **All Ares processes use IB `clientId=10`, and only `connect` has a
    timeout.** A stalled monitor can block the report (Oct 1).
 5. **SSH password login is enabled on the VPS**, and outsiders are trying
-   passwords.
+   passwords. Since 2026-10-22, a DigitalOcean cloud firewall allows inbound
+   TCP 22 only (port 4002 verified dropped from outside). SSH itself is
+   unchanged.
 6. **The Finviz screener returns nothing (since Mon 19 Oct 13:32 UTC).**
    - Finviz moved and redesigned its screener page: `/screener/stocks`, no
      HTML tables.
@@ -104,6 +106,13 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      gives no warning.
    - Decision 2026-10-20: **wait, no change** (FROZEN). Revisit at the weekly
      checkpoint. Details are in the logbook.
+   - Checkpoint 2026-10-23: still broken after 5 weekdays (10 reports, 0
+     signals). Since SKYD closed, 1 slot is idle and the queue is empty. Step
+     3 needs admissions to observe.
+   - **Decision:** hold, and check whether the 23 Oct 21:32 MYT dashboard
+     still says 3 screened. If it does, Finviz becomes next week's first
+     target: identify the cause, then a reviewed fix in a joint session with
+     the reviewer.
 7. **Intra-session admissions fill at that session's open, which came before
    the decision** (found 2026-10-20, corrected r2, r3 and r4). 11 fills (9
    `clean_v3`) are bounded: each holds if its admitting run started at its
@@ -114,6 +123,15 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      `archive/AUDIT_2026-10-20_admission_routes.md`.
    - Step 3 will record the decision time and price, plus the fill bar, so
      the gap is measured on every trade.
+8. **The OHLCV cache accepts a history that goes backwards** (found
+   2026-10-23).
+   - `download_stock` (`engine/data_feed.py:72-80`) saves whatever yfinance
+     returns. On 22 Oct 13:30 UTC, Yahoo returned AMP without its 21 Oct
+     row, which replaced a cache that had it.
+   - Both 22 Oct reports used the 20 Oct bar for AMP's daily exit check. AMP
+     was far from its SL and TP, so there was probably no effect.
+   - Recorded, not fixed (FROZEN). Self-check: did the 23 Oct 13:30
+     re-download restore 21/22 Oct?
 
 ## Open questions (not being worked on)
 
