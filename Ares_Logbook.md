@@ -3572,6 +3572,178 @@ full anyway.
   against 171 MB the night before. It is still confounded by the 3-symbol
   Finviz runs, so it is not the normal night Hermes needs.
 
+### 2026-10-21 → 22 — SKYD scales out 50% at $7.87 (+11.35%); AVTR dropped on drift; TMO new peak
+
+**21:32 MYT report (Oct 21, `49c3254`).**
+- 5/5 slots, no fills, no closes. Clean sample unchanged: **9 closed, W 1/9,
+  −$95.22**.
+- Queue: AVTR `kept` at 13:30:49, live $16.62, drift 1.22%. These are the
+  same values as the 21:00 check the night before, because it ran before the
+  open.
+- **Scan: 3 screened, 0 signals.** Finviz is still broken (third weekday).
+- System:
+  - RAM 829 MB, swap 305 MB (**0 MB paged out in 16.5 h**)
+  - stall 129 ms
+  - cache 1074 symbols
+
+**00:10 / 01:30 MYT monitor (recorder cycles 13 and 14).** No exits. The
+peaks advanced, so the monitor's `promote_queue` ran (A5); slots were full, so
+nothing was promoted.
+
+| | 00:10 | 01:30 | stop (TS) at 01:30 | gap to stop at 01:30 |
+|---|---|---|---|---|
+| TMO | $702.17 (+7.3%), **new peak** | $696.04 (+6.3%) | $634.25 | 8.9% |
+| AMP | $490.46 (−0.3%) | $491.28 (−0.2%) | $472.99 | 3.7% |
+| ITUB | $9.70 (−4.2%) | $9.65 (−4.6%) | $9.32 | 3.4% |
+| INSM | $95.37 (−3.0%) | $95.27 (−3.1%) | $93.05 | **2.3%** |
+| SKYD | $7.24 (+2.4%), new peak | $7.49 (+5.9%), new peak | $6.74 | 10.0% |
+
+- The trailing stops match `peak × 0.90`:
+  - SKYD: $7.24 → TS $6.52, then $7.49 → TS $6.74.
+  - TMO: $702.17 × 0.9 = $631.95, which is below the SL, so TS stays at the SL, $634.25.
+- **Inspection: PASS, rc 0.** Command:
+  `inspect_monitor_cycles.py 49c3254 57d243b 49aa335`.
+  - Cycle `d5026ea1` (`57d243b`) and cycle `118dd48f` (`49aa335`).
+  - 5 records each: AMP, INSM, ITUB, SKYD, TMO.
+
+**05:01 MYT report (Oct 22, `9d54fec`).**
+- **SKYD scale-out.** The 21 Oct daily bar closed at $7.88, above TP $7.77.
+  - `check_open_trades` sold 50%, 10.54 of 21.08 shares, at **$7.87**: recorded `scale_out_pnl` +$8.45 (+11.35%), plus a $1 commission (`total_commission` $1 → $2).
+  - Peak $7.88, so TS = $7.88 × 0.9 = **$7.09**, about $0.02 above entry ($7.07).
+  - 10.54 shares remain open. Parity record `cda826cf`: `scale_out`, **MATCH**.
+  - The clean-sample figures don't change: the trade is still open.
+- **AVTR dropped** at 21:00:19: live $17.26, drift +5.12%, above the ±5.0%
+  maximum. The queue is now empty.
+- Scan: 3 screened, 0 signals. Cache 1074 → 1066 symbols (cause not checked).
+- System:
+  - RAM 988 MB, swap 305 → 314 MB (9 MB paged out in 7.5 h)
+  - stall 657 ms
+- For Hermes's swappiness decision: both windows are quiet (0 MB and 9 MB).
+  They are still confounded by the 3-symbol Finviz runs. Tonight's 21:32 MYT
+  window will include the 22 Oct 06:05–08:26 UTC host lock-up, so it will
+  not be a normal night either.
+
+### 2026-10-22 — security check after the eMudhra CA compromise: three environment changes (no code change)
+
+**Trigger.** Hermes reported the eMudhra CA key compromise (forged
+certificates possible), PHP RCE advisories, and this morning's host
+incident (06:05–08:26 UTC, Hermes only; no Ares job in that window). Every
+Hermes claim about Ares was checked against the repo and the VPS and holds.
+No PHP or web server is installed. With the gateway down, only `sshd :22`
+listens publicly; DNS listens on loopback only.
+
+**Which trust list each Ares connection uses (VPS, 09:00–09:20 UTC):**
+
+| Connection | Trust list | Before | Action |
+|---|---|---|---|
+| Telegram (`curl` in the wrappers) | system store | updated 06:05 by unattended-upgrades (`ca-certificates` 20260816ubuntu0.24.04.1) | none |
+| yfinance 1.7.0 → `curl_cffi` 0.16.3 | `ssl.get_default_verify_paths()` → `/usr/lib/ssl/cert.pem` → `/etc/ssl/certs/ca-certificates.crt` (system store); certifi only as fallback | covered by the system update | none |
+| finvizfinance 1.5.0 → `requests` 2.34.2 | certifi 2026.07.22: 4 eMudhra roots (emSign G1, G3 ECC, C1, C3 ECC) | **trusted the compromised G3** | A |
+| IB Gateway login (Zulu JRE 17.0.16 in `/opt/i4j_jres/Oda-jK0QgTEmVssfllLP/`) | JRE `cacerts`: emSign G1, G2, G3 ECC | **trusted G3** (Java has no eMudhra distrust rule) | B |
+| IB API (`data_feed.py`) | plain TCP to `127.0.0.1:4002` | n/a | none |
+| `git push` | SSH | n/a | none |
+| Gateway listening on `*:4002` while it runs; ufw inactive | network | reachable from outside, guarded only by IB's trusted-IP setting | C |
+
+**Changes (user's go-ahead; Ares code and config untouched):**
+- **A.** `venv/bin/pip install --no-deps certifi==2026.10.19`.
+  - Baseline `pip freeze` saved to `/root/ares/pip_freeze_2026-10-22.txt` (the first record of the Ares venv; there is no requirements file). Its diff afterwards shows the certifi line only. numpy 2.2.6 and pandas 3.0.5 are unchanged.
+  - The new bundle drops emSign ECC Root CA - G3. G1, C1 and C3 remain, as in Mozilla's list.
+  - Undo: `venv/bin/pip install --no-deps certifi==2026.7.22`.
+- **B.** Deleted `emsigneccrootcag3`, `emsignrootcag1` and `emsignrootcag2` from the gateway JRE's `cacerts`.
+  - `keytool` now lists 0 emSign entries; the file went from 122,913 to 119,828 bytes.
+  - Backup at `/root/ares/cacerts_zulu_2026-10-22.bak` (original date 29 Oct 2025).
+  - Undo: copy the backup back. An IB or JRE update may replace this file; recheck after one.
+- **C.** DigitalOcean cloud firewall on Ares-Trading: inbound TCP 22 only, outbound default (all).
+  - A new SSH login from the laptop succeeded with the old session still open.
+  - This covers Hermes as well.
+
+**Rule from Hermes's incident, adopted for Ares:** never run `pip install -U`
+in the Ares venv. Change one pinned package with `--no-deps` and record it
+here.
+
+**To verify tonight** (checked 23 Oct from the bot's commits):
+- [x] B — the gateway logged in after the `cacerts` change. In report
+  `d1958af` (13:30 UTC), 4 of 5 parity records have `price_source: IBKR`
+  with bar date 2026-10-22; at 21:00, all 4 are IBKR. Both monitors had live
+  prices (inspection PASS). `ss`/`gateway.log` were not checked.
+- [x] A — no change in behaviour: 3 screened, the same as 17–21 Oct, and
+  the reports completed. This is not positive proof of a TLS handshake to
+  Finviz, because Finviz was already returning nothing.
+- [x] C — from the laptop on 23 Oct, against the public IP: port 4002 **timed
+  out** (dropped) and port 22 **succeeded**. A timeout, not "refused", means
+  the cloud firewall dropped the packets, so this holds whether or not the
+  gateway was running at the time.
+- [ ] Hermes cycles continue: not checked from the Ares side.
+
+Not done: `/root/jdk-17.0.12/bin` is on the wrappers' `PATH`, but no known
+Ares process uses that JDK. Low priority.
+
+### 2026-10-22 → 23 — SKYD closes at TP (+10.57%, clean sample 2/10); AMP's daily bar went back to 20 Oct; host lock-up visible in the stall
+
+**21:32 MYT report (Oct 22, `d1958af`).**
+- 5/5 slots, no fills, no closes. Queue empty.
+- Scan: 3 screened, 0 signals (Finviz still broken, 4th weekday).
+- System:
+  - ⚠️ stall **1,065,604 ms** (17.8 min); 2284 MB paged out; swap 314 → 37 MB
+  - RAM 1162 MB, cache 1066 → 1058 symbols
+- The 16.5 h window (21:00 UTC 21 Oct → 13:30 UTC 22 Oct) contains the
+  06:05–08:26 UTC host lock-up caused by Hermes MT5. No Ares job ran in that
+  window. This is that event, not an Ares memory problem.
+- **New: AMP's daily bar went back from 2026-10-21 to 2026-10-20.**
+
+  | Record | Time (UTC) | `bar_date` | `price_source` | `bar_price` |
+  |---|---|---|---|---|
+  | `1f675b8b` | 21 Oct 13:30 | 2026-10-21 | daily | 494.19 |
+  | `cda826cf` | 21 Oct 21:00 | 2026-10-21 | IBKR | 490.51 |
+  | `fc982746` | 22 Oct 13:30 | **2026-10-20** | daily | 487.67, which is the 20 Oct close |
+  | `58aa8010` | 22 Oct 21:00 | **2026-10-20** | IBKR | 496.83 |
+
+  - The other symbols had a 2026-10-22 bar.
+  - The marker contract still matched.
+  - **Cause (VPS, 23 Oct).** `data/ohlcv/AMP.csv` was rewritten at 22 Oct
+    13:30 UTC and ends at 2026-10-20 (rows 16, 19, 20 Oct). The 21 Oct row is
+    missing.
+    - `load_stock` re-downloads once the cache is more than 20 h old. At
+      13:30 the file was about 24 h old.
+    - `download_stock` (`data_feed.py:72-80`) writes whatever yfinance
+      returns, with no check on the last date. So a Yahoo response missing
+      21 Oct replaced a cache that had it.
+    - At 21:00 the file was 7.5 h old, so it was not refreshed and the
+      20 Oct bar was used again.
+    - Finding: **the cache accepts a history that goes backwards.** Ares is
+      frozen, so this is recorded only.
+  - **Effect.** The report's daily-bar exit checks for AMP saw 20 Oct, not
+    21 Oct. The monitors' IBKR live prices for AMP on 21–22 Oct ($490–$496)
+    were far from SL $472.99 and TP $541.29, so a missed exit is unlikely. The
+    21 Oct high and low were not checked.
+  - **Self-check:** today's 13:30 UTC report re-downloads AMP (the file will
+    be more than 20 h old). Look at whether the 21/22 Oct rows come back.
+  - Cache counts fell 1074 → 1066 → 1058 → 1043. The likely cause is
+    `prune_cache` (`data_feed.py:145`): it deletes unreferenced files more
+    than 30 days old, and with Finviz down (3 screened) few symbols are being
+    refreshed. This is inferred, not checked.
+
+**00:10 / 01:30 MYT monitor (`11873c6`, `ff96632`).**
+- **SKYD closed at 00:10: take_profit.**
+  - Live price $8.15, the new peak (TS $7.34).
+  - `close_trade` was passed the TP **$7.77**, not the live price, and booked $7.76 after slippage. The remaining 10.54 shares made +$7.30. Booking at the TP level instead of the higher live price matches the code (recorder: `close_price_argument` 7.77, `observed_live` 8.15).
+  - Trade total: pnl $15.75 (+10.57%); after $3 commissions, **+$12.75**.
+  - Route R2 (queue → scan), clean_v3.
+- At 01:30, 4 records: TMO, AMP, ITUB, INSM. No exits.
+- **Inspection: PASS, rc 0.** Command: `inspect_monitor_cycles.py d1958af 11873c6 ff96632`.
+  - Cycle `5d935c8e`: 5 records. Cycle `6aeea8fd`: 4 records.
+
+**05:01 MYT report (Oct 23, `779b540`).**
+- 4/5 slots. No queue, so nothing to promote.
+- **Clean sample: 10 closed, W 2/10 (20%), −$82.47.**
+  - −$95.22 + $12.75 = −$82.47 ✓
+  - Expectancy −$8.25, PF 0.16
+  - Net/trade −5.53% ± 5.55%, so the CI now includes zero
+- All history: 17 closed, W 4/17, −$105.04.
+- System:
+  - Swap 38 MB (1 MB paged out in 7.5 h), stall 140 ms, back to quiet
+  - Cache 1043 symbols
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
