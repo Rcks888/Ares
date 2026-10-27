@@ -1,3 +1,9 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:2
+signal_details:RRC | momentum_breakout | conf3 | uptrend
+  Price: $56.38 | RSI: 84.5 | Vol: 3.53x
+  Buy: $150 (2.7 shares)
+  SL: $51.76 | TP: $66.53 (+18%) | TS: 10%|||SGRY | momentum_breakout | conf3 | uptrend
+  Price: $23.36 | RSI: 84.6 | Vol: 2.18x
+  Buy: $150 (6.4 shares)
+  SL: $18.33 | TP: $27.56 (+18%) | TS: 10%
