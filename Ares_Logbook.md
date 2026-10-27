@@ -3760,6 +3760,95 @@ Ares process uses that JDK. Low priority.
 - **Second, only if time:** step 3 implementation on `recorder/admission-v1`, not activated.
 - If Finviz takes the week, step 3 and later checkpoints move one week.
 
+### 2026-10-23 → 27 — Friday monitor hung 80 min (clientId 10 collision); ITUB stopped out through a −22% gap, booked −8.0% vs about −26% to −28% real; Finviz still broken
+
+**21:33 MYT report (Oct 23, `496b0c4`).**
+- 4/5 slots. No queue, no fills, no closes.
+- Scan: 3 screened, 0 signals (Finviz, 5th weekday).
+- System: swap 77 MB (43 MB paged out in 16.5 h), stall 262 ms, cache 1027 symbols.
+- AMP `bar_date` 2026-10-23, same as the others.
+
+**00:10 / 01:30 MYT monitor (Oct 24, `981a173`, `1da9ae3`). The 16:10 UTC run hung for 80 minutes.**
+- Both Live Checks arrived at about 01:30 MYT. The second one shows **TMO "No live price"**.
+- No exits. All 8 records were holds, apart from the TMO skip.
+
+  | Cycle | Commit | `cycle_started_at` | `cycle_completed_at` | Result |
+  |---|---|---|---|---|
+  | `f010a5c5` (16:10 slot) | `981a173` | 16:10:05 | **17:30:12** | 4 holds |
+  | `bef0ee43` (17:30 slot) | `1da9ae3` | 17:30:04 | 17:30:19 | TMO `skipped` (`live_price_unavailable_cause_unknown`), 3 holds |
+
+- **The two runs overlapped:** the 17:30 run started 8 s before the 16:10 run finished.
+  - The inspection (`inspect_monitor_cycles.py 496b0c4 981a173 1da9ae3`) returned **FAIL**: "cycle_started_at is earlier than the previous commit". That is the correct verdict for overlapping runs.
+  - Each record set was complete (`coverage_complete`, `reconciled`, 4/4 written, 0 write failures), so this is not a recorder fault.
+- **`cron.log` (lines 13030–13075, VPS 27 Oct).** Both runs append to the same file, in this order:
+  1. `Peer closed connection. clientId 10 already in use?`
+  2. The 16:10 run's stdout block and its Telegram reply
+  3. `API connection failed: TimeoutError()`
+  4. The 17:30 run's stdout block and its Telegram reply
+  - Python block-buffers stdout into the pipe until exit, but writes stderr immediately, so the order shows when each line was written.
+  - **Reading (inference, consistent with every timestamp):**
+    - About 17:30:05: the gateway rejected the 17:30 run's first connect (for TMO), because the hung 16:10 run still held `clientId=10` (line 1).
+    - 17:30:12: the 16:10 run finished and flushed its output (line 2).
+    - About 17:30:15: the 10 s connect timeout expired (line 3), so TMO got no price.
+    - AMP, ITUB and INSM then connected normally.
+  - The 16:10 run printed no error. **Where it hung is unknown**, because the observation timestamps are taken at flush, not per step.
+    - Only `ib.connect` has an explicit timeout; `qualifyContracts` has none.
+    - An IB call is the likely place, but this is not checked.
+    - What released the run at 17:30 is also unknown.
+- **This is known issue 4** (shared `clientId=10`; only connect has a timeout), the first recurrence since the Oct 1 stall.
+  - No effect here: TMO at $669 was far from its SL of $634.25.
+  - The dashboard gave no warning.
+  - Recorded only.
+
+**05:01 MYT report (Oct 24, `8c82116`).**
+- No change: 4/5 slots, 3 screened, 0 signals.
+- System: ⚠️ swap 201 MB (126 MB paged out in 7.5 h), stall 699 ms, cache 1014 symbols.
+
+**21:33 MYT report (Oct 26, Mon, `ae6ebc7`). ITUB closed: stop_loss.**
+- IBKR live price (parity record, 13:30:54 UTC) was **$7.28**, against a stop of $9.32.
+  - Booked at **$9.31**: stop × (1 − 0.1%).
+  - Inline and shadow both decided `close:stop_loss`: MATCH.
+- **The gap was real.** The 26 Oct partial row in VPS `data/ohlcv/ITUB.csv`:
+  - Close/High/Low **$7.50 / $7.54 / $7.50**, volume **8.36 M**.
+  - Friday's close was $9.67, so this is about **−22% overnight**.
+  - The row's Open (9.48) equals Friday's open exactly. It looks like a stale Yahoo value and is not used.
+
+  | Basis | Exit after 0.1% slip | P&L % | P&L after $2 costs |
+  |---|---|---|---|
+  | **Booked** (stop level) | $9.31 | −8.0% | **−$13.92** |
+  | Observed IBKR $7.28 | $7.27 | −28.1% | −$43.91 |
+  | Yahoo partial-bar $7.50 | $7.49 | −26.0% | −$40.68 |
+
+  - The booking understates this loss by about **$27–30**.
+  - This is the shared defect recorded 2026-10-09: exits are booked at the stop level, and the observed price is discarded. This is the first gap-through large enough to matter.
+  - Recorded only (FROZEN).
+- ITUB: route R1, clean_v3, `weak_follow_through`, peak +0.3%.
+- **Clean sample: 11 closed, W 2/11 (18%), −$96.38** (−$82.47 − $13.91 ✓).
+  - At a realistic ITUB exit, this would be about **−$123 to −$126**.
+  - Expectancy −$8.76, PF 0.14.
+  - Net/trade −5.88% ± 5.07% (about −10.95% to −0.81%). The CI excludes zero again, and the dashboard drops its CI line without saying so. That is the same wording gap as 2026-10-14. Not a conclusion about edge at n=11.
+- All history: 18 closed, W 4/18, −$118.95.
+- **AMP used the 23 Oct bar; the others used 26 Oct.**
+  - VPS `AMP.csv` has rows for 20, 21, 22 and 23 Oct, but none for 26 Oct.
+  - Yahoo had not yet published AMP's 26 Oct bar at 13:30.
+  - The 21:01 report did not re-download, because the cache was only 7.5 h old.
+- **Known issue 8 self-check answered.** Friday's re-download restored 21 and 22 Oct. Monday's case is milder: today's row is missing, but the history did not go backwards.
+- System:
+  - Stall ⚠️ 1460 ms in the 64.5 h weekend window (last Monday: 1200 ms).
+  - Swap 284 MB, inert.
+  - Cache 944 symbols. The drop from 1014 over the weekend is consistent with `prune_cache` while Finviz is down. Not checked.
+- Scan: 3 screened, 0 signals.
+  - Finviz has been broken since 19 Oct: 6 weekdays, 12 reports.
+  - **The checkpoint's hold condition is met, so Finviz is this week's first target.**
+
+**00:10 / 01:30 MYT monitor (Oct 27, `a6035e5`, `fbec75b`).**
+- TMO, AMP, INSM: no exits.
+- **Inspection: PASS** (`inspect_monitor_cycles.py ae6ebc7 a6035e5 fbec75b`): cycle `323c2605` with 3 records, cycle `cb57fccd` with 3 records.
+
+**05:01 MYT report (Oct 27, `f65a610`).**
+- 3/5 slots, no queue. Scan: 3 screened, 0 signals.
+- System: swap 284 MB (0 MB paged out), stall 21 ms.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)

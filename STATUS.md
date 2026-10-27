@@ -1,6 +1,6 @@
 # Ares: current status
 
-Last updated: 2026-10-23 (weekly checkpoint). This page is the entry point. History is in
+Last updated: 2026-10-27. This page is the entry point. History is in
 `Ares_Logbook.md`, full reference in `README.md`, finished investigations in
 `archive/`. Everything removed in the cleanup is kept at tag
 `checkpoint-2026-10-12`.
@@ -93,6 +93,12 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
    running but wedged gateway is never restarted.
 4. **All Ares processes use IB `clientId=10`, and only `connect` has a
    timeout.** A stalled monitor can block the report (Oct 1).
+   - **Recurred Fri 23 Oct.** The 16:10 UTC monitor hung for 80 min, still
+     holding `clientId=10`.
+   - The gateway rejected the 17:30 run's first connect ("clientId 10
+     already in use?"), so TMO got no live price.
+   - No decision was affected, and the dashboard gave no warning.
+   - Where the run hung is unknown. See the logbook, 23 → 27 Oct.
 5. **SSH password login is enabled on the VPS**, and outsiders are trying
    passwords. Since 2026-10-22, a DigitalOcean cloud firewall allows inbound
    TCP 22 only (port 4002 verified dropped from outside). SSH itself is
@@ -113,6 +119,8 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      still says 3 screened. If it does, Finviz becomes next week's first
      target: identify the cause, then a reviewed fix in a joint session with
      the reviewer.
+   - 23 and 26 Oct: still 3 screened (6 weekdays, 12 reports). **This is
+     week 26–30 Oct's first target.**
 7. **Intra-session admissions fill at that session's open, which came before
    the decision** (found 2026-10-20, corrected r2, r3 and r4). 11 fills (9
    `clean_v3`) are bounded: each holds if its admitting run started at its
@@ -130,8 +138,23 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      row, which replaced a cache that had it.
    - Both 22 Oct reports used the 20 Oct bar for AMP's daily exit check. AMP
      was far from its SL and TP, so there was probably no effect.
-   - Recorded, not fixed (FROZEN). Self-check: did the 23 Oct 13:30
-     re-download restore 21/22 Oct?
+   - Recorded, not fixed (FROZEN). Self-check answered: yes, the 23 Oct
+     re-download restored 21 and 22 Oct.
+   - A milder variant on 26 Oct: Yahoo had no 26 Oct row for AMP at 13:30.
+     The 21:00 report does not refresh a 7.5 h-old cache, so both 26 Oct
+     reports used the 23 Oct bar.
+9. **Exits are booked at the stop or TP level, not at the observed price.**
+   - ITUB on 26 Oct: IBKR showed $7.28 after a gap of about −22% overnight
+     (Yahoo $7.50, 8.4 M shares). The stop was $9.32, and the exit was
+     booked at $9.31.
+   - Booked −8.0% (−$13.92). At the observed price it would be about −26%
+     to −28% (−$41 to −$44).
+   - So the clean sample's −$96.38 is about $27–30 too good: roughly −$123
+     to −$126.
+   - The same defect books TP exits below a higher live price (SKYD, 23 Oct).
+   - Recorded, not fixed (FROZEN). It bears on step 4, which exit policy is
+     authoritative. The monitor recorder captures `observed_live` against
+     `booked_exit_price`. The report path's parity record has the IBKR price.
 
 ## Open questions (not being worked on)
 
