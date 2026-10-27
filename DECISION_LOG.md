@@ -91,6 +91,68 @@ retain the ability to hold cash.
 
 ---
 
+## D-004 — Finviz screener restored by a minimal parser fix, without a reviewer round
+
+**Settled 2026-10-27 (user decision). An exception to FROZEN, limited to `engine/screener.py`.**
+
+**Problem.** From Mon 19 Oct 13:32 UTC, every report screened only SPY/QQQ/IWM:
+6 weekdays, 12 reports, 0 signals (STATUS known issue 6; logbook 2026-10-20 and
+23 → 27 Oct).
+- Finviz moved its screener to `/screener/stocks`. Results are now an embedded
+  JSON block (`data-ssr-props="ssr-island-1"`, `data.rows[].text.ticker`,
+  `data.totalCount`, 20 rows per page). The page has no `<table>`.
+- `finvizfinance` 1.5.0 is still the newest on PyPI (checked 27 Oct). It finds no
+  table and returns `None`. `_run_screen` printed that as "0 stocks", with no
+  error.
+
+**Change** (branch `fix/finviz-screener`, `engine/screener.py` only):
+- `_run_screen` reads the JSON block with `requests`, with a 20 s timeout.
+- The screens are unchanged: same five screens, same filter dictionaries.
+  - URL codes are copied from finvizfinance 1.5.0 `constants.filter_dict`.
+  - Same `v=111`, `o=ticker`, `r` paging and 1 s between pages, as in 1.5.0
+    `screener_view`.
+  - Pages are fetched until `totalCount`.
+- An unreadable page now prints `Screen [...] error:` and returns `[]`; before,
+  it showed "0 stocks". Cases covered: block missing, bad JSON, invalid
+  `totalCount`, a row without a ticker, an HTTP error.
+- An unmapped filter pair raises, because Finviz silently ignores unknown codes
+  (verified: a bogus code returned the unfiltered 1673).
+- `scan_market`, `get_screened_symbols`, `MAX_CANDIDATES` and `daily_report.py`
+  are unchanged.
+
+**Evidence.**
+- `tests/test_screener.py`: 26/26. 14 deliberate faults injected; all caught.
+- Live from the laptop, 27 Oct 02:15 UTC: 67 / 91 / 3 / 146 / 94 per screen,
+  329 unique, capped to 100.
+  - The same counts as direct URL checks of the codes. Each technical filter
+    narrowed the base 1673 and its rows satisfied the filter (e.g. `ta_change_u3`
+    page 1 change +3.0…+8.0%).
+  - Before the break: 102 and 455 unique, 16 Oct.
+- The other tests are unchanged and pass. `test_monitor_observer.py` needs
+  `pytest`, which is not installed on the laptop.
+
+**Why no reviewer round.** This restores behaviour, not new behaviour: the same
+screens and universe definition, parsed from the new page format. It touches no
+trading, exit, tracker or recorder logic.
+- This replaces the 23 Oct checkpoint wording "reviewed fix in a joint session
+  with the reviewer".
+
+**Effects to expect.**
+- New candidates and signals resume, so the clean sample can grow again. Its
+  definition is unchanged.
+- The `engine/screener.py` hash changes in the recorder's `decision_manifest`.
+- Still open (not part of this fix): if every screen fails, the dashboard still
+  shows only "3 screened". The fixed-watchlist fallback still never fires.
+
+**Verification after deploy.** At the first report, check:
+- the dashboard shows far more than 3 screened;
+- `cron.log` has five `Screen [...]: N stocks` lines and no `error` line.
+
+**Rollback.** `git revert` the fix commit on the laptop, then `git pull --ff-only` on
+the VPS. The worst case is back to "3 screened".
+
+---
+
 ## C-001 — heartbeat lineage is deployed but not yet verified
 
 **Recorded 2026-09-30T02:43Z.** An earlier summary listed this as completed. It is

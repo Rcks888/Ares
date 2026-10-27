@@ -121,6 +121,14 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      the reviewer.
    - 23 and 26 Oct: still 3 screened (6 weekdays, 12 reports). **This is
      week 26–30 Oct's first target.**
+   - **27 Oct: fixed (D-004).** `engine/screener.py` now reads the new
+     page's JSON block, using the same screens and filter codes as before.
+     Tests 26/26; a live laptop run gave 329 unique candidates.
+   - The user decided to skip the reviewer round, because this restores
+     behaviour rather than adding it.
+   - Deploy: VPS `git pull`. Then confirm at the first report that it
+     screens far more than 3 and that `cron.log` has no `Screen [...] error`
+     line.
 7. **Intra-session admissions fill at that session's open, which came before
    the decision** (found 2026-10-20, corrected r2, r3 and r4). 11 fills (9
    `clean_v3`) are bounded: each holds if its admitting run started at its

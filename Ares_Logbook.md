@@ -3849,6 +3849,28 @@ Ares process uses that JDK. Low priority.
 - 3/5 slots, no queue. Scan: 3 screened, 0 signals.
 - System: swap 284 MB (0 MB paged out), stall 21 ms.
 
+### 2026-10-27 — Finviz screener fixed (D-004): parser for the new page, same screens
+
+- **Cause, confirmed again today.** The new `/screener/stocks` page has no
+  table. Its results sit in an embedded JSON block: `data.rows[].text.ticker`,
+  `data.totalCount`, 20 rows per page.
+  - `r=` paging still works. Past the end, it repeats the last page.
+  - `finvizfinance` 1.5.0 is still the newest release, so upgrading would not
+    fix it.
+- **Fix:** `engine/screener.py` only.
+  - It reads the JSON block, with the same filter codes as finvizfinance 1.5.0
+    and the same `v=111`, `o=ticker`, paging and 1 s pause.
+  - An unreadable page now prints an `error` line instead of "0 stocks".
+  - Unknown filter codes raise, because Finviz ignores them silently and would
+    return the unfiltered list.
+- **Tests:** `tests/test_screener.py` 26/26; 14 injected faults, all caught.
+- **Live run** (laptop, 02:15 UTC): 67 / 91 / 3 / 146 / 94 per screen, 329
+  unique, capped to 100.
+- **No reviewer round.** The user decided this on 27 Oct, because it restores
+  existing behaviour. Recorded as D-004.
+- **Still open:** a total screener failure still shows only as "3 screened"
+  on the dashboard.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
