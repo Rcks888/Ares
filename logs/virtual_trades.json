@@ -224,7 +224,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 28,
+      "days_tracked": 29,
       "max_days": 30,
       "peak_after_exit": 54.15,
       "trough_after_exit": 47.91,
@@ -232,7 +232,7 @@
       "trough_date": "2026-10-01",
       "missed_upside_pct": 11.37,
       "avoided_downside_pct": 1.46,
-      "latest_price": 54.15
+      "latest_price": 53.1
     }
   },
   {
@@ -449,8 +449,8 @@
       "manual_note": ""
     },
     "shadow": {
-      "active": true,
-      "days_tracked": 29,
+      "active": false,
+      "days_tracked": 30,
       "max_days": 30,
       "peak_after_exit": 32.6,
       "trough_after_exit": 22.38,
@@ -458,7 +458,7 @@
       "trough_date": "2026-10-23",
       "missed_upside_pct": 15.6,
       "avoided_downside_pct": 20.64,
-      "latest_price": 24.81
+      "latest_price": 26.98
     }
   },
   {
@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 36
+    "holding_days": 37
   },
   {
     "symbol": "WBD",
@@ -737,7 +737,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 27,
+      "days_tracked": 28,
       "max_days": 30,
       "peak_after_exit": 15.79,
       "trough_after_exit": 7.64,
@@ -745,7 +745,7 @@
       "trough_date": "2026-10-26",
       "missed_upside_pct": 4.5,
       "avoided_downside_pct": 49.44,
-      "latest_price": 7.85
+      "latest_price": 8.07
     }
   },
   {
@@ -794,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 28
+    "holding_days": 29
   },
   {
     "symbol": "TWST",
@@ -861,7 +861,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 21,
+      "days_tracked": 22,
       "max_days": 30,
       "peak_after_exit": 188.1,
       "trough_after_exit": 133.5,
@@ -869,7 +869,7 @@
       "trough_date": "2026-10-23",
       "missed_upside_pct": 0.1,
       "avoided_downside_pct": 28.96,
-      "latest_price": 144.06
+      "latest_price": 160.86
     }
   },
   {
@@ -937,7 +937,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 26,
+      "days_tracked": 27,
       "max_days": 30,
       "peak_after_exit": 20.66,
       "trough_after_exit": 18.78,
@@ -945,7 +945,7 @@
       "trough_date": "2026-10-09",
       "missed_upside_pct": 4.13,
       "avoided_downside_pct": 5.34,
-      "latest_price": 20.19
+      "latest_price": 20.06
     }
   },
   {
@@ -1013,7 +1013,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 25,
+      "days_tracked": 26,
       "max_days": 30,
       "peak_after_exit": 45.01,
       "trough_after_exit": 34.16,
@@ -1089,15 +1089,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 21,
+      "days_tracked": 22,
       "max_days": 30,
       "peak_after_exit": 71.38,
-      "trough_after_exit": 59.97,
+      "trough_after_exit": 59.64,
       "peak_date": "2026-10-09",
-      "trough_date": "2026-10-26",
+      "trough_date": "2026-10-28",
       "missed_upside_pct": 8.38,
-      "avoided_downside_pct": 8.94,
-      "latest_price": 59.97
+      "avoided_downside_pct": 9.44,
+      "latest_price": 59.64
     }
   },
   {
@@ -1165,7 +1165,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 14,
+      "days_tracked": 15,
       "max_days": 30,
       "peak_after_exit": 11.76,
       "trough_after_exit": 7.9,
@@ -1173,7 +1173,7 @@
       "trough_date": "2026-10-26",
       "missed_upside_pct": 0.09,
       "avoided_downside_pct": 32.77,
-      "latest_price": 8.62
+      "latest_price": 9.27
     }
   },
   {
@@ -1241,7 +1241,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 1,
+      "days_tracked": 2,
       "max_days": 30,
       "peak_after_exit": 9.32,
       "trough_after_exit": 7.5,
@@ -1249,7 +1249,7 @@
       "trough_date": "2026-10-26",
       "missed_upside_pct": 0.11,
       "avoided_downside_pct": 19.44,
-      "latest_price": 7.89
+      "latest_price": 7.53
     }
   },
   {
@@ -1317,7 +1317,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 14,
+      "days_tracked": 15,
       "max_days": 30,
       "peak_after_exit": 139.51,
       "trough_after_exit": 108.82,
@@ -1325,7 +1325,7 @@
       "trough_date": "2026-10-16",
       "missed_upside_pct": 17.86,
       "avoided_downside_pct": 8.07,
-      "latest_price": 137.99
+      "latest_price": 138.37
     }
   },
   {
@@ -1393,15 +1393,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 13,
+      "days_tracked": 14,
       "max_days": 30,
       "peak_after_exit": 24.95,
       "trough_after_exit": 23.06,
-      "peak_date": "2026-10-14",
+      "peak_date": "2026-10-28",
       "trough_date": "2026-10-20",
       "missed_upside_pct": 0.93,
       "avoided_downside_pct": 6.72,
-      "latest_price": 24.42
+      "latest_price": 24.95
     }
   },
   {
@@ -1450,7 +1450,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 14
+    "holding_days": 15
   },
   {
     "symbol": "SKYD",
@@ -1521,7 +1521,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 5,
+      "days_tracked": 6,
       "max_days": 30,
       "peak_after_exit": 7.92,
       "trough_after_exit": 7.61,
@@ -1529,7 +1529,55 @@
       "trough_date": "2026-10-27",
       "missed_upside_pct": 2.06,
       "avoided_downside_pct": 1.93,
-      "latest_price": 7.61
+      "latest_price": 7.67
     }
+  },
+  {
+    "symbol": "SGRY",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "volume_spike",
+    "confluence": 3,
+    "signal_date": "2026-10-27",
+    "signal_price": 23.36,
+    "entry_date": "2026-10-28",
+    "entry_price": 23.28,
+    "entry_slippage": 0.0233,
+    "entry_commission": 1.0,
+    "shares": 6.4,
+    "original_shares": 6.4,
+    "position_size": 149.0,
+    "stop_loss": 18.27,
+    "take_profit": 27.47,
+    "trailing_stop": 18.27,
+    "peak_price": 23.28326022911072,
+    "rsi_at_entry": 84.6,
+    "vol_at_entry": 2.18,
+    "stdev_20": 0.1077,
+    "stdev_fallback": false,
+    "strength": "medium",
+    "scaled_out": false,
+    "scale_out_price": null,
+    "scale_out_date": null,
+    "from_queue": false,
+    "sample_phase": "clean_v3",
+    "contaminated": false,
+    "contamination_reasons": [],
+    "fill_source": "scheduled",
+    "fill_detect": "env",
+    "fill_run_ts": "2026-10-28T13:30:38",
+    "status": "open",
+    "exit_date": null,
+    "exit_price": null,
+    "exit_reason": null,
+    "exit_slippage": null,
+    "exit_commission": null,
+    "total_commission": 1.0,
+    "pnl": null,
+    "pnl_pct": null,
+    "pnl_after_costs": null,
+    "version": "3.0",
+    "holding_days": 0
   }
 ]

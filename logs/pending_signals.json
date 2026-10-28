@@ -17,23 +17,5 @@
       "big_movers_up"
     ],
     "from_queue": false
-  },
-  {
-    "symbol": "SGRY",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "volume_spike",
-    "confluence": 3,
-    "date": "2026-10-27",
-    "price": 23.36,
-    "rsi": 84.6,
-    "vol_ratio": 2.18,
-    "stdev_20": 0.1077,
-    "strength": "medium",
-    "screens": [
-      "unusual_volume"
-    ],
-    "from_queue": false
   }
 ]
