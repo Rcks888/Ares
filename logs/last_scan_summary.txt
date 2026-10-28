@@ -1,3 +1,12 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:3
+signal_details:ICLR | momentum_breakout | conf3 | uptrend
+  Price: $214.16 | RSI: 73.8 | Vol: 3.87x
+  Buy: $150 (0.7 shares)
+  SL: $194.50 | TP: $252.71 (+18%) | TS: 10%|||KNSA | momentum_breakout | conf3 | uptrend
+  Price: $95.18 | RSI: 67.7 | Vol: 2.14x
+  Buy: $150 (1.6 shares)
+  SL: $84.42 | TP: $112.31 (+18%) | TS: 10%|||BRZE | momentum_breakout | conf3 | uptrend
+  Price: $45.78 | RSI: 80.4 | Vol: 1.6x
+  Buy: $150 (3.3 shares)
+  SL: $35.07 | TP: $54.02 (+18%) | TS: 10%
