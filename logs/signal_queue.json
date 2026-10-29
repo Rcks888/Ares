@@ -1,21 +1,5 @@
 [
   {
-    "symbol": "BRZE",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "volume_spike",
-    "confluence": 3,
-    "price_at_signal": 45.78,
-    "rsi_at_signal": 80.4,
-    "stdev_20": 0.117,
-    "vol_ratio": 1.6,
-    "date_added": "2026-10-28",
-    "screens": [
-      "unusual_volume"
-    ]
-  },
-  {
     "symbol": "KNSA",
     "strategy": "momentum_breakout",
     "trigger": "breakout",

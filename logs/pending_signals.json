@@ -1,1 +1,20 @@
-[]
+[
+  {
+    "symbol": "BRZE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "volume_spike",
+    "confluence": 3,
+    "date": "2026-10-29",
+    "price": 45.75,
+    "rsi": 80.4,
+    "vol_ratio": 1.6,
+    "stdev_20": 0.117,
+    "strength": "unknown",
+    "screens": [
+      "unusual_volume"
+    ],
+    "from_queue": true
+  }
+]
