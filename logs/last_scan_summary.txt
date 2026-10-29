@@ -1,9 +1,21 @@
 candidates_screened:103
-signals_found:2
-signal_details:FTNT | mean_reversion | conf2 | range
-  Price: $129.80 | RSI: 28.4 | Vol: 0.4x
-  Buy: $150 (1.2 shares)
-  SL: $113.32 | TP: $142.78 (+10%) | TS: 10%|||FFIV | mean_reversion | conf2 | range
-  Price: $360.87 | RSI: 29.7 | Vol: 0.05x
+signals_found:6
+signal_details:FTNT | mean_reversion | conf3 | range
+  Price: $139.10 | RSI: 29.7 | Vol: 3.66x
+  Buy: $150 (1.1 shares)
+  SL: $124.33 | TP: $153.01 (+10%) | TS: 10%|||FFIV | mean_reversion | conf3 | range
+  Price: $363.46 | RSI: 29.8 | Vol: 2.56x
   Buy: $150 (0.4 shares)
-  SL: $324.86 | TP: $396.96 (+10%) | TS: 10%
+  SL: $327.19 | TP: $399.81 (+10%) | TS: 10%|||GKOS | momentum_breakout | conf3 | uptrend
+  Price: $242.48 | RSI: 82.2 | Vol: 4.12x
+  Buy: $150 (0.6 shares)
+  SL: $204.60 | TP: $286.13 (+18%) | TS: 10%|||LNG | momentum_breakout | conf3 | uptrend
+  Price: $318.94 | RSI: 72.9 | Vol: 2.58x
+  Buy: $150 (0.5 shares)
+  SL: $304.84 | TP: $376.35 (+18%) | TS: 10%|||PURR | momentum_breakout | conf3 | uptrend
+  Price: $12.29 | RSI: 56.5 | Vol: 4.18x
+  Buy: $150 (12.2 shares)
+  SL: $10.45 | TP: $14.50 (+18%) | TS: 10%|||STNG | momentum_breakout | conf3 | uptrend
+  Price: $95.07 | RSI: 65.4 | Vol: 1.82x
+  Buy: $150 (1.6 shares)
+  SL: $89.48 | TP: $112.18 (+18%) | TS: 10%
