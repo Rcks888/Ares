@@ -1,6 +1,6 @@
 # Ares: current status
 
-Last updated: 2026-10-27. This page is the entry point. History is in
+Last updated: 2026-10-29. This page is the entry point. History is in
 `Ares_Logbook.md`, full reference in `README.md`, finished investigations in
 `archive/`. Everything removed in the cleanup is kept at tag
 `checkpoint-2026-10-12`.
@@ -19,7 +19,7 @@ The main flow (agreed Oct 9), and where things stand:
 ✔ 0. Recorder repairs accepted   (v7 accepted 2026-10-12, branch 28ae5f0)
 ✔ 1. Conditional recorder activation   (5fd13e9 on the VPS, 2026-10-13; rollback pre-tested)
 ✔ 2. First monitor-cycle inspection  → CHECKPOINT   (2026-10-15: both nights, 4 cycles, PASS)
-▶ 3. Admission-source capture (separately reviewed, both routes)   ← HERE: design r5 accepted 2026-10-21; next: implementation on recorder/admission-v1
+▶ 3. Admission-source capture (separately reviewed, both routes)   ← HERE: design r5 accepted 2026-10-21; implementation M1 accepted 2026-10-29 (recorder/admission-v1 a6dd2f1, not merged, not active); next: M2
 ◻ 4. Evidence-informed decision on which exit policy is authoritative
 ```
 
@@ -34,8 +34,11 @@ why if it differs from the plan.
 | Oct 5 – Oct 9 | vacation; resume | incident (Oct 7), reconciliation, recorder designed, built and reviewed | unplanned: incident work |
 | Oct 12 – Oct 16 | recorder activation, Mon 16:10 UTC | HOLD from review → repair round 2 → pause → checkpoint, audit, cleanup, WBD closed → v3 update → inspection-tool rounds v4–v7 → **accepted Mon** → **activated Tue 13 Oct** (`5fd13e9`) → **inspection Thu 15 Oct: PASS, both nights** → checkpoint | one day late against the original Mon date, a week early against the replan |
 | Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | (steps 0–2 done the week before) route audit, step 3 design r1–r5, **r5 accepted for implementation review Wed 21 Oct**. Monitor inspections Mon–Thu: 8 cycles, all PASS. Unplanned, Thu 22 Oct: eMudhra CA response, environment only (venv certifi 2026.10.19, emSign roots removed from the gateway JRE, DigitalOcean firewall inbound 22 only), all three verified 23 Oct. SKYD closed at TP (clean sample 10, W 2/10). Finding: AMP cache regression (known issue 8) | pulled forward; step 3 design done a week early; security work unplanned, no code change |
-| Oct 26 – Oct 30 | **1st: Finviz** (if still broken on 23 Oct night): identify the cause, design and review a minimal fix with the reviewer. **2nd, if time:** step 3 implementation on `recorder/admission-v1` (not activated) | | replanned 23 Oct: step 3 design finished early. If the Finviz work takes the week, step 3 implementation and later checkpoints move one week (not a rushed project) |
-| Nov 2 onward | evidence collection → step 4 | | no date until there is enough evidence to judge |
+| Oct 26 – Oct 30 | **1st: Finviz** (if still broken on 23 Oct night): identify the cause, design and review a minimal fix with the reviewer. **2nd, if time:** step 3 implementation on `recorder/admission-v1` (not activated) | **Both done.** Finviz fixed Tue 27 Oct (D-004, `2e45851`, no reviewer round, by user decision). On the VPS since the 27 Oct 13:32 report: 103 screened. Signals resumed: RRC and SGRY (27 Oct) filled 28 Oct, so 5/5 slots; ICLR, KNSA and BRZE queued (28 Oct). Step 3 split into milestones M1–M4. **M1** built Tue–Thu, committed Thu 29 Oct (`00aee55`, `d25bec3`). Implementation review v1, Thu 29 Oct: 2 blocking findings, fixed the same day (`a6dd2f1`). **v2 accepted for M1** (not merge, deploy or activation). Monitor inspections Mon–Wed nights: 6 cycles, all PASS. DST: D-005 | the reviewer round dropped for Finviz; step 3 implementation started a week early and is planned in four milestones, one a week |
+| Nov 2 – Nov 6 | **Step 3 M2**: capture controls, one per outcome (all 9 fill outcomes, both queue branches, every promotion early return and candidate outcome); completion and partial outcomes; cross-recorder pairing; monitor entrypoint ordering; recorder unimportable or unwritable; data-feed call counts; end-to-end run of the real `daily_report.py` entrypoint. Also D4 (A2 three-valued, inconsistency as a `contract_violation`), the G2 naming ruling, and `repro_pack.py --only N`. **Done when** implementation review v3 accepts M2. Checkpoint also runs the D-005 check | | |
+| Nov 9 – Nov 13 | **Step 3 M3**: verifier extensions (statement whitelist, call-site inventory, writer inventory and save data flow); persistence and save-chain controls, C-HANDOFF, C-ENUM. Done when the review accepts M3 | | moves a week if an M2 round runs over |
+| Nov 16 – Nov 20 | **Step 3 M4**: `tools/inspect_admission_cycles.py` (state-diff reconciliation, episodes, per-file check, trade links, A2), mutation test, final bundle. Done when the review accepts M4 | | as above |
+| after M4 | activation decision (design §8, owner's go-ahead), then evidence collection → step 4 | | no date until there is enough evidence to judge |
 
 ## What runs (cron, weekdays only)
 
@@ -44,6 +47,11 @@ why if it differs from the plan.
 | 13:00, 16:00, 17:25 | 21:00, 00:00, 01:25 | `restart_gateway.sh` | starts IB Gateway **only if no gateway process exists** |
 | 13:30, 21:00 | 21:30, 05:00 | `run_ares.sh` → `daily_report.py`, `build_dashboard.py` | scan, fill pending, check exits, dashboard to Telegram, commit `logs/` |
 | 16:10, 17:30 | 00:10, 01:30 | `run_monitor.sh` → `monitor_trades.py` | live-price exit check, Telegram, commit `logs/` |
+
+**Winter time (D-005).** From Mon 2 Nov the NYSE session is 14:30–21:00 UTC, and
+the UTC (and MYT) times above are kept. The 13:30 report runs before the open,
+so fills move to the 21:00 report. The 21:00 report runs at the close, so its
+scan may see a bar that is not final yet; this is checked on 6 Nov.
 
 Production state is in `logs/` (`virtual_trades.json` is authoritative), and is
 backed up to GitHub by the bot's own commits.
@@ -63,6 +71,13 @@ backed up to GitHub by the bot's own commits.
   - Observes only, and writes `logs/monitor_{observation,heartbeat,health}_v1.jsonl`.
   - Each cycle is checked with `tools/inspect_monitor_cycles.py`.
   - Rollback and procedure: `ACTIVATION_monitor_recorder_v1.md` §3.5.
+- **Admission-path recorder (step 3, branch `recorder/admission-v1`, not merged,
+  not active):** `engine/admission_observer.py` plus registered capture lines in
+  `engine/tracker.py`, `daily_report.py` and `monitor_trades.py`.
+  - Isolation: `tools/verify_recorder_isolation.py --registry …` on three
+    fixture → code pairs, and `tests/run_admission_isolation_smoke.py`.
+  - Merging to `main` would start writing `logs/admission_*_v1.jsonl`, so a
+    merge needs the activation decision.
 - **Tests:** `tests/`, `tools/`. Only needed if trading or parity code changes.
   Run `for t in tests/test_*.py; do python3 "$t" || echo "FAIL $t"; done`; all
   must exit 0 (they did on 2026-10-12).
@@ -129,6 +144,10 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
    - Deploy: VPS `git pull`. Then confirm at the first report that it
      screens far more than 3 and that `cron.log` has no `Screen [...] error`
      line.
+   - **Verified: resolved.** Every report since 27 Oct 13:32 UTC has screened
+     103. Signals resumed on 27 Oct 21:01 (RRC, SGRY) and 28 Oct 21:01
+     (ICLR, KNSA, BRZE). Still open: a total screener failure shows only as
+     "3 screened".
 7. **Intra-session admissions fill at that session's open, which came before
    the decision** (found 2026-10-20, corrected r2, r3 and r4). 11 fills (9
    `clean_v3`) are bounded: each holds if its admitting run started at its
@@ -139,6 +158,8 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      `archive/AUDIT_2026-10-20_admission_routes.md`.
    - Step 3 will record the decision time and price, plus the fill bar, so
      the gap is measured on every trade.
+   - From 2 Nov (D-005), the 13:30 report runs before the open, so its
+     admissions are no longer exposed. Monitor promotions still are.
 8. **The OHLCV cache accepts a history that goes backwards** (found
    2026-10-23).
    - `download_stock` (`engine/data_feed.py:72-80`) saves whatever yfinance
@@ -163,11 +184,21 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
    - Recorded, not fixed (FROZEN). It bears on step 4, which exit policy is
      authoritative. The monitor recorder captures `observed_live` against
      `booked_exit_price`. The report path's parity record has the IBKR price.
+10. **Queue validation checks price drift only** (found 2026-10-29, in the step
+    3 work; the implementation review v2 bundle calls it K-9).
+    - `_validate_queued` (`engine/tracker.py:410`, `:413` on `main`) reads `RSI` and
+      `EMA_20`. `add_indicators` produces `rsi` and no EMA column.
+    - So RSI is always 50 and EMA20 is always 0. The overbought check and the
+      below-EMA20 check can never fire.
+    - Confirmed in production: all 92 validation events in
+      `logs/queue_events.jsonl` (72 kept, 12 promoted, 8 dropped) have
+      `rsi: 50.0` and `ema20_ok: true`.
+    - Present before M1, and unchanged by it. Recorded, not fixed (FROZEN).
+      This matters for step 4, and for any reading of queue outcomes.
 
 ## Open questions (not being worked on)
 
 - the five monitor exits that cannot be recovered
-- admission-source capture
 - which exit policy is authoritative
 - `MIN_CLOSED_SAMPLE`
 - why `get_live_price` returns `None` (four possible causes)

@@ -153,6 +153,81 @@ the VPS. The worst case is back to "3 screened".
 
 ---
 
+## D-005 — winter time: the cron stays in UTC; the behaviour change is recorded
+
+**Settled 2026-10-29 (user decision). No code or config change.**
+
+**Problem.** US clocks go back on Sun 1 Nov. From Mon 2 Nov the NYSE regular
+session is 14:30–21:00 UTC, not 13:30–20:00. Every cron time is UTC (STATUS,
+*What runs*), so each job moves one hour earlier against the market. MYT has no
+DST, so the MYT times do not change.
+
+| Job (UTC, unchanged) | Summer (EDT) | From 2 Nov (EST) |
+|---|---|---|
+| 13:30 report | 09:30 ET, at the open | **08:30 ET, 1 h before the open** |
+| 16:10 / 17:30 monitor | 12:10 / 13:30 ET | 11:10 / 12:30 ET |
+| 21:00 report | 17:00 ET, 1 h after the close | **16:00 ET, at the close** |
+
+**Effects, read from the code:**
+- **Fills move to the 21:00 report.**
+  - A fill pulls fresh data (`load_stock(..., max_age_hours=0)`,
+    `engine/tracker.py:105` on `main`). At 08:30 ET there is no bar for the day yet, so
+    every pending gets `fill_retry` ("last bar … != today",
+    `engine/tracker.py:122`) and is kept.
+  - The 21:00 report then fills it at that session's open.
+  - Precedent: RRC on 28 Oct, retried at 13:30:38 UTC and filled at 21:01 at
+    $56.59.
+  - The extra 7.5 h is far inside `pending_max_age_days: 4`.
+- **The 13:30 report's admissions come before the open.** Its scan sees only
+  the previous session's complete bars. So its fills are not exposed to known
+  issue 7. Monitor promotions (11:10 / 12:30 ET) still are.
+- **The 21:00 scan runs about at the close.** The screened symbols are
+  refreshed at about 16:00–16:01 ET. Yahoo's bar for the day may not be final
+  yet: the close may be before the closing auction, and volume may be short.
+  That changes the signal inputs (close, RSI on ohlc4, volume ratio). It is
+  **not verified**; see the check below.
+- **Daily exit checks at 21:00** use the IBKR live price when there is one, as
+  now. A held symbol that is not screened uses the 13:30 cache (20 h window):
+  - that cache is now always the previous session's bar;
+  - in summer it held that day's bar, partial, or nothing (AMP, 26 Oct).
+- **Unaffected:**
+  - `_fill_window_ok` assumes EDT. Its gap estimate is now 1 h short, but no
+    cron slot is near the 48 h limit.
+  - The parity schedule contract (`PARITY_CYCLE_SCHEDULE_UTC`,
+    `vps_phase3_verify.sh` §4b), the gateway restarts, and the PSI windows
+    (7.5 h / 16.5 h / 64.5 h).
+- **Watch, not verified: the IBKR daily kill** (README, 15:45 UTC in summer).
+  - If it is set in ET, it moves to 16:45 UTC. That is after the 16:00 restart
+    and the 16:10 monitor, and before the 17:25 restart, which still recovers
+    the gateway for the 17:30 monitor.
+  - On 2 Nov, check the gateway log for the time of the kill.
+
+**Why not shift every job +1 h now.** That keeps the market-relative timing,
+but it is more than a crontab edit:
+- `PARITY_CYCLE_SCHEDULE_UTC` (`tools/pre_parity_snapshot.py:351`) must change;
+- so must its tests (`tests/test_parity_freshness.py`) and the schedule
+  contract in `vps_phase3_verify.sh`.
+
+That is a code change under FROZEN, in three days.
+
+**Check at the 6 Nov checkpoint.** For each signal of the 21:00 reports of
+2–5 Nov:
+- compare the recorded `price` with that date's `Close` in the VPS
+  `data/ohlcv/<SYM>.csv`, re-downloaded by later runs. The recorded price is in
+  `logs/pending_signals.json` (`price`) or `logs/signal_queue.json`
+  (`price_at_signal`) at the report's commit;
+- compare the recorded `vol_ratio` with that date's `Volume` divided by the
+  20-day mean including that day (as `engine/indicators.py:21-22`),
+  recomputed from that file;
+- as a summer baseline, do the same for the 21:00 signals of 27 and 28 Oct
+  (RRC, SGRY, ICLR, KNSA, BRZE), taken at 17:00 ET.
+
+If the closes differ beyond rounding, or the volume is short, a reviewed
+schedule change is designed then; it is not rushed in. The same question returns
+in reverse when US DST starts on 14 Mar 2027.
+
+---
+
 ## C-001 — heartbeat lineage is deployed but not yet verified
 
 **Recorded 2026-09-30T02:43Z.** An earlier summary listed this as completed. It is

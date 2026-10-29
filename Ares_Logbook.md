@@ -3871,6 +3871,138 @@ Ares process uses that JDK. Low priority.
 - **Still open:** a total screener failure still shows only as "3 screened"
   on the dashboard.
 
+### 2026-10-27 → 28 — Finviz fix live (103 screened); first signals since 19 Oct: RRC and SGRY
+
+**21:32 MYT report (Oct 27, `25c1a0c`). First report with the D-004 screener.**
+- **103 screened**, against 3 on every report since 19 Oct. D-004's first check
+  holds. The `cron.log` `error`-line check was not done from the laptop.
+- 0 signals. 3/5 slots (TMO, AMP, INSM), no pending, no queue.
+- System: ⚠️ stall 1642 ms in the 16.5 h window, 7 MB paged out.
+
+**00:10 / 01:30 MYT monitor (Oct 28, `32cd4f6`, `a43c0c1`).**
+- TMO, AMP, INSM: no exits.
+- **Inspection: PASS** (`inspect_monitor_cycles.py 25c1a0c 32cd4f6 a43c0c1`):
+  cycle `e0aca9be` and cycle `83da053d`, 3 records each.
+
+**05:01 MYT report (Oct 28, `cf4917e`). Two signals, both to pending.**
+
+| Symbol | Strategy | Conf | Price | RSI | Vol | SL | TP |
+|---|---|---|---|---|---|---|---|
+| RRC | momentum_breakout | 3 | $56.38 | 84.5 | 3.53× | $51.76 | $66.53 |
+| SGRY | momentum_breakout | 3 | $23.36 | 84.6 | 2.18× | $18.33 | $27.56 |
+
+- 3 open + 2 pending = 5/5.
+- **The dashboard listed only RRC.** It shows only the first entry of
+  `signal_details`, which joins signals with `|||`. Display only; both are in
+  `pending_signals.json`. Recorded.
+- System: stall 857 ms, 144 MB paged out in 7.5 h. This is the first 21:00 run
+  with a full screen since 16 Oct, so it gives the normal-screening data point
+  the 23 Oct checkpoint asked for.
+
+### 2026-10-28 → 29 — SGRY filled at the open; RRC waited for Yahoo's bar and filled at 21:01; 5/5 slots; ICLR, KNSA and BRZE queued
+
+**21:32 MYT report (Oct 28, `a713cbb`).**
+- **SGRY filled at $23.28** (signal $23.36, −0.3%). Entry 2026-10-28, SL $18.27,
+  TP $27.47, `clean_v3`, `fill_run_ts` 13:30:38 UTC.
+- **RRC: `fill_retry`** at the same second: "last bar 2026-10-27 != today
+  2026-10-28". Yahoo had SGRY's 28 Oct row 38 s after the open, but not RRC's.
+  RRC was kept pending.
+- Both were admitted at 21:01 UTC on 27 Oct, before the 28 Oct open, so these
+  fills are not exposed to known issue 7.
+- 0 signals. 4/5 open + 1 pending.
+- System: stall 757 ms, 2 MB paged out.
+
+**00:10 / 01:30 MYT monitor (Oct 29, `88ada3f`, `7f13f98`).**
+- TMO, AMP, INSM, SGRY: no exits. TMO new peak $704.43.
+- **Inspection: PASS** (`inspect_monitor_cycles.py a713cbb 88ada3f 7f13f98`):
+  cycle `32e011df` and cycle `643a63c8`, 4 records each, including SGRY.
+
+**05:01 MYT report (Oct 29, `b74b5d8`).**
+- **RRC filled at $56.59** (signal $56.38, +0.4%). Entry 2026-10-28, SL $51.95,
+  TP $66.77, `clean_v3`, `fill_run_ts` 21:00:46 UTC.
+  - It is booked at the 28 Oct open, after the close. The admission came
+    before that open. From 2 Nov this becomes the normal path for every fill
+    (D-005).
+- **5/5 slots:** TMO, AMP, INSM, SGRY, RRC.
+- 3 signals, all `momentum_breakout` conf 3. Slots full, so all queued
+  (`date_added` 2026-10-28):
+  - ICLR $214.16, RSI 73.8, vol 3.87×;
+  - KNSA $95.18, RSI 67.7, vol 2.14×;
+  - BRZE $45.78, RSI 80.4, vol 1.60×.
+- `queue_ranked.json` is `[]`: they were queued after `maintain_queue` ran, so
+  the dashboard shows no "ranked" label. Expected; they are ranked at the next
+  maintenance.
+- System: stall 321 ms, 6 MB paged out.
+- **Clean sample unchanged:** 11 closed, W 2/11, −$96.38.
+
+### 2026-10-27 → 29 — step 3, implementation M1 built; review v1: 2 blocking findings; v2 accepted for M1
+
+- **Scope.** Design r5 §10 is several weeks of part-time work, so it is split
+  into four milestones, each reviewed before the next is built (STATUS
+  timeline). M1 covers:
+  - fixtures and the capture lines in `engine/tracker.py`, `daily_report.py`
+    and `monitor_trades.py`;
+  - `engine/admission_observer.py`: serialisation, envelope, save facts, call
+    states, routes, `queue_memory`, coverage, heartbeat, A2 helper;
+  - verifier `--registry`, with three fixture → code pairs;
+  - the isolation smoke run, plus every existing suite rerun.
+- **Commits** on `recorder/admission-v1`: `00aee55` (M1), `d25bec3` (gap G1:
+  report flush guarded against `BaseException`), `a6dd2f1` (review fixes).
+  Pushed 29 Oct; not merged, not active.
+- **Implementation review v1** (bundle `review_bundle_admission_impl_v1`):
+  milestone review accepted; D2, D3 and G1 acceptable; G2 left open.
+  **Not approved**, because of two blocking findings:
+  1. The verifier accepted unregistered header changes: `@property` on
+     `generate_report()` passed. Fixed: decorators, return annotations and
+     class bases are compared, with a fail-closed header comparison behind
+     them. The `except … as NAME` binding is now compared too (same class of
+     gap, found while fixing). Controls 20–25; all six fail against the
+     `d25bec3` verifier.
+  2. `classify_a2` returned `after_open` for a bracket with no end. Fixed: a
+     missing end gives `unknown` first (design §3.3). New A2 controls, 10/10.
+  - The reviewer's smoke run could not run without `pandas_ta`. It now uses an
+    identity `add_indicators` in both variants, and says so.
+- **Implementation review v2** (`review_bundle_admission_impl_v2`, delta
+  bundle): **accepted for M1**.
+  - Verified independently: 25/25 verifier controls, exactly 20–25 failing on
+    the old verifier, 10/10 A2, 12/12 entrypoint, smoke ALL PASS (stubbed).
+  - The combined pack timed out on the reviewer's side, so no uninterrupted
+    pack pass is claimed.
+  - D1 accepted within M1. The pairs keep 142 / 20 / 55.
+  - Q-A confirmed: a missing end takes precedence, including next-session
+    cases.
+  - Q-B: option (b). A2 stays three-valued, and the bar-before-event
+    inconsistency becomes a `contract_violation`. Until that is done, the
+    current fourth value is open as **D4**.
+  - **D4 and G2 open for M2.** This is milestone acceptance only, not merge,
+    deploy or activation.
+- **Found on the way: known issue 10.** Queue validation reads `RSI` and
+  `EMA_20`, which do not exist, so it checks drift only. All 92 validation
+  events in `queue_events.jsonl` show `rsi: 50.0`, `ema20_ok: true`. Recorded,
+  not fixed.
+
+### 2026-10-29 (Thu) — weekly checkpoint, week 26–30 Oct (held a day early)
+
+| Item | Result |
+|---|---|
+| Target 1: Finviz | ✅ Fixed 27 Oct (D-004), live since the 27 Oct 13:32 report: 103 screened on all four reports. Signals resumed: 5 in two days; 2 filled, 3 queued. Known issue 6 resolved. |
+| Target 2: step 3 implementation | ✅ M1 built and **accepted** (impl review v2, 29 Oct, `a6dd2f1`). Not merged, not active. |
+| Monitor-cycle inspections | ✅ Mon–Wed nights, 6 cycles, all PASS (`fbec75b…`, `a43c0c1…`, `7f13f98…`). Thu and Fri cycles are inspected on Mon. |
+| DST | **D-005: keep the UTC cron.** From 2 Nov fills move to the 21:00 report. The 21:00 scan runs at the close; whether its bars are final is checked on 6 Nov. |
+| New known issue | 10: queue validation checks drift only. |
+| STATUS | "Actual" column filled; M2–M4 planned one milestone a week; known issues 6, 7 and 10 updated; winter-time note under *What runs*. |
+
+**Next week (2–6 Nov), one target:** step 3 M2.
+- Capture controls, one per outcome; completion and partial outcomes;
+  cross-recorder pairing; monitor entrypoint ordering; recorder unimportable
+  or unwritable; data-feed call counts; an end-to-end run of the real
+  `daily_report.py` entrypoint.
+- Also D4, the G2 ruling, and `repro_pack.py --only N`.
+- **Done when** implementation review v3 accepts M2.
+- The checkpoint also runs the D-005 check: 21:00 signal price and
+  `vol_ratio` against the final bar, with 27–28 Oct as the summer baseline.
+- Not pulled forward: M3 and M4.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)

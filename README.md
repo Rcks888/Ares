@@ -118,6 +118,15 @@ broker-side kill leaves the gateway down and it has no self-recovery. Hermes
 (the XAU/USD sibling system) shares this VPS and is scheduled off the `:00`,
 `:10`, `:25` and `:30` marks to avoid colliding with these.
 
+**Winter time (DECISION_LOG D-005).** The UTC times are fixed, and the market
+descriptions above are for US summer time (EDT). From the first Monday after
+US DST ends (2 Nov 2026), the NYSE session is 14:30–21:00 UTC.
+- The 13:30 pass runs 1 h **before** the open. Every pending gets
+  `fill_retry`, and fills happen in the 21:00 pass, at that session's open.
+- The 21:00 pass runs **at** the close, so its daily candle may not be final yet.
+- The monitors run at 11:10 and 12:30 ET.
+- The times revert when US DST starts (14 Mar 2027).
+
 **Only the 5:00 AM pass generates signals.** Measured across three weeks, the
 9:30 PM pass found 0 signals every time while the 5:00 AM pass found 2-4. At
 13:30 UTC the US market is opening, so today's daily candle barely exists and
