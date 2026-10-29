@@ -81,6 +81,29 @@ def _install_feed(today):
     return load_stock
 
 
+def indicators_mode():
+    """'real' when pandas_ta imports, else 'stubbed'. Forced to 'stubbed' by
+    ARES_SMOKE_STUB_INDICATORS=1, so the stubbed mode can be compared with
+    the real one on a machine that has both."""
+    if os.environ.get("ARES_SMOKE_STUB_INDICATORS") == "1":
+        return "stubbed"
+    try:
+        import pandas_ta  # noqa: F401
+        return "real"
+    except Exception:                                     # noqa: BLE001
+        return "stubbed"
+
+
+def _install_indicators_stub():
+    """Identity add_indicators, applied identically to A and B. On this
+    sequence the tracker reads only `Close` (an input column) and
+    `.get('RSI')` / `.get('EMA_20')`, which add_indicators never produces,
+    so the stub does not change what either variant decides."""
+    ind = types.ModuleType("engine.indicators")
+    ind.add_indicators = lambda df: df
+    sys.modules["engine.indicators"] = ind
+
+
 def _sig(symbol, d, price, conf=3, **kw):
     s = {"symbol": symbol, "date": d, "price": price,
          "strategy": "mean_reversion", "trigger": "t", "regime": "r",
@@ -96,6 +119,8 @@ def drive(variant_path, logs, flush):
     os.environ["ARES_SCHEDULED"] = "1"
     today = datetime.now(timezone.utc).date()
     load_stock = _install_feed(today)
+    if indicators_mode() == "stubbed":
+        _install_indicators_stub()
     import engine
     spec = importlib.util.spec_from_file_location("engine.tracker",
                                                   variant_path)
@@ -267,6 +292,11 @@ def main():
         if not cond:
             fails.append(label)
 
+    mode = indicators_mode()
+    print(f"  indicators: {mode}"
+          + (" (pandas_ta unavailable or ARES_SMOKE_STUB_INDICATORS=1; "
+             "identity add_indicators in both variants)"
+             if mode == "stubbed" else ""))
     with tempfile.TemporaryDirectory() as tmp:
         pa, fa, _ = _run("A", tmp)
         pb, fb, obs = _run("B", tmp)
@@ -381,7 +411,8 @@ def main():
         check("III expired", any(x.get("symbol") == "III"
                                  for e in ex for x in e), ex)
     n = len(fails)
-    print(f"\n  {'ALL PASS' if not n else f'{n} FAILED: {fails}'}")
+    print(f"\n  {'ALL PASS' if not n else f'{n} FAILED: {fails}'}"
+          f" (indicators: {mode})")
     return 1 if n else 0
 
 

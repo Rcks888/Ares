@@ -84,18 +84,30 @@ def _digest(node):
     return hashlib.sha256(_norm(node).encode()).hexdigest()
 
 
+def _decorated(node, text):
+    """Prefix decorators, which are part of a definition's header: adding
+    @property to a function changes what the name binds to."""
+    decos = "".join(f"@{_norm(d)} " for d in node.decorator_list)
+    return decos + text
+
+
 def _signature(node):
     """Shallow identity used for alignment, excluding nested bodies.
 
     Compound statements must align on their header so their bodies can be
     compared recursively. Leaves align on their whole normalised source.
+    Decorators, return annotations and class bases are header, so they are
+    included; they are omitted from the text only when absent, which keeps
+    every existing registered scope string unchanged.
     """
-    if isinstance(node, ast.FunctionDef):
-        return f"def {node.name}({_norm(node.args)})"
-    if isinstance(node, ast.AsyncFunctionDef):
-        return f"async def {node.name}({_norm(node.args)})"
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        kw = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+        ret = f" -> {_norm(node.returns)}" if node.returns is not None else ""
+        return _decorated(node, f"{kw} {node.name}({_norm(node.args)}){ret}")
     if isinstance(node, ast.ClassDef):
-        return f"class {node.name}"
+        bases = [_norm(b) for b in node.bases] + [_norm(k) for k in node.keywords]
+        tail = f"({', '.join(bases)})" if bases else ""
+        return _decorated(node, f"class {node.name}{tail}")
     if isinstance(node, ast.If):
         return f"if {_norm(node.test)}"
     if isinstance(node, ast.While):
@@ -111,6 +123,25 @@ def _signature(node):
 
 _COMPOUND = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.If,
              ast.While, ast.For, ast.With, ast.Try)
+
+_BODY_FIELDS = ("body", "orelse", "finalbody", "handlers")
+
+
+def _header_dump(node):
+    """Everything about a compound statement except its nested statement
+    lists, as an ast.dump. Fail-closed backstop for _signature: any header
+    field it does not spell out (type parameters, type comments, a future
+    field) still makes the headers unequal."""
+    import copy
+    shell = copy.copy(node)
+    for field in _BODY_FIELDS:
+        if hasattr(shell, field):
+            setattr(shell, field, [])
+    return ast.dump(shell, include_attributes=False)
+
+
+def _handler_header(h):
+    return (_norm(h.type) if h.type is not None else None, h.name)
 
 
 # --------------------------------------------------------------------------
@@ -212,6 +243,11 @@ class Aligner:
         if not isinstance(pre_s, _COMPOUND):
             return
         child = f"{scope}/{_signature(pre_s)}"
+        if (type(pre_s) is not type(post_s)
+                or _header_dump(pre_s) != _header_dump(post_s)):
+            self.deletions.append((scope, _digest(pre_s), _norm(pre_s)))
+            self.additions.append((scope, _digest(post_s), _norm(post_s)))
+            return
         for field in ("body", "orelse", "finalbody"):
             a = getattr(pre_s, field, None) or []
             b = getattr(post_s, field, None) or []
@@ -226,7 +262,7 @@ class Aligner:
             self.additions.append((child, _digest(post_s), _norm(post_s)))
             return
         for ph, qh in zip(pre_h, post_h):
-            if _norm(ph.type or ast.Constant(None)) != _norm(qh.type or ast.Constant(None)):
+            if _handler_header(ph) != _handler_header(qh):
                 self.deletions.append((child, _digest(ph), _norm(ph)))
                 self.additions.append((child, _digest(qh), _norm(qh)))
                 continue

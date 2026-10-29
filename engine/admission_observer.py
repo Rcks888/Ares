@@ -222,9 +222,13 @@ def session_open_utc(bar_date):
 def classify_a2(bracket_start, bracket_end, bar_date):
     """Three-valued: did the booked open precede the event bracketed by
     [bracket_start, bracket_end]? Arguments are aware datetimes (end may be
-    None for a call that raised) and the fill's bar date."""
+    None for a call that raised) and the fill's bar date.
+
+    A bracket with no end is open-ended (design §3.3), so every claim about
+    it is `unknown`. That is decided first, before the start is compared
+    with anything."""
     from zoneinfo import ZoneInfo
-    if bracket_start is None or bar_date is None:
+    if bracket_start is None or bracket_end is None or bar_date is None:
         return "unknown"
     if isinstance(bar_date, str):
         bar_date = date.fromisoformat(bar_date)
@@ -235,7 +239,7 @@ def classify_a2(bracket_start, bracket_end, bar_date):
         return "inconsistent_bar_before_event"
     if bar_date > event_session:
         return "before_open"
-    if bracket_end is not None and bracket_end < o:
+    if bracket_end < o:
         return "before_open"
     if bracket_start >= o:
         return "after_open"

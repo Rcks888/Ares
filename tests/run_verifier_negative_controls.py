@@ -29,7 +29,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 DEPLOYED = os.path.join(ROOT, "monitor_trades.py")
 REFERENCE = os.path.join(HERE, "fixtures", "monitor_trades_preactivation.py")
-VERIFIER = os.path.join(ROOT, "tools", "verify_recorder_isolation.py")
+VERIFIER = (os.environ.get("ARES_NEGCTL_VERIFIER")
+            or os.path.join(ROOT, "tools", "verify_recorder_isolation.py"))
+
+
+class Skipped(Exception):
+    """A control that cannot run on this interpreter."""
 
 
 def _run_verifier(source_text):
@@ -331,24 +336,106 @@ def control_19_unknown_registry_fails_closed():
     assert "nothing is registered" in out, out
 
 
+def control_20_report_decorator_on_generate_report_is_rejected():
+    """Implementation review finding 1, reproduced exactly: @property makes
+    generate_report() uncallable, and was accepted because the alignment
+    signature and the descent ignored decorators."""
+    src = _replace_once(
+        _deployed_pair("daily_report"),
+        "\ndef generate_report():\n",
+        "\n@property\ndef generate_report():\n",
+        "report-decorator")
+    code, out = _run_pair("daily_report", src)
+    assert code != 0, f"decorated generate_report accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_21_tracker_decorator_on_open_trade_is_rejected():
+    src = _replace_once(
+        _deployed_pair("tracker"),
+        "\ndef open_trade(signal, from_queue=False):\n",
+        "\n@staticmethod\ndef open_trade(signal, from_queue=False):\n",
+        "tracker-decorator")
+    code, out = _run_pair("tracker", src)
+    assert code != 0, f"decorated open_trade accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_22_monitor_decorator_on_monitor_is_rejected():
+    src = _replace_once(_deployed(), "\ndef monitor():\n",
+                        "\n@property\ndef monitor():\n", "monitor-decorator")
+    code, out = _run_verifier(src)
+    assert code != 0, f"decorated monitor accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_23_tracker_return_annotation_is_rejected():
+    """Header change other than a decorator: an unregistered return
+    annotation is still an unregistered difference."""
+    src = _replace_once(
+        _deployed_pair("tracker"),
+        "\ndef open_trade(signal, from_queue=False):\n",
+        "\ndef open_trade(signal, from_queue=False) -> bool:\n",
+        "tracker-annotation")
+    code, out = _run_pair("tracker", src)
+    assert code != 0, f"return annotation accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_24_report_handler_binding_name_change_is_rejected():
+    """`except E as NAME` unbinds NAME when the handler ends. Renaming it to a
+    production variable deletes that variable, with an identical body. The
+    handler comparison used to check the exception type only."""
+    src = _replace_once(
+        _deployed_pair("daily_report"),
+        "        except Exception as e:\n            print(f\"  Screener error",
+        "        except Exception as all_symbols:\n            print(f\"  Screener error",
+        "report-handler-name")
+    code, out = _run_pair("daily_report", src)
+    assert code != 0, f"handler binding rename accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_25_header_field_outside_signature_is_rejected():
+    """Backstop for _signature: a type parameter list is header that the
+    signature text does not spell out. The generic header comparison must
+    still reject it. Type parameter syntax needs Python 3.12; on older
+    versions the source cannot be parsed, so the control is skipped."""
+    if sys.version_info < (3, 12):
+        raise Skipped("type parameter syntax needs Python 3.12")
+    src = _replace_once(
+        _deployed_pair("tracker"),
+        "\ndef open_trade(signal, from_queue=False):\n",
+        "\ndef open_trade[T](signal, from_queue=False):\n",
+        "tracker-type-params")
+    code, out = _run_pair("tracker", src)
+    assert code != 0, f"type parameter header change accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
 CONTROLS = [v for k, v in sorted(globals().items()) if k.startswith("control_")]
 
 
 def main():
     failures = []
+    skipped = []
     for fn in CONTROLS:
         name = fn.__name__
         try:
             fn()
             print(f"  PASS  {name}")
+        except Skipped as exc:
+            skipped.append(name)
+            print(f"  SKIP  {name}: {exc}")
         except AssertionError as exc:
             failures.append(name)
             print(f"  FAIL  {name}\n        {exc}")
         except Exception as exc:                      # noqa: BLE001
             failures.append(name)
             print(f"  ERROR {name}\n        {type(exc).__name__}: {exc}")
-    print(f"\n  {len(CONTROLS) - len(failures)}/{len(CONTROLS)} verifier "
-          f"negative controls passed")
+    ran = len(CONTROLS) - len(skipped)
+    print(f"\n  {ran - len(failures)}/{ran} verifier negative controls passed"
+          + (f", {len(skipped)} skipped" if skipped else ""))
     return 1 if failures else 0
 
 
