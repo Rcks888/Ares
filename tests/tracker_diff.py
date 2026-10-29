@@ -21,16 +21,34 @@ so nothing can hide inside the portion the normalizer discards.
 
 Comments and formatting do not appear in an AST and therefore cannot affect the
 verdict. They remain visible in the unified diff for human review.
+
+ADMISSION CAPTURE v1 (archive/DESIGN_admission_capture_v1.md)
+-------------------------------------------------------------
+Admission capture is a second observation layer with its own registration
+table, so this gate no longer reads engine/tracker.py directly. It is a chain
+of two proofs, both required for PASS:
+
+    pre-tracker-swap  --(this gate)-->  tests/fixtures/tracker_preadmission.py
+    tracker_preadmission.py  --(verify_recorder_isolation.py --registry
+        admission_registration_tracker)-->  engine/tracker.py
+
+The first link is the unchanged Phase 0.5 check, evaluated on the
+pre-admission base. The second proves the deployed tracker is that base plus
+only the registered admission additions. Neither link alone is the claim.
 """
 
 import ast
 import difflib
 import hashlib
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 TRACKER = ROOT / "engine" / "tracker.py"
+ADMISSION_BASE = ROOT / "tests" / "fixtures" / "tracker_preadmission.py"
+ADMISSION_REGISTRY = "admission_registration_tracker"
+ISOLATION_VERIFIER = ROOT / "tools" / "verify_recorder_isolation.py"
 
 ROLLBACK_TAG = "pre-tracker-swap"
 # The COMMIT the tag points at. pre-tracker-swap is an ANNOTATED tag, so
@@ -87,7 +105,23 @@ def reference_source():
 
 
 def candidate_source():
-    return TRACKER.read_text(errors="replace")
+    """The pre-admission base: the Phase 0.5 tracker (see module docstring)."""
+    return ADMISSION_BASE.read_text(errors="replace")
+
+
+def admission_chain():
+    """Second link: engine/tracker.py == base + registered admission additions.
+    Returns (proven, result_line)."""
+    try:
+        r = subprocess.run(
+            [sys.executable, str(ISOLATION_VERIFIER), "--registry",
+             ADMISSION_REGISTRY, str(ADMISSION_BASE), str(TRACKER)],
+            capture_output=True, text=True, timeout=120)
+    except Exception as e:                        # pragma: no cover
+        return False, f"verifier unavailable: {type(e).__name__}: {e}"
+    lines = [l.strip() for l in r.stdout.splitlines() if "RESULT" in l]
+    return r.returncode == 0, (lines[-1] if lines else
+                               f"exit {r.returncode}, no RESULT line")
 
 
 def md5(s):
@@ -547,6 +581,27 @@ def evaluate(ref_src=None, cand_src=None):
     except Exception as e:                        # pragma: no cover
         v["failures"].append(f"blast-radius scan unavailable: {e}")
 
+    # 5. second link of the chain: deployed tracker = base + admission capture
+    proven, line = admission_chain()
+    v["admission_chain_proven"] = proven
+    v["admission_chain_result"] = line
+    try:
+        v["deployed_tracker_md5"] = md5(TRACKER.read_text(errors="replace"))
+    except Exception as e:                        # pragma: no cover
+        v["deployed_tracker_md5"] = None
+        v["failures"].append(f"deployed tracker unreadable: {e}")
+    if not proven:
+        v["failures"].append(f"admission chain not proven: {line}")
+    try:
+        import blast_radius as br
+        found = br.scan_file(TRACKER)
+        if found:
+            v["failures"].append(
+                "deployed tracker references parity stack: "
+                + str([f"{f['node']} {f['symbol']}" for f in found]))
+    except Exception as e:                        # pragma: no cover
+        v["failures"].append(f"blast-radius scan unavailable: {e}")
+
     v["diff"] = unified_diff(ref_src, cand_src)
     v["verdict"] = "PASS" if not v["failures"] else "FAIL"
     return v
@@ -598,6 +653,10 @@ def summary(v):
         f"{'NONE' if not v.get('parity_references') else v['parity_references']}",
         f"normalized non-telemetry AST              : "
         f"{'IDENTICAL' if v.get('normalized_ast_identical') else 'DIFFERS'}",
+        f"admission chain (base -> deployed)        : "
+        f"{mark(v.get('admission_chain_proven'))}",
+        f"deployed tracker md5                      : "
+        f"{v.get('deployed_tracker_md5')}",
         f"forbidden changes detected                : {len(v['failures'])}",
         f"verdict                                   : {v['verdict']}",
     ]

@@ -242,6 +242,95 @@ def control_14_missing_registration_table_fails_closed():
         assert "nothing is registered" in out, out
 
 
+# --------------------------------------------------------------------------
+# Admission capture v1: the two further pairs, each with its own table
+# (archive/DESIGN_admission_capture_v1.md §6.2). Same verifier, same rules.
+# --------------------------------------------------------------------------
+
+PAIRS = {
+    "tracker": ("admission_registration_tracker",
+                os.path.join(HERE, "fixtures", "tracker_preadmission.py"),
+                os.path.join(ROOT, "engine", "tracker.py")),
+    "daily_report": ("admission_registration_daily_report",
+                     os.path.join(HERE, "fixtures",
+                                  "daily_report_preadmission.py"),
+                     os.path.join(ROOT, "daily_report.py")),
+}
+
+
+def _run_pair(pair, source_text=None, registry=None):
+    reg, before, after = PAIRS[pair]
+    with tempfile.TemporaryDirectory() as tmp:
+        candidate = os.path.join(tmp, os.path.basename(after))
+        if source_text is None:
+            with open(after, encoding="utf-8") as fh:
+                source_text = fh.read()
+        with open(candidate, "w", encoding="utf-8") as fh:
+            fh.write(source_text)
+        proc = subprocess.run(
+            [sys.executable, VERIFIER, "--registry", registry or reg, before,
+             candidate], capture_output=True, text=True)
+        return proc.returncode, proc.stdout + proc.stderr
+
+
+def _deployed_pair(pair):
+    with open(PAIRS[pair][2], encoding="utf-8") as fh:
+        return fh.read()
+
+
+def control_15_admission_pairs_pass_unmutated():
+    """Harness check for both new pairs, as control 0 is for the monitor."""
+    for pair in PAIRS:
+        code, out = _run_pair(pair)
+        assert code == 0, f"{pair}: approved file must pass, got {code}:\n{out}"
+        assert "only registered observation additions" in out, out
+
+
+def control_16_tracker_admission_decision_change_is_rejected():
+    """>= to > in the open_trade capacity test, next to a capture line."""
+    src = _replace_once(
+        _deployed_pair("tracker"),
+        "    if len(open_trades) + len(pending) >= max_positions:\n",
+        "    if len(open_trades) + len(pending) > max_positions:\n",
+        "tracker-capacity")
+    code, out = _run_pair("tracker", src)
+    assert code != 0, f"tracker decision change accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_17_tracker_chained_production_target_is_rejected():
+    """Candidate A again, on the admission capture: a second target writing a
+    production signal field behind a registered capture assignment."""
+    src = _replace_once(
+        _deployed_pair("tracker"),
+        '        adm["branch"] = "queued"\n',
+        '        adm["branch"] = signal["confluence"] = "queued"\n',
+        "tracker-chained")
+    code, out = _run_pair("tracker", src)
+    assert code != 0, f"chained production target accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_18_report_swallowed_exception_is_rejected():
+    """The report's __main__ must re-raise. Replacing the bare raise with pass
+    changes the registered wrapper digest."""
+    src = _replace_once(
+        _deployed_pair("daily_report"),
+        "        raise\n",
+        "        pass\n",
+        "report-raise")
+    code, out = _run_pair("daily_report", src)
+    assert code != 0, f"swallowed report exception accepted:\n{out}"
+    assert "UNREGISTERED" in out, out
+
+
+def control_19_unknown_registry_fails_closed():
+    """A misspelt --registry must not fall back to an empty or default table."""
+    code, out = _run_pair("tracker", registry="admission_registration_absent")
+    assert code != 0, f"unknown registry passed:\n{out}"
+    assert "nothing is registered" in out, out
+
+
 CONTROLS = [v for k, v in sorted(globals().items()) if k.startswith("control_")]
 
 

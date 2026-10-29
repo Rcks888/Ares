@@ -235,6 +235,7 @@ Ares/
 │   ├── indicators.py           # RSI 21, MACD, divergence, regime
 │   ├── signals.py              # Strategy logic + confluence check
 │   ├── tracker.py              # Virtual trade tracking + exits + pending signals
+│   ├── admission_observer.py   # Admission capture v1 serialiser (measurement only, not activated)
 │   └── sample.py               # SOLE definition of which trades count as clean
 ├── data/ohlcv/                 # Cached OHLCV CSV files
 ├── logs/
@@ -243,6 +244,7 @@ Ares/
 │   ├── signal_queue.json       # Blocked signals waiting for open slot
 │   ├── queue_ranked.json       # Validated + ranked queue (promotable entries only)
 │   ├── queue_events.jsonl      # Append-only audit log of every queue/fill event
+│   ├── admission_*_v1.jsonl    # Admission capture records / heartbeat / health (once activated)
 │   ├── trades_report.csv       # Trade history export
 │   ├── last_scan_summary.txt   # Latest scan results for dashboard
 │   ├── psi_state.json          # Memory-stall counters (per-host, NOT tracked)

@@ -8,10 +8,71 @@ from engine.indicators import add_indicators
 from engine.signals import scan_universe, load_watchlist, get_all_symbols
 from engine.tracker import open_trade, print_scorecard, export_csv, check_shadow_trades, execute_pending_signals, maintain_queue, promote_queue, load_trades, load_queue
 from engine.parity_hook import observed_check_open_trades
+import os as _os
+import sys as _sys
+import time as _time
+
+# Admission capture v1 -- observation only. Both imports are guarded: a
+# recorder that cannot be imported, or a tracker deployed without the store,
+# must not stop the report. The fallback store is a plain dict, so every
+# capture statement below still succeeds and records into nothing.
+try:
+    from engine.tracker import _ADMISSION_EVAL, _new_admission_store
+    _ADM_STORE_ERROR = None
+except Exception as _exc:                           # noqa: BLE001
+    _ADMISSION_EVAL = {}
+
+    def _new_admission_store(token):
+        return {"invocation_token": token, "scan_open_trade_expected": 0}
+
+    _ADM_STORE_ERROR = f"{type(_exc).__name__}: {_exc}"
+try:
+    from engine import admission_observer as _adm_obs
+    _ADM_OBS_IMPORT_ERROR = None
+except Exception as _exc:                           # noqa: BLE001
+    _adm_obs = None
+    _ADM_OBS_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
+
+_ADMISSION_SEQ = 0
+
+
+def _emit_admission_health_failure(reason, detail):
+    """Record that ADMISSION OBSERVATION failed, on a path needing no recorder.
+
+    Same contract as monitor_trades._emit_observation_health_failure: stdlib
+    only, never raises, announced on stderr so a stdout scraper cannot mistake
+    it for trading output.
+    """
+    try:
+        path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                             "logs", "admission_health_v1.jsonl")
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        line = json.dumps({
+            "health_schema_version": 1,
+            "decision_path": "report",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "invocation_token": _ADMISSION_EVAL.get("invocation_token"),
+            "observation_failed": True,
+            "reason": reason,
+            "detail": detail,
+            "report_completed": _ADMISSION_EVAL.get("report_completed"),
+        }, sort_keys=True, default=str)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+            fh.flush()
+        print(f"ADMISSION-HEALTH: {reason}: {detail}", file=_sys.stderr)
+    except BaseException:                           # noqa: BLE001
+        pass
+
 
 USE_SCREENER = True
 
 def generate_report():
+    global _ADMISSION_SEQ
+    _ADMISSION_SEQ += 1
+    _ADMISSION_EVAL.clear()
+    _ADMISSION_EVAL.update(_new_admission_store(_ADMISSION_SEQ))
+
     today = datetime.now(MYT).strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
     print(f"  ARES V3 DAILY REPORT — {today}")
@@ -51,6 +112,7 @@ def generate_report():
     # Must run AFTER refresh_watchlist: fills read today's open price, and
     # load_stock()'s 20h staleness window is longer than the 7.5h/16.5h gaps
     # between scans, so a pre-refresh fill silently used yesterday's bar.
+    _ADMISSION_EVAL["fill_pass_expected"] = True
     execute_pending_signals()
 
     print("\n[2] Checking open positions...")
@@ -61,6 +123,7 @@ def generate_report():
     print("\n[2b] SIGNAL QUEUE")
     print("-" * 40)
     maintain_queue()
+    _ADMISSION_EVAL["promotion_expected"] = True
     promote_queue(source="scan")
 
     print("\n[3] MARKET OVERVIEW")
@@ -81,7 +144,10 @@ def generate_report():
 
     print(f"\n[4] SIGNAL SCAN ({len(all_symbols)} stocks)")
     print("-" * 40)
+    _ADMISSION_EVAL["t_scan_start"] = _time.time()
     signals = scan_universe(all_symbols, screen_data)
+    _ADMISSION_EVAL["t_scan_end"] = _time.time()
+    _ADMISSION_EVAL["signals"] = signals
 
     if signals:
         for s in signals:
@@ -116,6 +182,7 @@ def generate_report():
             print(f"    Take-profit:  ${take_profit:.2f} (+{tp_pct*100:.0f}%) — scale out 50%")
             print(f"    Trailing:     {trailing_pct*100:.0f}% from peak (remaining 50%)")
 
+            _ADMISSION_EVAL["scan_open_trade_expected"] += 1
             result = open_trade(s)
             if result == 'pending':
                 print(f"    [PENDING — will execute at next day's open]")
@@ -192,7 +259,31 @@ def generate_report():
     print("  - Do NOT change parameters")
     print("  - Do NOT override signals manually")
     print(f"{'='*50}\n")
+    _ADMISSION_EVAL["report_completed"] = True
 
 if __name__ == "__main__":
-    generate_report()
+    # Same shape as monitor_trades.py: the flush is in a finally so a report
+    # that raised still publishes what it captured; the bare raise preserves
+    # the original exception, and flush() never raises. disconnect_ib() stays
+    # outside, exactly where it was: a raising report still skips it.
+    try:
+        generate_report()
+    except BaseException as exc:
+        _ADMISSION_EVAL["loop_exception"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        if _adm_obs is None or _ADM_STORE_ERROR is not None:
+            _emit_admission_health_failure(
+                "recorder_import_failed",
+                _ADM_OBS_IMPORT_ERROR or _ADM_STORE_ERROR)
+        else:
+            _adm_summary = _adm_obs.flush(_ADMISSION_EVAL, decision_path="report",
+                                          peer=None)
+            if (not _adm_summary.get("heartbeat_written")
+                    or _adm_summary.get("write_failures")
+                    or _adm_summary.get("flush_error")):
+                _emit_admission_health_failure(
+                    "recorder_write_failed", json.dumps(_adm_summary,
+                                                        sort_keys=True,
+                                                        default=str))
     disconnect_ib()

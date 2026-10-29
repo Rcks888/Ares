@@ -3,6 +3,17 @@
 
     python3 tools/verify_recorder_isolation.py BEFORE.py AFTER.py
     python3 tools/verify_recorder_isolation.py --register BEFORE.py AFTER.py
+    python3 tools/verify_recorder_isolation.py --registry MODULE BEFORE.py AFTER.py
+
+--registry selects the registration table (a module in tools/). The default,
+recorder_registration, is the monitor_trades.py pair. Admission capture v1
+adds one table per further pair (design §6.2):
+
+    admission_registration_tracker        engine/tracker.py
+    admission_registration_daily_report   daily_report.py
+
+A table may set REQUIRE_ENTRYPOINT = False for a file with no `__main__`
+wrapper (engine/tracker.py). Every other rule is identical for every table.
 
 Exit 0 only if every difference between BEFORE and AFTER is an exactly
 registered observation addition, and the one registered replacement.
@@ -119,6 +130,25 @@ except ImportError:                                   # pragma: no cover
         from recorder_registration import (REGISTERED_ADDITIONS,
                                            REGISTERED_REPLACEMENTS)
     except ImportError:
+        REGISTERED_ADDITIONS = None
+        REGISTERED_REPLACEMENTS = None
+REQUIRE_ENTRYPOINT = True
+
+
+def _load_registry(name):
+    """Swap in another registration table. A table that cannot be imported
+    leaves nothing registered, so nothing can be accepted (exit 2)."""
+    global REGISTERED_ADDITIONS, REGISTERED_REPLACEMENTS, REQUIRE_ENTRYPOINT
+    import importlib
+    here = __file__.rsplit("/", 1)[0]
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        mod = importlib.import_module(name)
+        REGISTERED_ADDITIONS = mod.REGISTERED_ADDITIONS
+        REGISTERED_REPLACEMENTS = mod.REGISTERED_REPLACEMENTS
+        REQUIRE_ENTRYPOINT = getattr(mod, "REQUIRE_ENTRYPOINT", True)
+    except (ImportError, AttributeError):
         REGISTERED_ADDITIONS = None
         REGISTERED_REPLACEMENTS = None
 
@@ -287,7 +317,7 @@ def main(before_path, after_path):
     _check(a.deletions, REGISTERED_REPLACEMENTS, "REMOVAL")
 
     wrappers = [s for s, _, _ in a.additions if s == ENTRYPOINT_SCOPE]
-    if len(wrappers) != 1:
+    if REQUIRE_ENTRYPOINT and len(wrappers) != 1:
         problems.append(
             f"expected exactly one entry-point addition in {ENTRYPOINT_SCOPE}, "
             f"found {len(wrappers)}")
@@ -314,12 +344,16 @@ def main(before_path, after_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--register":
-        sys.exit(register(sys.argv[2], sys.argv[3]))
-    if len(sys.argv) != 3:
+    argv = sys.argv[1:]
+    if len(argv) >= 2 and argv[0] == "--registry":
+        _load_registry(argv[1])
+        argv = argv[2:]
+    if len(argv) == 3 and argv[0] == "--register":
+        sys.exit(register(argv[1], argv[2]))
+    if len(argv) != 2:
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    sys.exit(main(argv[0], argv[1]))
 
 
 

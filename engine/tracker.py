@@ -1,5 +1,6 @@
 import json
 import csv
+import time as _time
 from datetime import datetime, date
 from pathlib import Path
 from engine.data_feed import load_stock, get_live_price
@@ -15,6 +16,40 @@ _LAST_EVAL = {
     "results": {},         # symbol -> decision-RESULT copy for that invocation
 }
 _EVAL_CYCLE_SEQ = 0        # monotonic in-process counter; not persisted
+
+# Admission capture v1 -- observation only, never read by any decision.
+# Design: archive/DESIGN_admission_capture_v1.md (r5). Capture statements store
+# names that are already bound, constants, `len()` of values production has
+# just measured itself, or one clock read. They cannot raise and they never
+# change what the code around them does. All derivation and every write happen
+# in engine/admission_observer.py, after the run, from the entrypoint `finally`.
+def _new_admission_store(token):
+    """THE registered initialisation contract for one process run.
+
+    Returned whole and swapped in by the entrypoint (clear, then update), the
+    same contract as monitor_trades._new_invocation_store, so nothing from an
+    earlier invocation survives beside a new token.
+    """
+    return {
+        "invocation_token": token,
+        "cycle_id": None,
+        "t_reset": _time.time(),
+        "records": [],
+        "queue_events": [],
+        "fill_pass_expected": False,
+        "promotion_expected": False,
+        "signals": None,
+        "scan_open_trade_expected": 0,
+        "t_scan_start": None,
+        "t_scan_end": None,
+        "report_completed": False,
+        "monitor_completed": False,
+        "loop_exception": None,
+        "flushed": False,
+    }
+
+
+_ADMISSION_EVAL = _new_admission_store(None)
 
 def _holding_days(entry_date_str):
     """Calculate number of days held from entry date to today."""
@@ -62,8 +97,19 @@ def execute_pending_signals():
     Called AFTER refresh_watchlist() so the fill reads a current bar.
     A pending is only discarded on a logged, explicit reason — never silently.
     """
+    fp = {"kind": "fill_pass", "t_enter": _time.time(),
+          "qe_index": len(_ADMISSION_EVAL["queue_events"]),
+          "pending_seen": None, "open_count_before": None,
+          "max_positions": None,
+          "pending_save_attempted": False, "pending_save_completed": False,
+          "trades_save_attempted": False, "trades_save_completed": False,
+          "return_reason": None, "t_exit": None}
+    _ADMISSION_EVAL["records"].append(fp)
     pending = load_pending()
     if not pending:
+        fp["pending_seen"] = 0
+        fp["return_reason"] = "no_pending"
+        fp["t_exit"] = _time.time()
         return
 
     params = _load_params()
@@ -75,28 +121,46 @@ def execute_pending_signals():
     trades = load_trades()
     open_count = len([t for t in trades if t['status'] == 'open'])
     executed = []
+    fp["open_count_before"] = open_count
+    fp["max_positions"] = max_positions
 
     print(f"\n  PENDING SIGNALS: {len(pending)} awaiting execution")
+    fp["pending_seen"] = len(pending)
 
     for sig in pending:
+        fe = {"kind": "fill", "sig": sig, "t_enter": _time.time(),
+              "qe_index": len(_ADMISSION_EVAL["queue_events"]),
+              "outcome": None, "fill_attempts": None,
+              "trade_appended": False, "executed_marked": False,
+              "t_exit": None}
+        _ADMISSION_EVAL["records"].append(fe)
         if open_count >= max_positions:
             print(f"    {sig['symbol']}: Slots full — moving to queue")
+            fe["outcome"] = "demoted_to_queue"
             queue_signal(sig)
             executed.append(sig)
+            fe["executed_marked"] = True
+            fe["t_exit"] = _time.time()
             continue
 
         if any(t['symbol'] == sig['symbol'] and t['status'] == 'open' for t in trades):
             print(f"    {sig['symbol']}: Already open — skipping")
+            fe["outcome"] = "discarded_already_open"
             executed.append(sig)
+            fe["executed_marked"] = True
+            fe["t_exit"] = _time.time()
             continue
 
         max_age_d = params.get('pending_max_age_days', 4)
         if _pending_age_days(sig) > max_age_d:
             print(f"    ✗ {sig['symbol']}: pending {_pending_age_days(sig)}d old "
                   f"(max {max_age_d}d) — dropped")
+            fe["outcome"] = "dropped_aged"
             _log_queue_event(sig['symbol'], 'fill_dropped',
                              reason=f"pending aged out ({_pending_age_days(sig)}d)")
             executed.append(sig)
+            fe["executed_marked"] = True
+            fe["t_exit"] = _time.time()
             continue
 
         try:
@@ -105,29 +169,41 @@ def execute_pending_signals():
             df = load_stock(sig['symbol'], max_age_hours=0)
             if df is None or len(df) < 2:
                 sig['fill_attempts'] = sig.get('fill_attempts', 0) + 1
+                fe["fill_attempts"] = sig['fill_attempts']
                 if sig['fill_attempts'] >= MAX_FILL_ATTEMPTS:
                     print(f"    ✗ {sig['symbol']}: no data after "
                           f"{sig['fill_attempts']} attempts — dropped")
+                    fe["outcome"] = "dropped_no_data"
                     _log_queue_event(sig['symbol'], 'fill_dropped',
                                      reason=f"no data after {sig['fill_attempts']} attempts")
                     executed.append(sig)
+                    fe["executed_marked"] = True
                 else:
                     print(f"    ⏳ {sig['symbol']}: no data "
                           f"(attempt {sig['fill_attempts']}/{MAX_FILL_ATTEMPTS}) — retained")
+                    fe["outcome"] = "retained_no_data"
                     _log_queue_event(sig['symbol'], 'fill_retry', reason="no data returned")
+                fe["t_exit"] = _time.time()
                 continue
 
             bar_date = df.index[-1].date()
             today = datetime.utcnow().date()
+            fe["bar_date"] = bar_date
+            fe["today_utc"] = today
             if bar_date != today:
                 print(f"    ⏳ {sig['symbol']}: last bar {bar_date} != today {today} "
                       f"— no session yet, retained")
+                fe["outcome"] = "retained_bar_not_today"
                 _log_queue_event(sig['symbol'], 'fill_retry',
                                  reason=f"last bar {bar_date} != today {today}")
+                fe["t_exit"] = _time.time()
                 continue
 
             today_open = float(df.iloc[-1]['Open'])
             entry_price = today_open * (1 + slippage_pct)
+            fe["bar_open"] = today_open
+            fe["entry_price"] = entry_price
+            fe["slippage_pct"] = slippage_pct
 
             portfolio = params.get('starting_capital', 1000)
             available_capital = portfolio * (1 - cash_reserve_pct)
@@ -223,30 +299,52 @@ def execute_pending_signals():
                 'version': '3.0'
             }
 
+            fe["shares"] = shares
+            fe["stop_loss"] = stop_loss
+            fe["take_profit"] = take_profit
+            fe["stdev_fallback"] = stdev_missing
+            fe["fill_source"] = fill_source
+            fe["entry_date"] = today_str
             trades.append(trade)
+            fe["trade_appended"] = True
             open_count += 1
             print(f"    ✅ {sig['symbol']}: EXECUTED at ${entry_price:.2f} (open) | "
                   f"Signal was ${sig['price']:.2f} (close) | "
                   f"Diff: {((entry_price - sig['price'])/sig['price']*100):+.2f}%")
             executed.append(sig)
+            fe["executed_marked"] = True
+            fe["outcome"] = "filled"
+            fe["t_exit"] = _time.time()
         except Exception as e:
             sig['fill_attempts'] = sig.get('fill_attempts', 0) + 1
+            fe["fill_attempts"] = sig['fill_attempts']
+            fe["exception"] = e
             if sig['fill_attempts'] >= MAX_FILL_ATTEMPTS:
                 print(f"    ✗ {sig['symbol']}: fill failed "
                       f"{sig['fill_attempts']}x — dropped ({e})")
+                fe["outcome"] = "dropped_exception"
                 _log_queue_event(sig['symbol'], 'fill_dropped',
                                  reason=f"exception after {sig['fill_attempts']} attempts: {e}")
                 executed.append(sig)
+                fe["executed_marked"] = True
             else:
                 print(f"    ⏳ {sig['symbol']}: fill error "
                       f"(attempt {sig['fill_attempts']}/{MAX_FILL_ATTEMPTS}) — retained: {e}")
+                fe["outcome"] = "retained_exception"
                 _log_queue_event(sig['symbol'], 'fill_retry', reason=str(e))
+            fe["t_exit"] = _time.time()
 
     for sig in executed:
         pending.remove(sig)
 
+    fp["pending_save_attempted"] = True
     save_pending(pending)
+    fp["pending_save_completed"] = True
+    fp["trades_save_attempted"] = True
     save_trades(trades)
+    fp["trades_save_completed"] = True
+    fp["return_reason"] = "completed"
+    fp["t_exit"] = _time.time()
 
 def load_trades():
     """Load all virtual trades from disk."""
@@ -287,7 +385,9 @@ def _log_queue_event(symbol, action, q=None, checks=None, reason=None):
     try:
         with open(QUEUE_EVENTS_FILE, 'a') as f:
             f.write(json.dumps(event) + '\n')
+        _ADMISSION_EVAL["queue_events"].append((symbol, action, True))
     except Exception:
+        _ADMISSION_EVAL["queue_events"].append((symbol, action, False))
         pass
 
 def load_ranked():
@@ -318,12 +418,20 @@ def save_queue(queue):
 
 def queue_signal(signal):
     """Add a signal to the watchlist queue. Enforces queue_max_size with eviction."""
+    qi = {"kind": "queue_insert", "signal": signal,
+          "qe_index": len(_ADMISSION_EVAL["queue_events"]),
+          "insert": None, "evicted": [],
+          "queue_save_attempted": False, "queue_save_completed": False,
+          "returned": False}
+    _ADMISSION_EVAL["records"].append(qi)
     params = _load_params()
     max_size = params.get('queue_max_size', 10)
     queue = load_queue()
 
     for q in queue:
         if q['symbol'] == signal['symbol']:
+            qi["insert"] = "already_queued"
+            qi["returned"] = True
             return
 
     entry = {
@@ -341,6 +449,7 @@ def queue_signal(signal):
         'screens': signal.get('screens', [])
     }
     queue.append(entry)
+    qi["insert"] = "inserted"
     _log_queue_event(signal['symbol'], 'queued', entry)
 
     if len(queue) > max_size:
@@ -351,13 +460,22 @@ def queue_signal(signal):
             print(f"    [Evicted — queue full] {e['symbol']} (conf{e.get('confluence')}, added {e.get('date_added')})")
             _log_queue_event(e['symbol'], 'evicted', e,
                              reason=f"queue exceeded max_size {max_size}")
+            qi["evicted"].append(e)
         queue = keep
 
+    qi["queue_save_attempted"] = True
     save_queue(queue)
+    qi["queue_save_completed"] = True
     print(f"    [Queued — slots full] {signal['symbol']} ({signal['strategy']})")
+    qi["returned"] = True
 
 def expire_queue():
     """Remove expired queue entries (older than queue_max_age_days)."""
+    ex = {"kind": "queue_expiry",
+          "qe_index": len(_ADMISSION_EVAL["queue_events"]),
+          "queue_save_attempted": False, "queue_save_completed": False,
+          "returned": False}
+    _ADMISSION_EVAL["records"].append(ex)
     params = _load_params()
     max_age = params.get('queue_max_age_days', 5)
     queue = load_queue()
@@ -374,9 +492,14 @@ def expire_queue():
                 _log_queue_event(q['symbol'], 'expired', q,
                                  reason=f"age {age}d exceeded max {max_age}d")
         except Exception:
+            _ADMISSION_EVAL["queue_events"].append((len(active), 'expiry_parse_failed', None))
             pass
     if len(active) != len(queue):
+        ex["queue_save_attempted"] = True
         save_queue(active)
+        ex["queue_save_completed"] = True
+    ex["qe_end"] = len(_ADMISSION_EVAL["queue_events"])
+    ex["returned"] = True
     return active
 
 def _validate_queued(symbol, q, params, use_live=False):
@@ -431,9 +554,19 @@ def maintain_queue():
     re-ranks survivors on current data, persists to logs/queue_ranked.json.
     Does NOT promote. Promotion is a separate pass.
     """
+    mq = {"kind": "queue_maintenance",
+          "qe_index": len(_ADMISSION_EVAL["queue_events"]),
+          "queue_save_attempted": False, "queue_save_completed": False,
+          "ranked_save_attempted": False, "ranked_save_completed": False,
+          "ranked_save_site": None, "returned": False}
+    _ADMISSION_EVAL["records"].append(mq)
     queue = expire_queue()
     if not queue:
+        mq["ranked_save_site"] = "empty"
+        mq["ranked_save_attempted"] = True
         save_ranked([])
+        mq["ranked_save_completed"] = True
+        mq["returned"] = True
         return []
 
     params = _load_params()
@@ -482,10 +615,15 @@ def maintain_queue():
 
     # Queue keeps survivors AND unverified entries; only survivors are ranked,
     # so an unverified signal can never be promoted without a passing check.
+    mq["queue_save_attempted"] = True
     save_queue([{k: v for k, v in q.items()
                  if k not in ('checked_at', 'drift_pct', 'rsi', 'ema20_ok', 'live_price')}
                 for q in survivors + unverified])
+    mq["queue_save_completed"] = True
+    mq["ranked_save_site"] = "survivors"
+    mq["ranked_save_attempted"] = True
     save_ranked(survivors)
+    mq["ranked_save_completed"] = True
 
     if unverified:
         print(f"    {len(unverified)} unverified (retained, not promotable)")
@@ -494,6 +632,7 @@ def maintain_queue():
         top = survivors[0]
         print(f"    Ranked {len(survivors)}: top = {top['symbol']} "
               f"(conf{top.get('confluence')}, drift {top.get('drift_pct'):+.1f}%)")
+    mq["returned"] = True
     return survivors
 
 def _fill_window_ok(params):
@@ -529,28 +668,50 @@ def promote_queue(source="scan", use_live=False):
     If slots are free, promote the top-ranked valid signal to pending.
     Always re-validates at execution time; never trusts a stale ranking.
     """
+    pp = {"kind": "promotion_pass", "source": source, "use_live": use_live,
+          "t_enter": _time.time(),
+          "qe_index": len(_ADMISSION_EVAL["queue_events"]),
+          "free_slots": None, "ranked_basis": "ranked", "ranked_count": None,
+          "fill_window_ok": None, "fill_window_reason": None,
+          "candidates": [],
+          "queue_save_attempted": False, "queue_save_completed": False,
+          "ranked_save_attempted": False, "ranked_save_completed": False,
+          "return_reason": None, "t_exit": None}
+    _ADMISSION_EVAL["records"].append(pp)
     params = _load_params()
     trades = load_trades()
     open_trades = [t for t in trades if t['status'] == 'open']
     pending = load_pending()
     max_positions = params.get('max_positions', 5)
     free_slots = max_positions - len(open_trades) - len(pending)
+    pp["free_slots"] = free_slots
 
     if free_slots <= 0:
+        pp["return_reason"] = "no_free_slots"
+        pp["t_exit"] = _time.time()
         return
 
     ranked = load_ranked()
     if not ranked:
+        pp["ranked_basis"] = "unranked_fallback"
         ranked = load_queue()
     if not ranked:
+        pp["ranked_basis"] = "empty"
+        pp["return_reason"] = "queue_empty"
+        pp["t_exit"] = _time.time()
         return
 
     ok, why = _fill_window_ok(params)
+    pp["fill_window_ok"] = ok
+    pp["fill_window_reason"] = why
     if not ok:
         print(f"  [Queue promotion] skipped — {why}")
+        pp["return_reason"] = "fill_window_closed"
+        pp["t_exit"] = _time.time()
         return
 
     print(f"  [Queue promotion / {source}] {free_slots} slot(s) free, {len(ranked)} ranked")
+    pp["ranked_count"] = len(ranked)
 
     held = {t['symbol'] for t in open_trades} | {p['symbol'] for p in pending}
     promoted, dropped = [], []
@@ -558,22 +719,36 @@ def promote_queue(source="scan", use_live=False):
     for q in ranked:
         if free_slots <= 0:
             break
+        cand = {"q": q, "held": False, "valid": None, "reason": None,
+                "checks": None, "t_validate_start": None,
+                "t_validate_end": None, "open_trade_expected": False,
+                "open_trade_result": None, "outcome": None}
+        pp["candidates"].append(cand)
         symbol = q['symbol']
         if symbol in held:
             print(f"    - {symbol}: already held or pending — removed from queue")
+            cand["held"] = True
+            cand["outcome"] = "held_dropped"
             _log_queue_event(symbol, 'dropped', q, None, "already held or pending")
             dropped.append(symbol)
             continue
 
         # Mandatory execution-time re-validation
+        cand["t_validate_start"] = _time.time()
         valid, reason, checks = _validate_queued(symbol, q, params, use_live=use_live)
+        cand["t_validate_end"] = _time.time()
+        cand["valid"] = valid
+        cand["reason"] = reason
+        cand["checks"] = checks
         if not valid:
             if reason.startswith('transient:'):
                 print(f"    ⏳ {symbol}: {reason} — retained, promotion deferred")
+                cand["outcome"] = "deferred_transient"
                 _log_queue_event(symbol, 'check_retry', q, checks,
                                  f"promotion-time: {reason}")
                 continue
             print(f"    ✗ {symbol}: {reason} — dropped at promotion")
+            cand["outcome"] = "dropped_invalid"
             _log_queue_event(symbol, 'dropped', q, checks, f"promotion-time: {reason}")
             dropped.append(symbol)
             continue
@@ -592,45 +767,79 @@ def promote_queue(source="scan", use_live=False):
             'vol_ratio': q.get('vol_ratio'),
             'screens': q.get('screens', [])
         }
+        cand["signal"] = signal
+        cand["open_trade_expected"] = True
         result = open_trade(signal, from_queue=True)
+        cand["open_trade_result"] = result
         if result in ('pending', 'opened'):
             print(f"    ✓ {symbol}: promoted (conf{q.get('confluence')}, "
                   f"drift {checks['drift_pct']:+.1f}%) → {result}")
+            cand["outcome"] = "promoted"
             _log_queue_event(symbol, 'promoted', q, checks)
             promoted.append(symbol)
             free_slots -= 1
         else:
             print(f"    ✗ {symbol}: open_trade returned '{result}'")
+            cand["outcome"] = "dropped_open_trade"
             _log_queue_event(symbol, 'dropped', q, checks, f"open_trade={result}")
             dropped.append(symbol)
 
     removed = set(promoted) | set(dropped)
     if removed:
+        pp["queue_save_attempted"] = True
         save_queue([q for q in load_queue() if q['symbol'] not in removed])
+        pp["queue_save_completed"] = True
+        pp["ranked_save_attempted"] = True
         save_ranked([q for q in ranked if q['symbol'] not in removed])
+        pp["ranked_save_completed"] = True
+    pp["return_reason"] = "completed"
+    pp["t_exit"] = _time.time()
 
 def open_trade(signal, from_queue=False):
     """Record a new virtual trade from a signal. Ares V3."""
+    adm = {"kind": "admission", "signal": signal, "from_queue": from_queue,
+           "t_enter": _time.time(),
+           "qe_index": len(_ADMISSION_EVAL["queue_events"]),
+           "open_trades_seen": None, "pending_seen": None,
+           "max_positions": None, "branch": None,
+           "pending_appended": False,
+           "pending_save_attempted": False, "pending_save_completed": False,
+           "t_return": None, "returned": None}
+    _ADMISSION_EVAL["records"].append(adm)
     trades = load_trades()
     params = _load_params()
 
     open_trades = [t for t in trades if t['status'] == 'open']
     pending = load_pending()
     max_positions = params.get('max_positions', 5)
+    adm["open_trades_seen"] = open_trades
+    adm["pending_seen"] = pending
+    adm["max_positions"] = max_positions
 
     for t in open_trades:
         if t['symbol'] == signal['symbol']:
+            adm["branch"] = "duplicate_open"
+            adm["t_return"] = _time.time()
+            adm["returned"] = "duplicate"
             return 'duplicate'
 
     if len(open_trades) + len(pending) >= max_positions:
+        adm["branch"] = "queued"
         queue_signal(signal)
+        adm["t_return"] = _time.time()
+        adm["returned"] = "queued"
         return 'queued'
 
     # Save as pending — will execute at next day's open price
     pending = load_pending()
     for p in pending:
         if p['symbol'] == signal['symbol']:
+            adm["branch"] = "duplicate_pending"
+            adm["t_return"] = _time.time()
+            adm["returned"] = "duplicate"
             return 'duplicate'
+
+    adm["branch"] = "pending"
 
     pending.append({
         'symbol': signal['symbol'],
@@ -654,7 +863,12 @@ def open_trade(signal, from_queue=False):
         'screens': signal.get('screens', []),
         'from_queue': from_queue
     })
+    adm["pending_appended"] = True
+    adm["pending_save_attempted"] = True
     save_pending(pending)
+    adm["pending_save_completed"] = True
+    adm["t_return"] = _time.time()
+    adm["returned"] = "pending"
     return 'pending'
 
 # Minimum favourable excursion before "gave back" describes anything real. Below

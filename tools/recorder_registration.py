@@ -148,9 +148,38 @@ REGISTERED_ADDITIONS = {
     ("<module>/def monitor()",
      "7bd563bc05bbe21fb78be4a23753a00081e2d7f179dfd69ceb8f7cc407e2f420"):
         ("_MONITOR_EVAL['monitor_completed'] = True", 1),
+    # Re-registered for admission capture v1: the same try/except/finally,
+    # whose finally now ends with the admission flush in its own
+    # try/except BaseException (design §6.1). Replaces a1896308....
     ("<module>/if __name__ == '__main__'",
-     "a1896308170ac338650e4a1009085be71a1569d5908f2e6bb53209a6c4f8240f"):
+     "65beb4b27c35db88cb49e9e80ec5264c08e8377e828e4a4f61766b447195e6d4"):
         ("try:", 1),
+    # ---- admission capture v1 (archive/DESIGN_admission_capture_v1.md) ----
+    # Guarded store import, guarded observer import.
+    ("<module>",
+     "1bcb92ba9baef4e317b6877587a4153226ecb39f652dae2fab93f742b4f1f863"):
+        ("try:", 1),
+    ("<module>",
+     "422c85b1b26d22d125e081a63d8b70856226c62d80715ab8746a58882ce4a6d9"):
+        ("try:", 1),
+    ("<module>",
+     "da1cf03ba7bad4f570272f75ff10af1afe2fd8cdcd5a6ce55fa4c2f7d124c3d2"):
+        ("def _emit_admission_health_failure(reason, detail):", 1),
+    ("<module>/def monitor()",
+     "925788e41a831a794dfdcd99d465a6fa24307279dba19684b2dfff281d3d4f60"):
+        ("_ADMISSION_EVAL.clear()", 1),
+    ("<module>/def monitor()",
+     "12e46143e9a5e0ca69a84949d5a1e6bb355e8130e966d9fc26a319b91fafa011"):
+        ("_ADMISSION_EVAL.update(_new_admission_store(_INVOCATION_SEQ))", 1),
+    ("<module>/def monitor()/if not open_trades",
+     "66d60c37534b840049fbb2f8dcbdc32f4266e5abf99a1a3db4de9e620a1d93bf"):
+        ("_ADMISSION_EVAL['monitor_completed'] = True", 1),
+    ("<module>/def monitor()/if updated",
+     "963bd1e8580fe643172e291c6805f5c163c2fdffd3bb16b9104a81651c54076b"):
+        ("_ADMISSION_EVAL['promotion_expected'] = True", 1),
+    ("<module>/def monitor()",
+     "66d60c37534b840049fbb2f8dcbdc32f4266e5abf99a1a3db4de9e620a1d93bf"):
+        ("_ADMISSION_EVAL['monitor_completed'] = True", 1),
 }
 
 REGISTERED_REPLACEMENTS = {
