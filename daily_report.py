@@ -265,25 +265,32 @@ if __name__ == "__main__":
     # Same shape as monitor_trades.py: the flush is in a finally so a report
     # that raised still publishes what it captured; the bare raise preserves
     # the original exception, and flush() never raises. disconnect_ib() stays
-    # outside, exactly where it was: a raising report still skips it.
+    # outside, exactly where it was: a raising report still skips it. The
+    # finally body has its own try/except BaseException, as in
+    # monitor_trades.py: flush() catches only Exception, so a BaseException
+    # raised inside it must not replace an in-flight report exception.
     try:
         generate_report()
     except BaseException as exc:
         _ADMISSION_EVAL["loop_exception"] = f"{type(exc).__name__}: {exc}"
         raise
     finally:
-        if _adm_obs is None or _ADM_STORE_ERROR is not None:
-            _emit_admission_health_failure(
-                "recorder_import_failed",
-                _ADM_OBS_IMPORT_ERROR or _ADM_STORE_ERROR)
-        else:
-            _adm_summary = _adm_obs.flush(_ADMISSION_EVAL, decision_path="report",
-                                          peer=None)
-            if (not _adm_summary.get("heartbeat_written")
-                    or _adm_summary.get("write_failures")
-                    or _adm_summary.get("flush_error")):
+        try:
+            if _adm_obs is None or _ADM_STORE_ERROR is not None:
                 _emit_admission_health_failure(
-                    "recorder_write_failed", json.dumps(_adm_summary,
-                                                        sort_keys=True,
-                                                        default=str))
+                    "recorder_import_failed",
+                    _ADM_OBS_IMPORT_ERROR or _ADM_STORE_ERROR)
+            else:
+                _adm_summary = _adm_obs.flush(_ADMISSION_EVAL,
+                                              decision_path="report",
+                                              peer=None)
+                if (not _adm_summary.get("heartbeat_written")
+                        or _adm_summary.get("write_failures")
+                        or _adm_summary.get("flush_error")):
+                    _emit_admission_health_failure(
+                        "recorder_write_failed", json.dumps(_adm_summary,
+                                                            sort_keys=True,
+                                                            default=str))
+        except BaseException:                       # noqa: BLE001
+            pass
     disconnect_ib()

@@ -72,8 +72,11 @@ REGISTERED_ADDITIONS = {
     ("<module>/def generate_report()",
      "bb350521f71f5c4ad5bb1e182166b6fd0cb4b52be988770290dbe358176b866e"):
         ("_ADMISSION_EVAL['report_completed'] = True", 1),
+    # Re-registered for gap G1 (review_bundle_admission_impl_v1): the finally
+    # body is now guarded by its own try/except BaseException, as in
+    # monitor_trades.py. Replaces 9b98134e... (00aee55).
     ("<module>/if __name__ == '__main__'",
-     "9b98134ea525f344abcb602c414607a4b4783a24f706ef59a5fd6423ed67b788"):
+     "db4ffd132df7f215e09e57e070d37b220076c7926e515d1e5bd022acba0ce54d"):
         ("try:", 1),
 }
 
