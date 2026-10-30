@@ -29,6 +29,7 @@ Direct links to the significant defects, newest first.
 
 | Date | Severity | Bug | Impact |
 |------|----------|-----|--------|
+| [Oct 30](#partial-bar-scan) | 🟠 | The 13:30 scan reads today's bar about one minute after the open | 5 of 6 summer 13:30 signals since 9 Sep had `vol_ratio` 0.01×–0.4×: one-minute price, RSI and volume; FTNT queued then dropped on drift the same day. Stops in winter (D-005). Recorded, not fixed (FROZEN) |
 | [Oct 20](#fill-before-decision) | 🔴 | Intra-session admissions filled at that session's open, which preceded the decision | **11 of 21 fills** booked at an unattainable price; 9 of 14 `clean_v3` entries affected (−0.79% to +3.49% against the decision price). Recorded, not fixed (FROZEN) |
 | [Sep 21](#tmo-nearmiss) | 🟠 | Missing `stdev_20` silently replaced by 0.05 | TMO would have opened trade #1 of `clean_v3` at **3.2x intended risk** under a clean label. Caught before the fill |
 | [Sep 24](#b-postmortem) | 🟠 | `_build_post_mortem` reads `rsi_extreme`; producer emits `emotional_extreme` | 2 of 5 branches unreachable; `emotional_extreme` and `mean_reversion_complete` recorded as `other` with no diagnostics. **4th string-mismatch defect** |
@@ -3934,6 +3935,82 @@ Ares process uses that JDK. Low priority.
   maintenance.
 - System: stall 321 ms, 6 MB paged out.
 - **Clean sample unchanged:** 11 closed, W 2/11, −$96.38.
+
+### 2026-10-29 → 30 — INSM scaled out on a gap, then closed at TP by the monitor; BRZE promoted by the monitor and filled at the open; the 13:30 scan reads a one-minute bar
+
+**21:32 MYT report (Oct 29, `08b5067`).**
+- **INSM gapped up** (peak $99.35 → $114.00). Scaled out 50%, 0.76 of 1.52
+  shares, at $113.89 (+15.88%, +$11.86 locked). Trail $93.05 → $102.60.
+- TMO new peak $711.00, trail $639.90.
+- Queue maintenance: BRZE −0.08%, KNSA −0.82%, ICLR −1.23%, all kept.
+- 2 signals, both `mean_reversion` conf 2 (`oversold+sma_support`). Slots full,
+  so both queued (`date_added` 2026-10-29):
+  - FTNT $129.80, RSI 28.4, vol 0.4×;
+  - FFIV $360.87, RSI 29.7, vol 0.05×.
+- Dashboard "QUEUED (3) — ranked" shows BRZE, KNSA, ICLR; `signal_queue.json`
+  holds 5. The registered display gap (17 Oct).
+- System: stall 1331 ms in 16.5 h ("memory pressure event"), 4 MB paged out.
+- Clean sample unchanged: 11, W 2/11, −$96.38. Net/trade −5.88% ± 5.07%
+  (−10.95% to −0.81%): the CI still excludes zero, and the dashboard says
+  nothing (same gap as 14 and 26 Oct).
+
+**00:10 / 01:30 MYT monitor (Oct 30, `841db68`, `685c573`).**
+- **16:10 UTC: INSM closed, `take_profit`.** `observed_live` $113.26 ≥ TP
+  $108.11; `close_price_argument` $108.11, booked $108.00 after slippage
+  (`unrealized_pct_at_decision` +15.24%).
+  - The monitor has no scale-out branch (`DESIGN_monitor_recorder_v1.md`:
+    `close:take_profit` sells the full position). After the report's
+    scale-out, TP stays at $108.11, under the price, so the half meant to
+    ride was sold at the first monitor, 2 h 40 min later.
+  - Booked at the level, not the price: known issue 9. At $113.26 less 0.1%
+    slippage the second half makes $11.30, not $7.39 (+$3.91).
+  - Trade: pnl $19.25 ($11.86 + $7.39), $3 commission, **+$16.25 after costs,
+    +12.89%**, 16 days, `as_expected`.
+- The freed slot: **BRZE promoted** at 16:10:13 (live $45.75, drift −0.07%)
+  into `pending_signals.json` (`from_queue`, date 2026-10-29).
+- 17:30: 4 positions, no exits. RRC $54.32 (−4.0%), SL $51.95.
+- **Inspection: PASS** (`inspect_monitor_cycles.py 08b5067 841db68 685c573`):
+  cycle `44bacc7d`, 5 records including INSM's close; cycle `c1125c5e`, 4
+  records.
+
+**05:02 MYT report (Oct 30, `1aef7d1`).**
+- **BRZE filled at $45.80** (decision price $45.75, +0.11%). Entry 2026-10-29,
+  SL $35.08, TP $54.04, `clean_v3`, `fill_run_ts` 21:00:58 UTC.
+  - Booked at the 29 Oct open, which came before the 16:10 promotion: known
+    issue 7, now 12 fills (10 `clean_v3`). The monitor record times the
+    decision, so this one is established, not bounded.
+- **5/5 slots:** TMO, AMP, SGRY, RRC, BRZE.
+- Queue maintenance: KNSA +2.50%, FFIV +0.72%, ICLR +0.62% kept; **FTNT
+  dropped**, "drifted +7.2% (max ±5.0%)" (live $139.10).
+- 6 signals, all conf 3. Slots full, so queued: FTNT (`mean_reversion`,
+  $139.10, vol 3.66×, 45 s after it was dropped), and GKOS, LNG, PURR, STNG
+  (`momentum_breakout`).
+  - FFIV was signalled again at conf 3 (vol 2.56×), but it was already queued,
+    so it keeps the 13:30 conf 2 entry.
+- Queue 8/10; the dashboard shows the 3 ranked (ICLR, KNSA, FFIV).
+- **Clean sample: 12 closed, W 3/12 (25%), −$80.13**, expectancy −$6.68, PF
+  0.28, net/trade −4.48% ± 5.38% (CI includes zero). All history: 19, W 5/19,
+  −$102.70.
+  - At observed prices (known issue 9, ITUB and INSM) the clean sample is
+    about −$103 to −$106.
+- System: stall 134 ms in 7.5 h, 0 MB paged out.
+
+<a id="partial-bar-scan"></a>
+**Finding: the 13:30 scan reads today's bar about one minute after the open
+(known issue 11).**
+- `vol_ratio` on 13:30 signals since 9 Sep: BCE 0.01× (28 Sep), INSM 0.02×
+  (12 Oct), SKHY 0.26× (15 Oct), FFIV 0.05× and FTNT 0.4× (29 Oct). PCVX 1.57×
+  (5 Oct) is the one exception. Every 21:00 signal is 0.61× to 7.93×.
+- Yahoo serves today's row within seconds of the open (SGRY's was there 38 s
+  after it on 28 Oct).
+- So price, RSI and `vol_ratio` come from a one-minute bar, and the volume
+  trigger cannot add confluence. FTNT and FFIV above show the effect: a 13:30
+  entry dropped on drift the same evening, and a conf 2 entry that a queued
+  symbol keeps although the final bar rates it conf 3.
+- Inferred from the ratios, not from a stored bar: the 21:00 run replaced the
+  29 Oct rows in the cache.
+- Stops from 2 Nov, when the 13:30 report runs before the open (D-005); comes
+  back at the March DST change. Recorded, not fixed (FROZEN).
 
 ### 2026-10-27 → 29 — step 3, implementation M1 built; review v1: 2 blocking findings; v2 accepted for M1
 

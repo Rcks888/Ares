@@ -1,6 +1,6 @@
 # Ares: current status
 
-Last updated: 2026-10-29. This page is the entry point. History is in
+Last updated: 2026-10-30. This page is the entry point. History is in
 `Ares_Logbook.md`, full reference in `README.md`, finished investigations in
 `archive/`. Everything removed in the cleanup is kept at tag
 `checkpoint-2026-10-12`.
@@ -34,7 +34,7 @@ why if it differs from the plan.
 | Oct 5 – Oct 9 | vacation; resume | incident (Oct 7), reconciliation, recorder designed, built and reviewed | unplanned: incident work |
 | Oct 12 – Oct 16 | recorder activation, Mon 16:10 UTC | HOLD from review → repair round 2 → pause → checkpoint, audit, cleanup, WBD closed → v3 update → inspection-tool rounds v4–v7 → **accepted Mon** → **activated Tue 13 Oct** (`5fd13e9`) → **inspection Thu 15 Oct: PASS, both nights** → checkpoint | one day late against the original Mon date, a week early against the replan |
 | Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | (steps 0–2 done the week before) route audit, step 3 design r1–r5, **r5 accepted for implementation review Wed 21 Oct**. Monitor inspections Mon–Thu: 8 cycles, all PASS. Unplanned, Thu 22 Oct: eMudhra CA response, environment only (venv certifi 2026.10.19, emSign roots removed from the gateway JRE, DigitalOcean firewall inbound 22 only), all three verified 23 Oct. SKYD closed at TP (clean sample 10, W 2/10). Finding: AMP cache regression (known issue 8) | pulled forward; step 3 design done a week early; security work unplanned, no code change |
-| Oct 26 – Oct 30 | **1st: Finviz** (if still broken on 23 Oct night): identify the cause, design and review a minimal fix with the reviewer. **2nd, if time:** step 3 implementation on `recorder/admission-v1` (not activated) | **Both done.** Finviz fixed Tue 27 Oct (D-004, `2e45851`, no reviewer round, by user decision). On the VPS since the 27 Oct 13:32 report: 103 screened. Signals resumed: RRC and SGRY (27 Oct) filled 28 Oct, so 5/5 slots; ICLR, KNSA and BRZE queued (28 Oct). Step 3 split into milestones M1–M4. **M1** built Tue–Thu, committed Thu 29 Oct (`00aee55`, `d25bec3`). Implementation review v1, Thu 29 Oct: 2 blocking findings, fixed the same day (`a6dd2f1`). **v2 accepted for M1** (not merge, deploy or activation). Monitor inspections Mon–Wed nights: 6 cycles, all PASS. DST: D-005 | the reviewer round dropped for Finviz; step 3 implementation started a week early and is planned in four milestones, one a week |
+| Oct 26 – Oct 30 | **1st: Finviz** (if still broken on 23 Oct night): identify the cause, design and review a minimal fix with the reviewer. **2nd, if time:** step 3 implementation on `recorder/admission-v1` (not activated) | **Both done.** Finviz fixed Tue 27 Oct (D-004, `2e45851`, no reviewer round, by user decision). On the VPS since the 27 Oct 13:32 report: 103 screened. Signals resumed: RRC and SGRY (27 Oct) filled 28 Oct, so 5/5 slots; ICLR, KNSA and BRZE queued (28 Oct). Step 3 split into milestones M1–M4. **M1** built Tue–Thu, committed Thu 29 Oct (`00aee55`, `d25bec3`). Implementation review v1, Thu 29 Oct: 2 blocking findings, fixed the same day (`a6dd2f1`). **v2 accepted for M1** (not merge, deploy or activation). Monitor inspections Mon–Thu nights: 8 cycles, all PASS (Fri's on Mon 2 Nov). Thu 29 Oct: INSM scaled out on a gap and closed at TP (clean sample 12, W 3/12); BRZE promoted by the monitor and filled. DST: D-005. Finding: the 13:30 scan reads a one-minute bar (known issue 11) | the reviewer round dropped for Finviz; step 3 implementation started a week early and is planned in four milestones, one a week |
 | Nov 2 – Nov 6 | **Step 3 M2**: capture controls, one per outcome (all 9 fill outcomes, both queue branches, every promotion early return and candidate outcome); completion and partial outcomes; cross-recorder pairing; monitor entrypoint ordering; recorder unimportable or unwritable; data-feed call counts; end-to-end run of the real `daily_report.py` entrypoint. Also D4 (A2 three-valued, inconsistency as a `contract_violation`), the G2 naming ruling, and `repro_pack.py --only N`. **Done when** implementation review v3 accepts M2. Checkpoint also runs the D-005 check | | |
 | Nov 9 – Nov 13 | **Step 3 M3**: verifier extensions (statement whitelist, call-site inventory, writer inventory and save data flow); persistence and save-chain controls, C-HANDOFF, C-ENUM. Done when the review accepts M3 | | moves a week if an M2 round runs over |
 | Nov 16 – Nov 20 | **Step 3 M4**: `tools/inspect_admission_cycles.py` (state-diff reconciliation, episodes, per-file check, trade links, A2), mutation test, final bundle. Done when the review accepts M4 | | as above |
@@ -50,8 +50,9 @@ why if it differs from the plan.
 
 **Winter time (D-005).** From Mon 2 Nov the NYSE session is 14:30–21:00 UTC, and
 the UTC (and MYT) times above are kept. The 13:30 report runs before the open,
-so fills move to the 21:00 report. The 21:00 report runs at the close, so its
-scan may see a bar that is not final yet; this is checked on 6 Nov.
+so fills move to the 21:00 report, and its scan sees the previous day's final
+bar instead of a one-minute one (known issue 11). The 21:00 report runs at the
+close, so its scan may see a bar that is not final yet; this is checked on 6 Nov.
 
 Production state is in `logs/` (`virtual_trades.json` is authoritative), and is
 backed up to GitHub by the bot's own commits.
@@ -160,6 +161,10 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      the gap is measured on every trade.
    - From 2 Nov (D-005), the 13:30 report runs before the open, so its
      admissions are no longer exposed. Monitor promotions still are.
+   - **New instance, 29 Oct: BRZE.** The 16:10 UTC monitor promoted it
+     (live $45.75); the 21:00 report filled it at the 29 Oct open, $45.80
+     (+0.11%). The monitor's own record times the decision, so this one is
+     established, not bounded. Now 12 fills (10 `clean_v3`).
 8. **The OHLCV cache accepts a history that goes backwards** (found
    2026-10-23).
    - `download_stock` (`engine/data_feed.py:72-80`) saves whatever yfinance
@@ -181,6 +186,13 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
    - So the clean sample's −$96.38 is about $27–30 too good: roughly −$123
      to −$126.
    - The same defect books TP exits below a higher live price (SKYD, 23 Oct).
+   - **INSM, 29 Oct.** The 13:30 report scaled out half at $113.89 after a
+     gap. The monitor has no scale-out branch, so at 16:10 it closed the
+     other half because live $113.26 ≥ TP $108.11, booked at $108.00. The
+     half meant to ride was sold 2 h 40 min later at the level. At the live
+     price it would book about $3.91 more.
+   - Net with ITUB and INSM: the clean sample's −$80.13 (12 closed) is about
+     −$103 to −$106 at observed prices.
    - Recorded, not fixed (FROZEN). It bears on step 4, which exit policy is
      authoritative. The monitor recorder captures `observed_live` against
      `booked_exit_price`. The report path's parity record has the IBKR price.
@@ -195,6 +207,23 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
       `rsi: 50.0` and `ema20_ok: true`.
     - Present before M1, and unchanged by it. Recorded, not fixed (FROZEN).
       This matters for step 4, and for any reading of queue outcomes.
+11. **The 13:30 report scans today's bar about one minute after the open**
+    (found 2026-10-30).
+    - Evidence: `vol_ratio` on 13:30 signals is BCE 0.01× (28 Sep), INSM
+      0.02× (12 Oct), SKHY 0.26× (15 Oct), FFIV 0.05× and FTNT 0.4× (29 Oct).
+      PCVX 1.57× (5 Oct) is the one exception. Every 21:00 signal is 0.61× to
+      7.93×. Yahoo serves today's row within seconds of the open (SGRY's,
+      38 s after it, on 28 Oct).
+    - So price, RSI and `vol_ratio` come from a one-minute bar, and the
+      volume trigger cannot count towards confluence.
+    - 29 Oct: FTNT was queued at $129.80 (conf 2), then dropped at 21:00 for
+      +7.2% drift, and re-queued at $139.10 (conf 3). FFIV keeps its conf 2
+      entry although the 21:00 scan gave conf 3, because a queued symbol
+      keeps its first entry.
+    - Inferred from the ratios, not from a stored bar: the 21:00 run
+      replaced the 29 Oct rows in the cache.
+    - Stops from 2 Nov (D-005): the 13:30 report then runs before the open.
+      It comes back at the March DST change. Recorded, not fixed (FROZEN).
 
 ## Open questions (not being worked on)
 
