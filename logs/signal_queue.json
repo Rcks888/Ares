@@ -1,56 +1,5 @@
 [
   {
-    "symbol": "LNG",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 318.94,
-    "rsi_at_signal": 72.9,
-    "stdev_20": 0.0221,
-    "vol_ratio": 2.58,
-    "date_added": "2026-10-29",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
-    "symbol": "GKOS",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 242.48,
-    "rsi_at_signal": 82.2,
-    "stdev_20": 0.0781,
-    "vol_ratio": 4.12,
-    "date_added": "2026-10-29",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
-    "symbol": "KNSA",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 95.18,
-    "rsi_at_signal": 67.7,
-    "stdev_20": 0.0565,
-    "vol_ratio": 2.14,
-    "date_added": "2026-10-28",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
     "symbol": "ICLR",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -68,16 +17,16 @@
     ]
   },
   {
-    "symbol": "STNG",
+    "symbol": "GKOS",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 95.07,
-    "rsi_at_signal": 65.4,
-    "stdev_20": 0.0294,
-    "vol_ratio": 1.82,
+    "price_at_signal": 242.48,
+    "rsi_at_signal": 82.2,
+    "stdev_20": 0.0781,
+    "vol_ratio": 4.12,
     "date_added": "2026-10-29",
     "screens": [
       "unusual_volume",
@@ -103,19 +52,106 @@
     ]
   },
   {
-    "symbol": "FFIV",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 2,
-    "price_at_signal": 360.87,
-    "rsi_at_signal": 29.7,
-    "stdev_20": 0.0499,
-    "vol_ratio": 0.05,
+    "symbol": "STNG",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 95.07,
+    "rsi_at_signal": 65.4,
+    "stdev_20": 0.0294,
+    "vol_ratio": 1.82,
     "date_added": "2026-10-29",
     "screens": [
-      "oversold_bounce"
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "KNSA",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 95.18,
+    "rsi_at_signal": 67.7,
+    "stdev_20": 0.0565,
+    "vol_ratio": 2.14,
+    "date_added": "2026-10-28",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "LNG",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 318.94,
+    "rsi_at_signal": 72.9,
+    "stdev_20": 0.0221,
+    "vol_ratio": 2.58,
+    "date_added": "2026-10-29",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "FFIV",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 338.34,
+    "rsi_at_signal": 27.5,
+    "stdev_20": 0.0511,
+    "vol_ratio": 2.75,
+    "date_added": "2026-10-30",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce",
+      "big_movers_down"
+    ]
+  },
+  {
+    "symbol": "REGN",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 927.89,
+    "rsi_at_signal": 73.7,
+    "stdev_20": 0.0321,
+    "vol_ratio": 3.83,
+    "date_added": "2026-10-30",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "ROP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 466.6,
+    "rsi_at_signal": 76.7,
+    "stdev_20": 0.0243,
+    "vol_ratio": 2.08,
+    "date_added": "2026-10-30",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
     ]
   }
 ]

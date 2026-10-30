@@ -1,6 +1,15 @@
 candidates_screened:103
-signals_found:1
-signal_details:FFIV | mean_reversion | conf2 | range
-  Price: $352.75 | RSI: 28.7 | Vol: 0.02x
+signals_found:4
+signal_details:FFIV | mean_reversion | conf3 | range
+  Price: $338.34 | RSI: 27.5 | Vol: 2.75x
   Buy: $150 (0.4 shares)
-  SL: $317.83 | TP: $388.03 (+10%) | TS: 10%
+  SL: $303.76 | TP: $372.17 (+10%) | TS: 10%|||LNG | momentum_breakout | conf3 | uptrend
+  Price: $330.32 | RSI: 76.2 | Vol: 2.23x
+  Buy: $150 (0.5 shares)
+  SL: $315.46 | TP: $389.78 (+18%) | TS: 10%|||REGN | momentum_breakout | conf3 | uptrend
+  Price: $927.89 | RSI: 73.7 | Vol: 3.83x
+  Buy: $150 (0.2 shares)
+  SL: $868.32 | TP: $1094.91 (+18%) | TS: 10%|||ROP | momentum_breakout | conf3 | uptrend
+  Price: $466.60 | RSI: 76.7 | Vol: 2.08x
+  Buy: $150 (0.3 shares)
+  SL: $443.92 | TP: $550.59 (+18%) | TS: 10%
