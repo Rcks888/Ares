@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 39
+    "holding_days": 42
   },
   {
     "symbol": "WBD",
@@ -794,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 31
+    "holding_days": 34
   },
   {
     "symbol": "TWST",
@@ -861,7 +861,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 24,
+      "days_tracked": 27,
       "max_days": 30,
       "peak_after_exit": 188.1,
       "trough_after_exit": 133.5,
@@ -869,7 +869,7 @@
       "trough_date": "2026-10-23",
       "missed_upside_pct": 0.1,
       "avoided_downside_pct": 28.96,
-      "latest_price": 163.3
+      "latest_price": 152.78
     }
   },
   {
@@ -936,8 +936,8 @@
       "manual_note": ""
     },
     "shadow": {
-      "active": true,
-      "days_tracked": 29,
+      "active": false,
+      "days_tracked": 32,
       "max_days": 30,
       "peak_after_exit": 20.66,
       "trough_after_exit": 18.78,
@@ -945,7 +945,7 @@
       "trough_date": "2026-10-09",
       "missed_upside_pct": 4.13,
       "avoided_downside_pct": 5.34,
-      "latest_price": 20.36
+      "latest_price": 20.38
     }
   },
   {
@@ -1012,8 +1012,8 @@
       "manual_note": ""
     },
     "shadow": {
-      "active": true,
-      "days_tracked": 28,
+      "active": false,
+      "days_tracked": 31,
       "max_days": 30,
       "peak_after_exit": 57.29,
       "trough_after_exit": 34.16,
@@ -1089,7 +1089,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 24,
+      "days_tracked": 27,
       "max_days": 30,
       "peak_after_exit": 71.38,
       "trough_after_exit": 59.64,
@@ -1097,7 +1097,7 @@
       "trough_date": "2026-10-28",
       "missed_upside_pct": 8.38,
       "avoided_downside_pct": 9.44,
-      "latest_price": 62.81
+      "latest_price": 62.03
     }
   },
   {
@@ -1165,7 +1165,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 17,
+      "days_tracked": 20,
       "max_days": 30,
       "peak_after_exit": 11.76,
       "trough_after_exit": 7.9,
@@ -1173,7 +1173,7 @@
       "trough_date": "2026-10-26",
       "missed_upside_pct": 0.09,
       "avoided_downside_pct": 32.77,
-      "latest_price": 8.46
+      "latest_price": 8.35
     }
   },
   {
@@ -1241,15 +1241,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 4,
+      "days_tracked": 7,
       "max_days": 30,
       "peak_after_exit": 9.32,
-      "trough_after_exit": 7.22,
+      "trough_after_exit": 7.13,
       "peak_date": "2026-10-26",
       "trough_date": "2026-10-30",
       "missed_upside_pct": 0.11,
-      "avoided_downside_pct": 22.45,
-      "latest_price": 7.22
+      "avoided_downside_pct": 23.42,
+      "latest_price": 7.13
     }
   },
   {
@@ -1317,7 +1317,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 17,
+      "days_tracked": 20,
       "max_days": 30,
       "peak_after_exit": 143.83,
       "trough_after_exit": 108.82,
@@ -1325,7 +1325,7 @@
       "trough_date": "2026-10-16",
       "missed_upside_pct": 21.51,
       "avoided_downside_pct": 8.07,
-      "latest_price": 141.44
+      "latest_price": 139.69
     }
   },
   {
@@ -1393,15 +1393,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 16,
+      "days_tracked": 19,
       "max_days": 30,
-      "peak_after_exit": 24.95,
+      "peak_after_exit": 25.02,
       "trough_after_exit": 23.06,
-      "peak_date": "2026-10-28",
+      "peak_date": "2026-10-30",
       "trough_date": "2026-10-20",
-      "missed_upside_pct": 0.93,
+      "missed_upside_pct": 1.21,
       "avoided_downside_pct": 6.72,
-      "latest_price": 24.77
+      "latest_price": 25.02
     }
   },
   {
@@ -1473,7 +1473,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 1,
+      "days_tracked": 4,
       "max_days": 30,
       "peak_after_exit": 112.58,
       "trough_after_exit": 108.11,
@@ -1553,15 +1553,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 8,
+      "days_tracked": 11,
       "max_days": 30,
-      "peak_after_exit": 7.92,
+      "peak_after_exit": 7.95,
       "trough_after_exit": 7.61,
-      "peak_date": "2026-10-23",
+      "peak_date": "2026-10-30",
       "trough_date": "2026-10-27",
-      "missed_upside_pct": 2.06,
+      "missed_upside_pct": 2.45,
       "avoided_downside_pct": 1.93,
-      "latest_price": 7.85
+      "latest_price": 7.95
     }
   },
   {
@@ -1610,7 +1610,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 2
+    "holding_days": 5
   },
   {
     "symbol": "RRC",
@@ -1658,7 +1658,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 2
+    "holding_days": 5
   },
   {
     "symbol": "BRZE",
@@ -1706,6 +1706,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 1
+    "holding_days": 4
   }
 ]
