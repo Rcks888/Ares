@@ -453,16 +453,55 @@ naming difference and is amended above. The rest are recorded, not absorbed:
 | Item | Code | Classification |
 |---|---|---|
 | `schema_version` | `record_schema_version` (records and heartbeat); the heartbeat also carries `heartbeat_schema_version` | naming only: same constant, type and persistence. Amended |
-| `missing_fields` | not emitted. The nearest facts are per-source lists (`signal_fields_absent`, `queue_entry_fields_absent`, design Q3) on the kinds that copy production fields, and violation strings such as `queue_insert_outcome_missing` | **open contract item G2-C1**: different structure and coverage, not a rename |
-| `record_complete` | `not contract_violations` | defined only by the code; depends on G2-C1, because missing fields cannot affect it while `missing_fields` does not exist |
-| `run_kind`, `run_kind_detect` | `None` and `"unavailable: <exception>"` when `sample.fill_context()` raises | **open contract item G2-C2**: a null value and a value outside `scheduled\|manual`, `env\|tty_inferred` |
+| `missing_fields` | at the M2 candidate: not emitted | **G2-C1**, not closed by review v3; contract below |
+| `record_complete` | at the M2 candidate: `not contract_violations`, so a record with no timestamps, counts or `max_positions` was complete (review v3 probe) | **G2-C1**; contract below |
+| `run_kind`, `run_kind_detect` | `None` and `"unavailable: <exception>"` when `sample.fill_context()` raises | **G2-C2, accepted (review v3)** as explicit unknown evidence. It is not a valid `scheduled\|manual` classification: any check that needs one is INCONCLUSIVE for that run |
 | not in the table | `seq`, `parent_seq` (§5 linkage), `repository_commit` on every record | additions, listed for review; no existing field changes meaning |
 
 Found while mapping, in §4.5: the code emits no `completed` field, and emits
 both `report_completed` and `monitor_completed` as booleans on every
 heartbeat, so a report heartbeat carries `monitor_completed: false` where
-§4.5 has the field absent. **Open contract item G2-C3.** G2 closes when this
-mapping and C1–C3 are reviewed.
+§4.5 has the field absent. **G2-C3, accepted (review v3)** on one condition:
+completion is read only from the flag that matches the heartbeat's
+`decision_path`. The other path's `false` says nothing and is never a failed
+invocation.
+
+**G2-C1 contract (after review v3).** `REQUIRED_FIELDS` in the observer
+names, per record kind and observed state, the fields that must be non-null.
+The state comes from the record's own progress evidence: an admission's call
+state (returned, branch reached, entered), a fill's outcome or
+`reached_not_completed`, a pass's `return_reason` or `not_returned`, a
+candidate's outcome. The tracker sets each listed field unconditionally
+before the point the state proves was passed, so a null is lost capture,
+never a value production made. A field that itself defines the state
+(`returned`, a fill's `t_exit`, a pass's `return_reason`) is not listed;
+losing it changes the state, and the record is then incomplete because the
+call did not return.
+
+- `missing_fields`: the listed fields that are null, in table order;
+  candidates as `candidates[i].<field>`.
+- Production-field absence (`signal_fields_absent`,
+  `queue_entry_fields_absent`, Q3) describes the source dict and stays out
+  of this contract.
+- A save that is unconditional on a returned path (fill pass: pending and
+  trades; completed promotion pass that removed a candidate: queue and
+  ranked; inserted queue entry; expiry that removed one; maintenance) must
+  be `completed`. Anything else is the violation
+  `<save>_not_completed_at_return`.
+- `record_complete` is true only when the call returned, `missing_fields` is
+  empty and `contract_violations` is empty. A call that raised is recorded
+  and never complete (§7: "the record is incomplete, not absent").
+
+The heartbeat's `records_incomplete` counts records with `record_complete`
+false, so a run with a raised call counts it. G2 closes when the review
+accepts this contract.
+
+**Recorded limitation O1 (review v3).** The pre-existing monitor flush is
+not guarded against `BaseException`. A KeyboardInterrupt inside it ends the
+`finally` before the admission block, so no admission evidence and no
+admission health line are written (control 89). Admission output is
+therefore not guaranteed on every failure path; changing this would alter
+the registered monitor block.
 
 ### 4.2 `kind: admission` — one per `open_trade` call
 

@@ -531,6 +531,172 @@ def _derive_maintenance(raw, violations):
 
 
 # --------------------------------------------------------------------------
+# Completeness (design §4.1, G2-C1)
+#
+# REQUIRED_FIELDS names, per record kind and observed state, the fields that
+# must be non-null. The tracker sets each of them unconditionally before the
+# point the state proves was passed, so a null is lost capture, never a value
+# production produced. A field that defines the state (`returned`, a fill's
+# `t_exit`, a pass's `return_reason`) is not listed: losing it changes the
+# state, and the record is then incomplete because its call did not return.
+#
+# Production-field absence (`signal_fields_absent`, `queue_entry_fields_absent`,
+# design Q3) describes the source dict, not the capture, and is not part of
+# this contract.
+#
+# record_complete: the call returned, nothing required is missing, and no
+# contract violation fired. A call that raised is recorded, never complete.
+# --------------------------------------------------------------------------
+
+_FILL_DONE = ("t_enter", "outcome")
+_FILL_BAR = ("bar_date", "today_utc")
+_FILL_BOOKED = ("bar_open", "entry_price", "slippage_pct", "shares",
+                "stop_loss", "take_profit", "stdev_fallback", "fill_source",
+                "entry_date")
+_PASS_BASE = ("t_enter", "source", "use_live", "ranked_basis")
+_PASS_WINDOW = ("free_slots", "fill_window_ok", "fill_window_reason")
+_CAND_VALIDATED = ("outcome", "valid", "reason", "checks",
+                   "t_validate_start", "t_validate_end")
+
+REQUIRED_FIELDS = {
+    ("admission", "returned"): ("t_enter", "open_positions_before",
+                                "pending_before", "max_positions", "branch",
+                                "t_return"),
+    ("admission", "branch_reached"): ("t_enter", "open_positions_before",
+                                      "pending_before", "max_positions"),
+    ("admission", "entered"): ("t_enter",),
+    ("fill", "demoted_to_queue"): _FILL_DONE,
+    ("fill", "discarded_already_open"): _FILL_DONE,
+    ("fill", "dropped_aged"): _FILL_DONE,
+    ("fill", "retained_no_data"): _FILL_DONE + ("fill_attempts",),
+    ("fill", "dropped_no_data"): _FILL_DONE + ("fill_attempts",),
+    ("fill", "retained_bar_not_today"): _FILL_DONE + _FILL_BAR,
+    ("fill", "filled"): _FILL_DONE + _FILL_BAR + _FILL_BOOKED,
+    ("fill", "retained_exception"): _FILL_DONE + ("fill_attempts",
+                                                  "exception"),
+    ("fill", "dropped_exception"): _FILL_DONE + ("fill_attempts",
+                                                 "exception"),
+    ("fill", "completed_without_known_outcome"): _FILL_DONE,
+    ("fill", "reached_not_completed"): ("t_enter",),
+    ("fill_pass", "no_pending"): ("t_enter", "pending_seen", "t_exit"),
+    ("fill_pass", "completed"): ("t_enter", "pending_seen",
+                                 "open_count_before", "max_positions",
+                                 "t_exit"),
+    ("fill_pass", "not_returned"): ("t_enter",),
+    ("promotion_pass", "no_free_slots"): _PASS_BASE + ("free_slots",
+                                                       "t_exit"),
+    ("promotion_pass", "queue_empty"): _PASS_BASE + ("free_slots", "t_exit"),
+    ("promotion_pass", "fill_window_closed"): _PASS_BASE + _PASS_WINDOW
+    + ("t_exit",),
+    ("promotion_pass", "completed"): _PASS_BASE + _PASS_WINDOW
+    + ("ranked_count", "t_exit"),
+    ("promotion_pass", "not_returned"): _PASS_BASE,
+    ("candidate", "held_dropped"): ("outcome",),
+    ("candidate", "deferred_transient"): _CAND_VALIDATED,
+    ("candidate", "dropped_invalid"): _CAND_VALIDATED,
+    ("candidate", "promoted"): _CAND_VALIDATED + ("open_trade_result",),
+    ("candidate", "dropped_open_trade"): _CAND_VALIDATED
+    + ("open_trade_result",),
+    ("candidate", "no_outcome_in_completed_pass"): ("outcome",),
+    ("candidate", "no_outcome_in_open_pass"): (),
+    ("queue_insert", "returned"): ("insert",),
+    ("queue_insert", "not_returned"): (),
+    ("queue_expiry", "returned"): (),
+    ("queue_expiry", "not_returned"): (),
+    ("queue_maintenance", "returned"): ("ranked_save_site",),
+    ("queue_maintenance", "not_returned"): (),
+}
+
+PROMOTION_REMOVES = frozenset({"held_dropped", "dropped_invalid", "promoted",
+                               "dropped_open_trade"})
+
+
+def call_returned(rec):
+    """Did the call behind a derived record return?"""
+    kind = rec.get("kind")
+    if kind == "admission":
+        return rec.get("call_state") == "returned"
+    if kind == "fill":
+        return rec.get("entry_state") == "completed"
+    if kind == "fill_pass":
+        return rec.get("return_reason") in ("no_pending", "completed")
+    if kind == "promotion_pass":
+        return rec.get("return_reason") in PASS_RETURNS
+    if kind in ("queue_insert", "queue_expiry", "queue_maintenance"):
+        return rec.get("returned") is True
+    return False
+
+
+def contract_state(rec):
+    """The REQUIRED_FIELDS state of a derived record (not of a candidate)."""
+    kind = rec.get("kind")
+    if kind == "admission":
+        if call_returned(rec):
+            return "returned"
+        return "branch_reached" if rec.get("branch") is not None else "entered"
+    if kind == "fill":
+        if not call_returned(rec):
+            return "reached_not_completed"
+        o = rec.get("outcome")
+        return o if o in FILL_OUTCOMES else "completed_without_known_outcome"
+    if kind in ("fill_pass", "promotion_pass"):
+        return rec.get("return_reason") if call_returned(rec) \
+            else "not_returned"
+    return "returned" if call_returned(rec) else "not_returned"
+
+
+def candidate_state(cand, pass_returned):
+    o = cand.get("outcome")
+    if o in CANDIDATE_OUTCOMES:
+        return o
+    return ("no_outcome_in_completed_pass" if pass_returned
+            else "no_outcome_in_open_pass")
+
+
+def _required_saves(rec):
+    """Save facts that must be `completed` on a returned call: the save is
+    unconditional on that path, so anything else is a contradiction."""
+    kind = rec.get("kind")
+    if not call_returned(rec):
+        return ()
+    if kind == "fill_pass" and rec.get("return_reason") == "completed":
+        return ("pending_save", "trades_save")
+    if kind == "promotion_pass" and rec.get("return_reason") == "completed" \
+            and any(c.get("outcome") in PROMOTION_REMOVES
+                    for c in rec.get("candidates") or []):
+        return ("queue_save", "ranked_save")
+    if kind == "queue_insert" and rec.get("insert") == "inserted":
+        return ("queue_save",)
+    if kind == "queue_expiry" and rec.get("removals"):
+        return ("queue_save",)
+    if kind == "queue_maintenance":
+        if rec.get("ranked_save_site") == "survivors":
+            return ("queue_save", "ranked_save")
+        return ("ranked_save",)
+    return ()
+
+
+def assess(rec, violations):
+    """(missing_fields, record_complete) for a derived record. Appends the
+    save contradictions to `violations`."""
+    kind = rec.get("kind")
+    missing = [f for f in REQUIRED_FIELDS.get((kind, contract_state(rec)), ())
+               if rec.get(f) is None]
+    if kind == "promotion_pass":
+        returned = call_returned(rec)
+        for i, c in enumerate(rec.get("candidates") or []):
+            st = candidate_state(c, returned)
+            missing.extend(f"candidates[{i}].{f}"
+                           for f in REQUIRED_FIELDS[("candidate", st)]
+                           if c.get(f) is None)
+    for f in _required_saves(rec):
+        if rec.get(f) != "completed":
+            violations.append(f"{f}_not_completed_at_return")
+    complete = call_returned(rec) and not missing and not violations
+    return missing, complete
+
+
+# --------------------------------------------------------------------------
 # Linking within one run (identity, never symbol)
 # --------------------------------------------------------------------------
 
@@ -757,8 +923,11 @@ def derive_all(store):
             violations.append(f"unknown_kind:{kind}")
         rec = {"kind": kind, "seq": i, "parent_seq": parent.get(i)}
         rec.update(body)
+        violations = list(violations)
+        missing, complete = assess(rec, violations)
+        rec["missing_fields"] = missing
         rec["contract_violations"] = sorted(set(violations))
-        rec["record_complete"] = not rec["contract_violations"]
+        rec["record_complete"] = complete
         out.append(rec)
     return raw_records, out
 

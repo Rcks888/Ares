@@ -33,10 +33,25 @@ hold afterwards. The verdict on the disk effect (design §3.5: consistent,
 here the file left by each failure point is asserted directly, so those later
 controls have a known input.
 
+  *Queue upkeep and raises before a return* -- maintain_queue with an
+  expiry and with an empty queue; open_trade, promote_queue and a fill
+  demotion each raising before they return.
+
+Completeness contract (design §4.1, G2-C1), checked over every store the
+controls derived: no real record names a missing field and record_complete
+is exactly "returned, nothing missing, no violation" (k01); nulling the raw
+source of each field `REQUIRED_FIELDS` lists for the record's state names
+that field in `missing_fields`, and every table entry is exercised (k02);
+each save that is unconditional on a returned path, marked raised, gives
+`<save>_not_completed_at_return` (k03); the review v3 probe (k04).
+
 Anti-vacuity: every control asserts a specific outcome value, and the final
 coverage checks require that the controls together produced all nine fill
 outcomes, all four admission branches, all five candidate outcomes and all
 four promotion return reasons. A harness whose stimulus did nothing fails.
+Mutants of tracker.py (a capture statement removed) and of the observer
+(the pre-C1 completeness rule restored, the save rule dropped) must each
+make their named checks fail.
 """
 
 import builtins
@@ -133,9 +148,27 @@ def _load_tracker():
     return mod
 
 
+def _load_observer():
+    """The real engine/admission_observer.py, or the mutant named by
+    ARES_CAPTURE_OBSERVER (anti-vacuity runs only)."""
+    path = os.environ.get("ARES_CAPTURE_OBSERVER")
+    if not path:
+        from engine import admission_observer
+        return admission_observer
+    import importlib.util
+    import engine
+    spec = importlib.util.spec_from_file_location("engine.admission_observer",
+                                                  path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["engine.admission_observer"] = mod
+    engine.admission_observer = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
 _install_stubs()
 tr = _load_tracker()
-from engine import admission_observer as ao           # noqa: E402
+ao = _load_observer()
 
 BASE_PARAMS = tr._load_params()
 REAL_FILL_WINDOW = tr._fill_window_ok
@@ -301,8 +334,15 @@ def print_raises_on(fragment):
     return patched(print=fake_print)
 
 
+CORPUS = []
+
+
 def _derive(store):
+    """derive_all, and a snapshot of the store for the completeness checks.
+    The records list is replaced (never cleared) at the next reset, so a
+    shallow copy keeps this run's raw records."""
     raw, out = ao.derive_all(store)
+    CORPUS.append((dict(store), out))
     return raw, out
 
 
@@ -1011,6 +1051,295 @@ def c49_r3_post_append_then_save_trades_partial(s):
     return _r3(s, "partial", "unreadable")
 
 
+# ------------------------ queue expiry and maintenance ---------------------
+
+@control
+def c50_queue_maintenance_and_expiry(s):
+    """maintain_queue over one expired and one valid entry, then over an
+    empty queue: both expiry shapes and both ranked-save sites, returned."""
+    c = Check()
+    s.write("signal_queue.json", [_qentry("OLDQ", added=OLD), _qentry("KEP")])
+    store = _reset_store()
+    with patched(_load_params=_params()):
+        tr.maintain_queue()
+        s.write("signal_queue.json", [])
+        tr.maintain_queue()
+    _, out = _derive(store)
+    ex, mq = _of(out, "queue_expiry"), _of(out, "queue_maintenance")
+    c(len(ex) == 2 and len(mq) == 2, f"records {len(ex)}/{len(mq)}")
+    if len(ex) == 2 and len(mq) == 2:
+        c([r["symbol"] for r in ex[0]["removals"]] == ["OLDQ"],
+          f"removals {ex[0]['removals']}")
+        c(ex[0]["queue_save"] == "completed", f"expiry save {ex[0]['queue_save']}")
+        c(ex[1]["removals"] == [] and ex[1]["queue_save"] == "not_attempted",
+          f"empty expiry {ex[1]}")
+        c(mq[0]["ranked_save_site"] == "survivors"
+          and mq[0]["queue_save"] == mq[0]["ranked_save"] == "completed",
+          f"maintenance {mq[0]}")
+        c(mq[1]["ranked_save_site"] == "empty"
+          and mq[1]["ranked_save"] == "completed"
+          and mq[1]["queue_save"] == "not_attempted", f"maintenance {mq[1]}")
+    c(all(r["record_complete"] for r in out), "record not complete")
+    c([q["symbol"] for q in s.read("queue_ranked.json")] == [],
+      "ranked file after the empty pass")
+    _complete(c, out, "c50")
+    return c.fails
+
+
+@control
+def c51_admission_raises_before_branch(s):
+    """open_trade raises while reading state: the record exists, has no
+    branch, is not complete, and names nothing missing (t_enter only)."""
+    c = Check()
+    (s.dir / "virtual_trades.json").write_text("{")
+    store = _reset_store()
+    raised = None
+    with patched(_load_params=_params()):
+        try:
+            tr.open_trade(_sig("RBB"))
+        except ValueError as e:
+            raised = e
+    c(raised is not None, "the read failure did not propagate")
+    _, out = _derive(store)
+    adm = _of(out, "admission")
+    c(len(adm) == 1, f"admission records {len(adm)}")
+    if adm:
+        a = adm[0]
+        c(a["branch"] is None and a["call_state"] == "raised_elsewhere",
+          f"{a['branch']}/{a['call_state']}")
+        c(ao.contract_state(a) == "entered", ao.contract_state(a))
+        c(a["missing_fields"] == [] and a["record_complete"] is False,
+          f"{a['missing_fields']}/{a['record_complete']}")
+    return c.fails
+
+
+@control
+def c52_fill_demotion_raises_in_queue_save(s):
+    """A demotion whose queue_signal raises at save_queue open: the fill
+    entry is reached_not_completed, its pass did not return, and neither
+    record is complete or names anything missing."""
+    c = Check()
+    s.write("pending_signals.json", [_sig("DRQ")])
+    s.write("virtual_trades.json", FULL)
+    s.write("signal_queue.json", [])
+    store = _reset_store()
+    raised = None
+    with patched(_load_params=_params()), failpoint(tr.QUEUE_FILE, "open"):
+        try:
+            tr.execute_pending_signals()
+        except Marker as e:
+            raised = e
+    c(raised is not None, "save_queue failure did not propagate")
+    _, out = _derive(store)
+    f, fp, qi = _of(out, "fill"), _of(out, "fill_pass"), _of(out, "queue_insert")
+    c(len(f) == 1 and f[0]["outcome"] == "demoted_to_queue"
+      and f[0]["entry_state"] == "reached_not_completed", f"fill {f}")
+    c(len(fp) == 1 and fp[0]["return_reason"] is None, f"pass {fp}")
+    c(len(qi) == 1 and qi[0]["queue_save"] == "raised", f"insert {qi}")
+    c(all(r["record_complete"] is False and r["missing_fields"] == []
+          for r in out), [(r["kind"], r["record_complete"], r["missing_fields"])
+                          for r in out])
+    c(s.read("pending_signals.json") != "absent"
+      and [p["symbol"] for p in s.read("pending_signals.json")] == ["DRQ"],
+      "pending changed")
+    return c.fails
+
+
+@control
+def c53_promotion_raises_reading_state(s):
+    """promote_queue raises at load_trades: the pass record exists with its
+    base fields, did not return, and is not complete."""
+    c = Check()
+    (s.dir / "virtual_trades.json").write_text("{")
+    store = _reset_store()
+    raised = None
+    with patched(_load_params=_params()):
+        try:
+            tr.promote_queue(source="scan")
+        except ValueError as e:
+            raised = e
+    c(raised is not None, "the read failure did not propagate")
+    _, out = _derive(store)
+    pp = _of(out, "promotion_pass")
+    c(len(pp) == 1, f"passes {len(pp)}")
+    if pp:
+        p = pp[0]
+        c(p["return_reason"] is None and p["free_slots"] is None,
+          f"{p['return_reason']}/{p['free_slots']}")
+        c(ao.contract_state(p) == "not_returned", ao.contract_state(p))
+        c(p["missing_fields"] == [] and p["record_complete"] is False,
+          f"{p['missing_fields']}/{p['record_complete']}")
+    return c.fails
+
+
+# --------------------------------------------------------------------------
+# Completeness contract (design §4.1, G2-C1). Run after the controls, over
+# every store they derived (CORPUS).
+# --------------------------------------------------------------------------
+
+RAW_KEY = {("admission", "open_positions_before"): "open_trades_seen",
+           ("admission", "pending_before"): "pending_seen"}
+
+KCHECKS = []
+
+
+def kcheck(fn):
+    KCHECKS.append(fn)
+    return fn
+
+
+def _ablated(store, seq, changes, cand=None):
+    """A copy of `store` with raw `changes` applied to record `seq` (to its
+    candidate `cand` when given). Signal and queue-entry objects are shared,
+    so identity links are unchanged."""
+    recs = [dict(r) for r in store["records"]]
+    if cand is None:
+        recs[seq].update(changes)
+    else:
+        cands = [dict(x) for x in recs[seq]["candidates"]]
+        cands[cand].update(changes)
+        recs[seq]["candidates"] = cands
+    s2 = dict(store)
+    s2["records"] = recs
+    return ao.derive_all(s2)[1][seq]
+
+
+def _req(kind, state):
+    return ao.REQUIRED_FIELDS[(kind, state)]
+
+
+@kcheck
+def k01_real_records_carry_every_required_field(c):
+    """No real capture lost a required field, and record_complete is exactly
+    'returned, nothing missing, no violation'."""
+    kinds = set()
+    for _, out in CORPUS:
+        for r in out:
+            kinds.add(r["kind"])
+            c(r["missing_fields"] == [],
+              f"{r['kind']}#{r['seq']} missing {r['missing_fields']}")
+            want = ao.call_returned(r) and not r["contract_violations"]
+            c(r["record_complete"] is want,
+              f"{r['kind']}#{r['seq']} record_complete {r['record_complete']}")
+    want = {"admission", "queue_insert", "fill", "fill_pass", "promotion_pass",
+            "queue_expiry", "queue_maintenance"}
+    c(kinds == want, f"record kinds {sorted(kinds)}")
+
+
+COVERED = set()
+
+
+@kcheck
+def k02_each_required_field_ablated_is_named_missing(c):
+    """For every real record and every field its state requires: null the
+    raw source, re-derive, and the field must be named in missing_fields
+    with record_complete false. Every table entry must be exercised."""
+    def probe(store, r, kind, fields, state_of, name, cand=None):
+        """Ablate each field alone; when that moves the record to another
+        state, also ablate each field of the new state alongside it."""
+        st = state_of(r)
+        for f in fields(st):
+            first = {RAW_KEY.get((kind, f), f): None}
+            r2 = _ablated(store, r["seq"], first, cand)
+            ok = name(f) in r2["missing_fields"] and \
+                r2["record_complete"] is False
+            c(ok, f"{kind}/{st}: ablated {f} -> {r2['missing_fields']}")
+            if not ok:
+                continue
+            COVERED.add((kind, st, f))
+            st2 = state_of(r2)
+            for g in fields(st2):
+                both = dict(first)
+                both[RAW_KEY.get((kind, g), g)] = None
+                r3 = _ablated(store, r["seq"], both, cand)
+                ok3 = name(g) in r3["missing_fields"] and \
+                    r3["record_complete"] is False
+                c(ok3, f"{kind}/{st2} (via {f}): ablated {g} -> "
+                       f"{r3['missing_fields']}")
+                if ok3:
+                    COVERED.add((kind, st2, g))
+
+    for store, out in CORPUS:
+        for r in out:
+            if r["missing_fields"]:
+                continue
+            kind = r["kind"]
+            probe(store, r, kind, lambda st, k=kind: _req(k, st),
+                  ao.contract_state, lambda f: f)
+            if kind != "promotion_pass":
+                continue
+            done = ao.call_returned(r)
+            for i in range(len(r["candidates"])):
+                probe(store, r, "candidate",
+                      lambda st: _req("candidate", st),
+                      lambda rr, i=i: ao.candidate_state(rr["candidates"][i],
+                                                         done),
+                      lambda f, i=i: f"candidates[{i}].{f}", cand=i)
+    table = {(k, st, f) for (k, st), fs in ao.REQUIRED_FIELDS.items()
+             for f in fs}
+    left = sorted(table - COVERED)
+    c(not left, f"table entries never exercised: {left}")
+
+
+@kcheck
+def k03_save_not_completed_on_returned_call_is_a_violation(c):
+    """Every save that is unconditional on a returned call: mark it raised
+    in the raw record and the record gets `<save>_not_completed_at_return`."""
+    seen = set()
+    for store, out in CORPUS:
+        for r in out:
+            if not r["record_complete"]:
+                continue
+            for f in ao._required_saves(r):
+                r2 = _ablated(store, r["seq"], {f + "_completed": False})
+                v = f"{f}_not_completed_at_return"
+                c(v in r2["contract_violations"]
+                  and r2["record_complete"] is False,
+                  f"{r['kind']}#{r['seq']} {f}: {r2['contract_violations']}")
+                seen.add((r["kind"], f, r.get("ranked_save_site")))
+    want = {("fill_pass", "pending_save", None),
+            ("fill_pass", "trades_save", None),
+            ("promotion_pass", "queue_save", None),
+            ("promotion_pass", "ranked_save", None),
+            ("queue_insert", "queue_save", None),
+            ("queue_expiry", "queue_save", None),
+            ("queue_maintenance", "queue_save", "survivors"),
+            ("queue_maintenance", "ranked_save", "survivors"),
+            ("queue_maintenance", "ranked_save", "empty")}
+    c(seen == want, f"save rules exercised {sorted(seen, key=str)}")
+
+
+@kcheck
+def k04_reviewer_probe_returned_pending_without_brackets(c):
+    """Review v3 probe: a returned pending admission whose save flags are
+    set but whose timestamps, position counts and max_positions are absent
+    must not be complete."""
+    hit = None
+    for store, out in CORPUS:
+        for r in out:
+            if r["kind"] == "admission" and r["branch"] == "pending" \
+                    and r["record_complete"]:
+                hit = (store, r)
+                break
+        if hit:
+            break
+    c(hit is not None, "no complete pending admission in the corpus")
+    if not hit:
+        return
+    store, r = hit
+    r2 = _ablated(store, r["seq"], {"t_enter": None, "t_return": None,
+                                    "open_trades_seen": None,
+                                    "pending_seen": None,
+                                    "max_positions": None})
+    c(r2["missing_fields"] == ["t_enter", "open_positions_before",
+                               "pending_before", "max_positions", "t_return"],
+      f"missing {r2['missing_fields']}")
+    c(r2["contract_violations"] == [], f"violations {r2['contract_violations']}")
+    c(r2["pending_save"] == "completed" and r2["call_state"] == "returned",
+      f"{r2['pending_save']}/{r2['call_state']}")
+    c(r2["record_complete"] is False, "record_complete true")
+
+
 # --------------------------------------------------------------------------
 
 def main():
@@ -1045,10 +1374,27 @@ def main():
               + ("" if ok else f" missing {sorted(set(want) - seen)}"))
         if not ok:
             failed.append(label)
-    n = len(CONTROLS) + len(cov)
-    if not os.environ.get("ARES_CAPTURE_TRACKER"):
-        print("\n  anti-vacuity: capture mutants of engine/tracker.py; each "
-              "named control must FAIL on its mutant")
+    print("\n  completeness contract (G2-C1) over every record the controls "
+          "derived")
+    for fn in KCHECKS:
+        c = Check()
+        try:
+            fn(c)
+        except Exception:                                  # noqa: BLE001
+            c.fails.append("harness raised:\n" + traceback.format_exc())
+        print(f"  {'PASS' if not c.fails else 'FAIL'}  {fn.__name__}")
+        for x in c.fails[:12]:
+            print(f"        {x}")
+        if len(c.fails) > 12:
+            print(f"        ... {len(c.fails) - 12} more")
+        if c.fails:
+            failed.append(fn.__name__)
+    n = len(CONTROLS) + len(cov) + len(KCHECKS)
+    if not (os.environ.get("ARES_CAPTURE_TRACKER")
+            or os.environ.get("ARES_CAPTURE_OBSERVER")):
+        print("\n  anti-vacuity: mutants of engine/tracker.py and "
+              "engine/admission_observer.py; each named check must FAIL on "
+              "its mutant")
         for label, ok in _run_mutants():
             print(f"  {'PASS' if ok else 'FAIL'}  {label}")
             n += 1
@@ -1058,29 +1404,42 @@ def main():
     return 1 if failed else 0
 
 
-# One capture statement removed per mutant (replaced by `pass`, same
-# indentation), and the control that must notice it.
+# One statement replaced per mutant (by `pass` unless a replacement is given,
+# same indentation), and the checks that must all notice it. Tracker mutants
+# remove a capture statement; observer mutants restore the pre-C1
+# completeness rule or drop the save-contradiction rule.
+_T, _O = "engine/tracker.py", "engine/admission_observer.py"
 MUTANTS = [
-    ('fe["outcome"] = "filled"', "c01_fill_filled"),
-    ('qi["evicted"].append(e)', "c41_insert_then_evict_new_candidate"),
-    ('adm["pending_save_completed"] = True', "c20_admission_pending"),
-    ('cand["outcome"] = "dropped_open_trade"',
-     "c34_promotion_every_candidate_outcome"),
-    ('pp["ranked_basis"] = "unranked_fallback"',
-     "c33_promotion_unranked_fallback"),
-    ('_ADMISSION_EVAL["queue_events"].append((symbol, action, False))',
-     "c25_admission_queue_event_write_failed"),
-    ('fp["trades_save_attempted"] = True',
-     "c47_save_trades_fails_after_save_pending"),
-    ('fe["trade_appended"] = True',
-     "c45_fill_exception_after_append_retained"),
+    (_T, 'fe["outcome"] = "filled"', None, ("c01_fill_filled",)),
+    (_T, 'qi["evicted"].append(e)', None,
+     ("c41_insert_then_evict_new_candidate",)),
+    (_T, 'adm["pending_save_completed"] = True', None,
+     ("c20_admission_pending",)),
+    (_T, 'cand["outcome"] = "dropped_open_trade"', None,
+     ("c34_promotion_every_candidate_outcome",)),
+    (_T, 'pp["ranked_basis"] = "unranked_fallback"', None,
+     ("c33_promotion_unranked_fallback",)),
+    (_T, '_ADMISSION_EVAL["queue_events"].append((symbol, action, False))',
+     None, ("c25_admission_queue_event_write_failed",)),
+    (_T, 'fp["trades_save_attempted"] = True', None,
+     ("c47_save_trades_fails_after_save_pending",)),
+    (_T, 'fe["trade_appended"] = True', None,
+     ("c45_fill_exception_after_append_retained",)),
+    (_T, 'fp["max_positions"] = max_positions', None,
+     ("k01_real_records_carry_every_required_field",)),
+    (_O, 'complete = call_returned(rec) and not missing and not violations',
+     'complete = not violations',
+     ("k01_real_records_carry_every_required_field",
+      "k02_each_required_field_ablated_is_named_missing",
+      "k04_reviewer_probe_returned_pending_without_brackets")),
+    (_O, 'violations.append(f"{f}_not_completed_at_return")', None,
+     ("k03_save_not_completed_on_returned_call_is_a_violation",)),
 ]
+_MUTANT_ENV = {_T: "ARES_CAPTURE_TRACKER", _O: "ARES_CAPTURE_OBSERVER"}
 
 
 def _run_mutants():
     import subprocess
-    src_path = os.path.join(ROOT, "engine", "tracker.py")
-    src = open(src_path, encoding="utf-8").read()
     results = []
     tmp = tempfile.mkdtemp(prefix="adm_capture_mut_")
     try:
@@ -1088,27 +1447,32 @@ def _run_mutants():
         os.makedirs(os.path.join(tmp, "config"))
         shutil.copyfile(os.path.join(ROOT, "config", "strategy_params.json"),
                         os.path.join(tmp, "config", "strategy_params.json"))
-        for stmt, must_fail in MUTANTS:
+        for rel, stmt, repl, must_fail in MUTANTS:
+            src = open(os.path.join(ROOT, rel), encoding="utf-8").read()
             lines = src.splitlines(keepends=True)
             hits = [i for i, l in enumerate(lines) if l.strip() == stmt]
-            label = f"mutant `{stmt}` -> {must_fail} fails"
+            label = (f"mutant {os.path.basename(rel)} `{stmt}` -> "
+                     f"{', '.join(must_fail)} fail")
             if len(hits) != 1:
                 results.append((f"{label} (statement found {len(hits)}x)",
                                 False))
                 continue
             i = hits[0]
             indent = lines[i][: len(lines[i]) - len(lines[i].lstrip())]
-            lines[i] = indent + "pass\n"
-            path = os.path.join(tmp, "engine", "tracker.py")
+            lines[i] = indent + (repl or "pass") + "\n"
+            path = os.path.join(tmp, rel)
             with open(path, "w", encoding="utf-8") as fh:
                 fh.write("".join(lines))
-            env = dict(os.environ, ARES_CAPTURE_TRACKER=path)
+            env = dict(os.environ)
+            env[_MUTANT_ENV[rel]] = path
             p = subprocess.run([sys.executable, os.path.abspath(__file__)],
                                capture_output=True, text=True, env=env,
                                cwd=ROOT, timeout=300)
             failed = {l.split()[1] for l in p.stdout.splitlines()
                       if l.startswith("  FAIL  ")}
-            results.append((label, must_fail in failed and p.returncode == 1))
+            results.append((label, set(must_fail) <= failed
+                            and p.returncode == 1))
+            os.remove(path)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     return results

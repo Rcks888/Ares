@@ -282,6 +282,14 @@ def main():
               {"fill", "admission", "promotion_pass"} <= set(kinds), kinds)
         viol = sorted({v for r in recs for v in r.get("contract_violations", [])})
         check("no contract violation", viol == [], viol)
+        bad = [(r.get("kind"), r.get("seq"), r.get("missing_fields"))
+               for r in recs if r.get("missing_fields") != []
+               or r.get("record_complete") is not True]
+        check("every record complete, no missing field", recs and not bad, bad)
+        if beats:
+            check("heartbeat records_incomplete 0",
+                  beats[0].get("records_incomplete") == 0,
+                  beats[0].get("records_incomplete"))
     print(f"\n  {'ALL PASS' if not fails else f'{len(fails)} FAILED: {fails}'}")
     return 1 if fails else 0
 
