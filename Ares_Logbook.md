@@ -4210,6 +4210,48 @@ row written at 13:30 (extends known issue 11).**
 - Inferred from parity bar dates and the code; the cache files were not read.
   Recorded only (FROZEN).
 
+### 2026-11-02 → 03 — step 3, implementation M2 built; reviews v3 and v4; **M2 accepted**
+
+- **Commits** on `recorder/admission-v1`, pushed, not merged, not active:
+  - `2470a50`: D4, plus the capture, monitor admission entrypoint and report
+    end-to-end suites. Report entrypoint 12 → 16, isolation smoke gained a
+    data-feed call check.
+  - `00303ec`: design §4.1 G2 amendment. Only `schema_version` →
+    `record_schema_version` was naming-only; C1–C3 were left open for the
+    reviewer.
+  - `5d274de`: G2-C1 completeness contract.
+- **Implementation review v3** (`review_bundle_admission_impl_v3`): delta
+  acceptable, no new blocker, M2 not accepted.
+  - D4 closed. Schema rename accepted.
+  - C2 accepted as explicit unknown evidence, not a valid `scheduled|manual`
+    classification.
+  - C3 accepted if completion is read from the flag that matches
+    `decision_path`.
+  - O1 accepted as a recorded limitation, not as coverage: a BaseException
+    in the monitor flush skips the admission block.
+  - **C1 blocked G2.** The reviewer's probe showed a returned pending
+    admission without timestamps, counts or `max_positions` getting
+    `record_complete: true`.
+  - Four suites timed out on the reviewer's side.
+- **C1 fix** (`5d274de`):
+  - `REQUIRED_FIELDS` per kind and observed state; `missing_fields` emitted.
+  - `record_complete` = returned, nothing missing, no violation.
+  - Rule R1: a raised call is never complete.
+  - Rule R2: saves that are unconditional on a returned path must be
+    `completed`, else `<save>_not_completed_at_return`.
+  - Capture suite 44 → 55: c50–c53, k01–k04 (required-field ablation over
+    every derived record), 11 mutants. End-to-end 20 → 22 checks.
+- **Implementation review v4** (`review_bundle_admission_impl_v4`): C1
+  accepted, **G2 closed**. R1 and R2 accepted; R2 establishes call
+  completion, not disk persistence.
+- **M2 milestone ruling: accepted** for `2470a50` + `00303ec` + `5d274de`,
+  with D4 and G2 closed and O1 kept as a limitation.
+  - Reproduced independently across v3–v4: hashes, the pairs at
+    142 / 20 / 55, A2 11/11, `--only 4` 25/25, `--only 6` 16/16, `--only 7`
+    34/34, capture 55/55, smoke and end-to-end (stubbed indicators).
+  - The real-indicator full run is supplied evidence only.
+  - This is milestone acceptance only, not merge, deploy or activation.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
