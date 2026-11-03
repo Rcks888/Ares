@@ -4164,7 +4164,7 @@ BRZE ×3).
 
 <a id="trail-first-high"></a>
 **Finding: the trailing stop starts only at the first new high, so a $0.01
-tick can move the stop by more than 13% of the entry.**
+tick can move the stop by more than 13% of the entry (known issue 12).**
 - At fill, `trailing_stop = stop_loss` and `peak_price = entry`
   (`tracker.py:192-193`).
 - The trail is recomputed only when the price exceeds the peak (`tracker.py:876`,

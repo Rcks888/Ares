@@ -234,6 +234,19 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
       one-minute bar; in winter, the previous session's final bar (bar a
       session old at 21:00). Stops and TP use the live price. Evidence:
       parity bar dates, 30 Oct 13:31 and 2 Nov 21:01. Logbook, 30 Oct → 3 Nov.
+12. **The trailing stop starts only at the first new high** (found 2026-11-03).
+    - At fill, `trailing_stop = stop_loss` and `peak_price = entry`
+      (`tracker.py:192-193`). The 10% trail is recomputed only when the price
+      exceeds the peak (`tracker.py:876`, `monitor_trades.py:207`).
+    - So a wide volatility stop protects the trade until the first tick
+      above entry, and peak × 0.90 protects it from then on.
+    - BRZE, 2 Nov 16:10: a $0.014 new high moved the stop $35.08 → $41.23
+      (−23.4% → −10.0% of entry). SGRY, 28 Oct: $18.27 → $21.02.
+    - Two trades with the same path below entry, one tick apart, end up with
+      stops about 13 points apart. The 23 Sep dead-band table holds only when
+      SL is above entry × 0.90.
+    - Code behaviour, not a regression. Recorded, not fixed (FROZEN). It bears
+      on step 4, which exit policy is authoritative.
 
 ## Open questions (not being worked on)
 
