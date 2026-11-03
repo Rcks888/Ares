@@ -1,6 +1,6 @@
 candidates_screened:103
 signals_found:1
-signal_details:HOG | momentum_breakout | conf3 | uptrend
-  Price: $33.06 | RSI: 76.2 | Vol: 1.81x
-  Buy: $150 (4.5 shares)
-  SL: $31.53 | TP: $39.01 (+18%) | TS: 10%
+signal_details:VLTO | momentum_breakout | conf3 | uptrend
+  Price: $115.70 | RSI: 78.8 | Vol: 2.02x
+  Buy: $150 (1.3 shares)
+  SL: $111.28 | TP: $136.53 (+18%) | TS: 10%

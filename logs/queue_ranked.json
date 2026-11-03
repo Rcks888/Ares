@@ -1,5 +1,27 @@
 [
   {
+    "symbol": "HOG",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 33.06,
+    "rsi_at_signal": 76.2,
+    "stdev_20": 0.0232,
+    "vol_ratio": 1.81,
+    "date_added": "2026-11-02",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-03T13:31:19",
+    "drift_pct": 0.03,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 33.07
+  },
+  {
     "symbol": "GKOS",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -15,11 +37,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-02T21:01:23",
-    "drift_pct": -1.46,
+    "checked_at": "2026-11-03T13:31:16",
+    "drift_pct": -1.6,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 238.95
+    "live_price": 238.61
   },
   {
     "symbol": "LNG",
@@ -37,7 +59,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-02T21:01:26",
+    "checked_at": "2026-11-03T13:31:16",
     "drift_pct": -2.28,
     "rsi": 50.0,
     "ema20_ok": true,
@@ -59,7 +81,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-02T21:01:23",
+    "checked_at": "2026-11-03T13:31:17",
     "drift_pct": 2.77,
     "rsi": 50.0,
     "ema20_ok": true,
@@ -81,7 +103,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-02T21:01:22",
+    "checked_at": "2026-11-03T13:31:18",
     "drift_pct": 3.6,
     "rsi": 50.0,
     "ema20_ok": true,
@@ -104,54 +126,10 @@
       "oversold_bounce",
       "big_movers_down"
     ],
-    "checked_at": "2026-11-02T21:01:21",
+    "checked_at": "2026-11-03T13:31:18",
     "drift_pct": -4.08,
     "rsi": 50.0,
     "ema20_ok": true,
     "live_price": 324.55
-  },
-  {
-    "symbol": "ICLR",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 214.16,
-    "rsi_at_signal": 73.8,
-    "stdev_20": 0.0459,
-    "vol_ratio": 3.87,
-    "date_added": "2026-10-28",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-02T21:01:23",
-    "drift_pct": -4.21,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 205.14
-  },
-  {
-    "symbol": "KNSA",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 95.18,
-    "rsi_at_signal": 67.7,
-    "stdev_20": 0.0565,
-    "vol_ratio": 2.14,
-    "date_added": "2026-10-28",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-02T21:01:25",
-    "drift_pct": -4.6,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 90.8
   }
 ]
