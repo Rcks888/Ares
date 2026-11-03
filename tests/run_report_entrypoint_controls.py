@@ -12,6 +12,9 @@ finally while a report exception is, or is not, in flight.
 Design: archive/DESIGN_admission_capture_v1.md §6.1 items 3 and 5. Gap G1 of
 review_bundle_admission_impl_v1: flush() catches Exception only, so a
 BaseException raised inside it must not replace the report's own exception.
+Controls 75-77 (M2) are §7 *Recorder unimportable or unwritable* on this
+entry point: observer unimportable, tracker without the store, observer
+unable to write.
 
 The controls are also run against a mutant of the deployed file with the
 finally guard removed, i.e. the entry point before the G1 fix: controls 71, 72
@@ -74,8 +77,10 @@ def _install_stubs(mode, work):
         execute_pending_signals=lambda *a, **kw: None,
         maintain_queue=lambda *a, **kw: None,
         promote_queue=lambda *a, **kw: None, load_trades=lambda: [],
-        load_queue=lambda: [], _ADMISSION_EVAL=store,
-        _new_admission_store=_new_admission_store)
+        load_queue=lambda: [],
+        **({} if mode.endswith("tracker_without_store") else
+           {"_ADMISSION_EVAL": store,
+            "_new_admission_store": _new_admission_store}))
     mod("engine.parity_hook", observed_check_open_trades=lambda: None)
     for name in ("data_feed", "indicators", "signals", "screener", "tracker",
                  "parity_hook"):
@@ -93,6 +98,10 @@ def _install_stubs(mode, work):
             raise KeyboardInterrupt("raised inside admission flush")
         if mode.endswith("flush_systemexit"):
             raise SystemExit(7)
+        if mode.endswith("flush_write_failed"):
+            return {"attempted": 2, "written": 0, "write_failures": 2,
+                    "heartbeat_written": False, "flush_error": None,
+                    "skipped_already_flushed": False}
         return {"attempted": 0, "written": 0, "write_failures": 0,
                 "heartbeat_written": True, "flush_error": None,
                 "skipped_already_flushed": False}
@@ -224,6 +233,34 @@ def control_75_unimportable_observer_reports_health_and_trades_on(src):
            f"health {r['health']}", f)
     _check("ADMISSION-HEALTH" in r["stderr"]
            and "ADMISSION-HEALTH" not in r["stdout"], "health not on stderr only", f)
+    return f
+
+
+@control
+def control_76_tracker_without_store_reports_health_and_trades_on(src):
+    """A tracker deployed without _ADMISSION_EVAL: the report completes on the
+    fallback store, flush is not called, one recorder_import_failed health
+    line names the missing store."""
+    r, f = run("ok_tracker_without_store", src), []
+    _check(r["rc"] == 0, f"exit {r['rc']} != 0: {r['last_err']!r}", f)
+    _check(r["disconnect"] == 1, f"disconnect_ib ran {r['disconnect']}x", f)
+    _check(r["flush_calls"] == [], "flush called without a store", f)
+    _check([h.get("reason") for h in r["health"]] == ["recorder_import_failed"]
+           and "_ADMISSION_EVAL" in str(r["health"][0].get("detail")),
+           f"health {r['health']}", f)
+    return f
+
+
+@control
+def control_77_observer_write_failure_reports_health(src):
+    """Observer ran but could not write: exit 0, disconnect_ib runs, one
+    recorder_write_failed health line carrying the flush summary."""
+    r, f = run("ok_flush_write_failed", src), []
+    _check(r["rc"] == 0, f"exit {r['rc']} != 0: {r['last_err']!r}", f)
+    _check(r["disconnect"] == 1, f"disconnect_ib ran {r['disconnect']}x", f)
+    _check([h.get("reason") for h in r["health"]] == ["recorder_write_failed"]
+           and '"write_failures": 2' in str(r["health"][0].get("detail")),
+           f"health {r['health']}", f)
     return f
 
 

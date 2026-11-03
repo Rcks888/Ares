@@ -63,10 +63,21 @@ def _frame(symbol, last_day):
         "Volume": [1_000_000 + 1000 * i for i in range(80)]}, index=days)
 
 
+FEED_CALLS = []
+
+
 def _install_feed(today):
+    """Every call is appended to FEED_CALLS in order, so A and B can be
+    compared on the data-feed calls they make (design §7, isolation: the
+    recorder adds no data-feed call)."""
     feed = types.ModuleType("engine.data_feed")
 
+    def get_live_price(symbol):
+        FEED_CALLS.append(["get_live_price", symbol])
+        return None
+
     def load_stock(symbol, max_age_hours=None):
+        FEED_CALLS.append(["load_stock", symbol, max_age_hours])
         if symbol in ("EEE", "NOD"):
             return None
         last = today - timedelta(days=1) if symbol == "FFF" else today
@@ -75,7 +86,7 @@ def _install_feed(today):
         return _frame(symbol, last)
 
     feed.load_stock = load_stock
-    feed.get_live_price = lambda symbol: None
+    feed.get_live_price = get_live_price
     feed.disconnect_ib = lambda: None
     sys.modules["engine.data_feed"] = feed
     return load_stock
@@ -138,7 +149,10 @@ def drive(variant_path, logs, flush):
     tr.QUEUE_EVENTS_FILE = L / "queue_events.jsonl"
 
     def last_close(sym):
-        return round(float(load_stock(sym)["Close"].iloc[-1]), 4)
+        n = len(FEED_CALLS)
+        price = round(float(load_stock(sym)["Close"].iloc[-1]), 4)
+        del FEED_CALLS[n:]
+        return price
 
     iso = today.isoformat()
     old = (today - timedelta(days=10)).isoformat()
@@ -248,6 +262,7 @@ def driver_main(variant_copy, logs, obs_logs):
         sys.stderr.write(f"AGAIN {path} " + json.dumps(again) + "\n")
 
     drive(variant_copy, logs, flush)
+    sys.stderr.write("FEEDCALLS " + json.dumps(FEED_CALLS) + "\n")
 
 
 # --------------------------------------------------------------------------
@@ -313,6 +328,22 @@ def main():
             check(f"state file identical: {name}",
                   fa.get(name) == fb.get(name) and name in fa,
                   f"present A={name in fa} B={name in fb}")
+        def feed_calls(p):
+            for line in p.stderr.splitlines():
+                if line.startswith("FEEDCALLS "):
+                    return json.loads(line.split(" ", 1)[1])
+            return None
+        ca, cb = feed_calls(pa), feed_calls(pb)
+        check("data-feed calls identical (sequence, symbols, arguments)",
+              ca is not None and ca == cb and len(ca) > 0,
+              f"A {len(ca or [])} calls, B {len(cb or [])} calls; first "
+              f"difference at "
+              f"{next((i for i, (x, y) in enumerate(zip(ca or [], cb or [])) if x != y), 'tail')}")
+        if ca:
+            kinds = {}
+            for c in ca:
+                kinds[c[0]] = kinds.get(c[0], 0) + 1
+            print(f"        data-feed calls per variant: {kinds}")
         summs, agains = [], []
         for line in pb.stderr.splitlines():
             if line.startswith("SUMMARY "):

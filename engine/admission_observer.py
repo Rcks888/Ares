@@ -219,31 +219,46 @@ def session_open_utc(bar_date):
     return local.astimezone(timezone.utc)
 
 
-def classify_a2(bracket_start, bracket_end, bar_date):
-    """Three-valued: did the booked open precede the event bracketed by
-    [bracket_start, bracket_end]? Arguments are aware datetimes (end may be
-    None for a call that raised) and the fill's bar date.
+A2_VALUES = ("before_open", "after_open", "unknown")
+A2_BAR_BEFORE_EVENT = "a2_bar_before_event_session"
+
+
+def classify_a2_checked(bracket_start, bracket_end, bar_date):
+    """(value, contract_violations). The value is three-valued (design §4.4):
+    did the booked open precede the event bracketed by [bracket_start,
+    bracket_end]? Arguments are aware datetimes (end may be None for a call
+    that raised) and the fill's bar date.
 
     A bracket with no end is open-ended (design §3.3), so every claim about
     it is `unknown`. That is decided first, before the start is compared
-    with anything."""
+    with anything.
+
+    A bar dated before the event's own session cannot belong to a correct
+    fill. The answer is then `unknown`, and the inconsistency is reported
+    separately as a contract violation (implementation review v2, Q-B (b);
+    deviation D4 closed). It needs a closed bracket, like any other claim."""
     from zoneinfo import ZoneInfo
     if bracket_start is None or bracket_end is None or bar_date is None:
-        return "unknown"
+        return "unknown", []
     if isinstance(bar_date, str):
         bar_date = date.fromisoformat(bar_date)
     o = session_open_utc(bar_date)
     event_session = bracket_start.astimezone(
         ZoneInfo("America/New_York")).date()
     if bar_date < event_session:
-        return "inconsistent_bar_before_event"
+        return "unknown", [A2_BAR_BEFORE_EVENT]
     if bar_date > event_session:
-        return "before_open"
+        return "before_open", []
     if bracket_end < o:
-        return "before_open"
+        return "before_open", []
     if bracket_start >= o:
-        return "after_open"
-    return "unknown"
+        return "after_open", []
+    return "unknown", []
+
+
+def classify_a2(bracket_start, bracket_end, bar_date):
+    """The A2 value alone; always one of A2_VALUES."""
+    return classify_a2_checked(bracket_start, bracket_end, bar_date)[0]
 
 
 # --------------------------------------------------------------------------
