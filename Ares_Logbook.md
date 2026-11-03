@@ -4080,6 +4080,136 @@ Ares process uses that JDK. Low priority.
   `vol_ratio` against the final bar, with 27–28 Oct as the summer baseline.
 - Not pulled forward: M3 and M4.
 
+### 2026-10-30 → 11-03 — no fills, no closes; first winter-time reports: the 13:30 run is pre-open, as D-005 predicted; BRZE's trail engages on a $0.01 high
+
+No closes, so the clean sample is still 12, W 3/12, −$80.13, and all four
+dashboards agree. 5/5 slots throughout: TMO, AMP, SGRY, RRC, BRZE.
+
+**21:32 MYT report (Oct 30, `0543cb4`), the last summer-time 13:30 run.**
+- TMO new peak $714.86 (+9.2%), trail $639.91 → $643.37.
+- Queue maintenance: 7 kept; **PURR dropped**, drift −5.8%.
+- 1 signal: FFIV `mean_reversion` conf 2, $352.75, **vol 0.02×**. That is
+  known issue 11 again (one-minute bar). FFIV was already queued, so there is
+  no new entry.
+- Dashboard "QUEUED (7)" matches the 7 kept.
+- System: swap 298 → 34 MB since the 05:02 dashboard, 4 MB paged out in 16.5 h;
+  stall 1188 ms ("memory pressure event").
+
+**00:10 / 01:30 MYT monitor (Oct 31, `9c11cd0`, `049aa36`).** No exits.
+**Inspection: PASS** (`inspect_monitor_cycles.py 0543cb4 9c11cd0 049aa36`):
+cycles `4448ce2a` and `becb84ba`, 5 records each.
+
+**05:02 MYT report (Oct 31, `ca4d618`).**
+- Queue maintenance: 6 kept; **FFIV dropped**, drift −6.2% ($338.34).
+- 4 signals, all conf 3: FFIV `mean_reversion` ($338.34, RSI 27.5, vol 2.75×),
+  and LNG, REGN, ROP `momentum_breakout` (vol 2.23×, 3.83×, 2.08×).
+  - **FFIV re-queued 43 s after it was dropped**, at the new price and conf 3.
+    This is the FTNT pattern of 29 Oct: a drift drop followed by a re-signal
+    resets the drift reference.
+  - LNG was already queued. REGN and ROP queued (`date_added` 2026-10-30).
+- Queue 9/10; the dashboard shows the 6 kept before insertion (registered
+  display gap).
+- System: stall 98 ms in 7.5 h, 0 MB paged out.
+
+**21:32 MYT report (Nov 2, `c60c5ee`): first winter-time 13:30 run, 1 h
+before the open.**
+- **D-005 confirmed.** The six older queue entries got exactly Friday 21:01's
+  live prices (ICLR $211.36, GKOS $237.60, FTNT $136.08, STNG $92.60, KNSA
+  $92.24, LNG $330.32), so their drifts are unchanged. FFIV, REGN and ROP show
+  drift 0.0%, with live price = signal price.
+- The scan saw Friday's final bar: FFIV conf 3, $338.34, RSI 27.5, vol 2.75×,
+  identical to Friday 21:00. Known issue 11 has stopped, as predicted.
+- **1 signal, where Friday 21:00 had 4, on the same bars.** LNG, REGN and ROP
+  did not come back. Likely cause: the candidate list changed, not the
+  signals. Their screens filter on relative volume (`unusual_volume`,
+  `near_52w_high`) or today's change (`big_movers_up`), which is not yet
+  meaningful before the open, while FFIV's `oversold_bounce` uses RSI only.
+  Inferred: the candidate list is not stored. The VPS `cron.log` has the
+  per-screen counts (`Screen [...]: N stocks`).
+- No pending signals, so nothing to fill.
+- System: stall 1717 ms in 64.5 h (weekend), 2 MB paged out; cache 1047 → 998
+  (`prune_cache`).
+
+**00:10 / 01:30 MYT monitor (Nov 3, `09a3340`, `a546b74`).** No exits.
+**Inspection: PASS** (`inspect_monitor_cycles.py c60c5ee 09a3340 a546b74`):
+cycles `f9503a4e` and `3f4063c9`, 5 records each.
+- At 16:10 UTC, BRZE live $45.81 > peak $45.79575, a new high of $0.014.
+  **Trail $35.08 → $41.23** (45.81 × 0.90). The monitor wrote this to
+  `virtual_trades.json`, as it always does on a new peak. See the finding
+  below.
+
+**05:02 MYT report (Nov 3, `ba634ca`), at the close (21:00 UTC).**
+- Queue maintenance: 7 kept; **FTNT dropped**, −9.3% ($126.21), and **STNG
+  dropped**, −8.9% ($86.61).
+- 1 signal: HOG `momentum_breakout` conf 3, $33.06, RSI 76.2, vol 1.81×.
+  Queued (`date_added` 2026-11-02). Queue 8/10; the dashboard shows the 7
+  kept.
+- AMP peak $503.26 (+2.3%); its trail stays under SL $472.99.
+- System: stall 53 ms in 7.5 h, 1 MB paged out.
+
+**Parity, 20 records: 13 MATCH, 7 `DECISION_CHANGING_MISMATCH`** (RRC ×4,
+BRZE ×3).
+- These are the dual-precision peak, the ITUB case of 8–9 Oct. A fill stores
+  the peak unrounded (`tracker.py:193`): RRC 56.58652877807617, BRZE
+  45.79575. The `tracker_v3_2dp` shadow normalises it to 2 dp and returns
+  `state_update` where inline returns `hold`.
+- Stops, actions and exits were identical in every record (RRC 51.95 both
+  sides).
+- Each starts at the first non-entry-day evaluation: RRC 29 Oct 21:01, BRZE
+  30 Oct 21:01. The mismatch clears at the first new high, which writes a
+  rounded peak. BRZE was MATCH again at 21:01 on 2 Nov, after the monitor's
+  $45.81 peak. SGRY never mismatched, because the 28 Oct 21:00 report rounded
+  its peak. RRC's continues until it makes a new high.
+- Not reclassified (a review decision, as in October).
+
+<a id="trail-first-high"></a>
+**Finding: the trailing stop starts only at the first new high, so a $0.01
+tick can move the stop by more than 13% of the entry.**
+- At fill, `trailing_stop = stop_loss` and `peak_price = entry`
+  (`tracker.py:192-193`).
+- The trail is recomputed only when the price exceeds the peak (`tracker.py:876`,
+  `monitor_trades.py:207`). It then becomes peak × 0.90 if that is higher.
+- A wide volatility stop therefore protects the position until the first
+  tick above entry, and the 10% trail protects it from then on:
+
+  | Position | SL vs entry | Trail at the first high | Change |
+  |---|---|---|---|
+  | BRZE | $35.08, −23.4% | $41.23, −10.0% (2 Nov 16:10, +$0.01) | +$6.15 |
+  | SGRY | $18.27, −21.5% | $21.02 (28 Oct, peak $23.35) | +$2.75 |
+
+- Two trades with the same path below entry, one tick apart, end up with
+  stops 13 points apart.
+- The 23 Sep dead-band table (ECO) assumed the trail was in force from entry. That
+  holds only when SL is above entry × 0.90.
+- Code behaviour, not a regression. Recorded only (FROZEN). It matters for
+  step 4's exit-policy question ("which exit policy is authoritative").
+
+<a id="held-cache-bar"></a>
+**Finding: the report's daily-bar exit checks on held positions use the cached
+row written at 13:30 (extends known issue 11).**
+- `check_open_trades` reads held symbols through `load_stock` with the 20 h
+  window (`tracker.py:840`). `refresh_watchlist` refreshes only the screened
+  100.
+- An unscreened held symbol is therefore re-downloaded once a day, by the
+  13:30 report (24 h since the last pull). The 21:00 report reuses that file
+  (7.5 h old).
+- Parity bar dates show it:
+  - 30 Oct 13:31: TMO, AMP and SGRY have bar 10-30, a one-minute row. RRC and
+    BRZE have 10-29, because their files were written by their 21:00 fills,
+    16.5 h before, so they were not refreshed.
+  - 2 Nov 21:01, at the close: all five still have bar **10-30**, Friday's row
+    from the 13:30 pre-open pull.
+- Effect: RSI > 90, bearish divergence and mean-reversion RSI > 70 are judged
+  on that row. The entry-day skip also uses its date. Stops and TP use the IBKR
+  live price and are not affected.
+  - **Summer:** normally a one-minute row at both reports. A held position's
+    final daily bar was seen only when its file had last been written at
+    21:00, by a fill or a screen hit.
+  - **Winter:** the 13:30 pull is pre-open, so each final bar is judged at the
+    next morning's 13:30 report. The 21:00 report judges a bar a session old.
+- Inferred from parity bar dates and the code; the cache files were not read.
+  Recorded only (FROZEN).
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)

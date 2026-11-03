@@ -224,6 +224,16 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
       replaced the 29 Oct rows in the cache.
     - Stops from 2 Nov (D-005): the 13:30 report then runs before the open.
       It comes back at the March DST change. Recorded, not fixed (FROZEN).
+    - **Confirmed stopped, 2 Nov 13:32.** The scan reproduced Friday 21:00's
+      final-bar FFIV exactly (conf 3, $338.34, vol 2.75×). Queue live prices
+      equalled Friday 21:01's.
+    - **Also affects exits (found 3 Nov).** Held symbols outside the screened
+      100 are re-downloaded only by the 13:30 report (20 h cache window,
+      `tracker.py:840`), and the 21:00 report reuses that file. The RSI and
+      divergence exits therefore judge the 13:30 row: in summer, normally a
+      one-minute bar; in winter, the previous session's final bar (bar a
+      session old at 21:00). Stops and TP use the live price. Evidence:
+      parity bar dates, 30 Oct 13:31 and 2 Nov 21:01. Logbook, 30 Oct → 3 Nov.
 
 ## Open questions (not being worked on)
 
