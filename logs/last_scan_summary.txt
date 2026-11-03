@@ -1,6 +1,6 @@
 candidates_screened:103
 signals_found:1
-signal_details:VLTO | momentum_breakout | conf3 | uptrend
-  Price: $115.70 | RSI: 78.8 | Vol: 2.02x
-  Buy: $150 (1.3 shares)
-  SL: $111.28 | TP: $136.53 (+18%) | TS: 10%
+signal_details:TBBB | momentum_breakout | conf3 | uptrend
+  Price: $62.99 | RSI: 71.3 | Vol: 2.62x
+  Buy: $150 (2.4 shares)
+  SL: $59.37 | TP: $74.33 (+18%) | TS: 10%

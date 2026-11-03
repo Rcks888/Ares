@@ -1244,12 +1244,12 @@
       "days_tracked": 8,
       "max_days": 30,
       "peak_after_exit": 9.32,
-      "trough_after_exit": 7.13,
+      "trough_after_exit": 7.01,
       "peak_date": "2026-10-26",
-      "trough_date": "2026-10-30",
+      "trough_date": "2026-11-03",
       "missed_upside_pct": 0.11,
-      "avoided_downside_pct": 23.42,
-      "latest_price": 7.17
+      "avoided_downside_pct": 24.7,
+      "latest_price": 7.01
     }
   },
   {
