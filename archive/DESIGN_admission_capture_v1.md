@@ -438,13 +438,31 @@ One stream holds all records: `logs/admission_v1.jsonl`. Each record has a
 
 | Field | Source |
 |---|---|
-| `schema_version`, `kind` | constant |
+| `record_schema_version`, `kind` | constant (`record_schema_version` is `RECORD_SCHEMA_VERSION`, integer, never null). Named `schema_version` before the G2 amendment below; naming only |
 | `cycle_id` | minted by `admission_observer.flush` (§3.4) |
 | `invocation_token` | admission store, set at reset |
 | `decision_path` | `report` \| `monitor` (set by the flushing entrypoint) |
 | `run_kind`, `run_kind_detect` | `sample.fill_context()`, called by the observer at flush (same process, same environment): `scheduled\|manual`, `env\|tty_inferred` |
 | bracket fields (`t_*`) | clock reads at the capture site (§3.3); serialised by the observer as tz-aware UTC ISO strings |
 | `record_complete`, `missing_fields`, `contract_violations` | derived in the observer |
+
+**G2 amendment (impl review v3, 2026-11-03).** Mapping of this table to
+`engine/admission_observer.py` at the M2 candidate. Only the first row is a
+naming difference and is amended above. The rest are recorded, not absorbed:
+
+| Item | Code | Classification |
+|---|---|---|
+| `schema_version` | `record_schema_version` (records and heartbeat); the heartbeat also carries `heartbeat_schema_version` | naming only: same constant, type and persistence. Amended |
+| `missing_fields` | not emitted. The nearest facts are per-source lists (`signal_fields_absent`, `queue_entry_fields_absent`, design Q3) on the kinds that copy production fields, and violation strings such as `queue_insert_outcome_missing` | **open contract item G2-C1**: different structure and coverage, not a rename |
+| `record_complete` | `not contract_violations` | defined only by the code; depends on G2-C1, because missing fields cannot affect it while `missing_fields` does not exist |
+| `run_kind`, `run_kind_detect` | `None` and `"unavailable: <exception>"` when `sample.fill_context()` raises | **open contract item G2-C2**: a null value and a value outside `scheduled\|manual`, `env\|tty_inferred` |
+| not in the table | `seq`, `parent_seq` (§5 linkage), `repository_commit` on every record | additions, listed for review; no existing field changes meaning |
+
+Found while mapping, in §4.5: the code emits no `completed` field, and emits
+both `report_completed` and `monitor_completed` as booleans on every
+heartbeat, so a report heartbeat carries `monitor_completed: false` where
+§4.5 has the field absent. **Open contract item G2-C3.** G2 closes when this
+mapping and C1–C3 are reviewed.
 
 ### 4.2 `kind: admission` — one per `open_trade` call
 
