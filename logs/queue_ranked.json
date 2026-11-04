@@ -1,5 +1,27 @@
 [
   {
+    "symbol": "REGN",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 927.89,
+    "rsi_at_signal": 73.7,
+    "stdev_20": 0.0321,
+    "vol_ratio": 3.83,
+    "date_added": "2026-10-30",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-04T21:01:56",
+    "drift_pct": 0.3,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 930.67
+  },
+  {
     "symbol": "VLTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -14,55 +36,11 @@
     "screens": [
       "near_52w_high"
     ],
-    "checked_at": "2026-11-04T13:31:35",
-    "drift_pct": 0.54,
+    "checked_at": "2026-11-04T21:01:54",
+    "drift_pct": 1.14,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 116.32
-  },
-  {
-    "symbol": "HOG",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 33.06,
-    "rsi_at_signal": 76.2,
-    "stdev_20": 0.0232,
-    "vol_ratio": 1.81,
-    "date_added": "2026-11-02",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-04T13:31:35",
-    "drift_pct": 0.79,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 33.32
-  },
-  {
-    "symbol": "ROP",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 466.6,
-    "rsi_at_signal": 76.7,
-    "stdev_20": 0.0243,
-    "vol_ratio": 2.08,
-    "date_added": "2026-10-30",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-04T13:31:36",
-    "drift_pct": 1.5,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 473.58
+    "live_price": 117.02
   },
   {
     "symbol": "FFIV",
@@ -81,32 +59,32 @@
       "oversold_bounce",
       "big_movers_down"
     ],
-    "checked_at": "2026-11-04T13:31:37",
-    "drift_pct": -2.13,
+    "checked_at": "2026-11-04T21:01:56",
+    "drift_pct": -2.55,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 331.15
+    "live_price": 329.72
   },
   {
-    "symbol": "REGN",
+    "symbol": "HOG",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 927.89,
-    "rsi_at_signal": 73.7,
-    "stdev_20": 0.0321,
-    "vol_ratio": 3.83,
-    "date_added": "2026-10-30",
+    "price_at_signal": 33.06,
+    "rsi_at_signal": 76.2,
+    "stdev_20": 0.0232,
+    "vol_ratio": 1.81,
+    "date_added": "2026-11-02",
     "screens": [
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-04T13:31:39",
-    "drift_pct": 4.9,
+    "checked_at": "2026-11-04T21:01:55",
+    "drift_pct": 4.63,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 973.36
+    "live_price": 34.59
   }
 ]
