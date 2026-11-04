@@ -1,27 +1,5 @@
 [
   {
-    "symbol": "TBBB",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 62.99,
-    "rsi_at_signal": 71.3,
-    "stdev_20": 0.0287,
-    "vol_ratio": 2.62,
-    "date_added": "2026-11-03",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-04T13:31:40",
-    "drift_pct": -0.03,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 62.97
-  },
-  {
     "symbol": "VLTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",

@@ -1,1 +1,21 @@
-[]
+[
+  {
+    "symbol": "TBBB",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "date": "2026-11-04",
+    "price": 64.51,
+    "rsi": 71.3,
+    "vol_ratio": 2.62,
+    "stdev_20": 0.0287,
+    "strength": "unknown",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "from_queue": true
+  }
+]

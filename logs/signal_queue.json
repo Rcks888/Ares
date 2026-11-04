@@ -1,22 +1,5 @@
 [
   {
-    "symbol": "TBBB",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 62.99,
-    "rsi_at_signal": 71.3,
-    "stdev_20": 0.0287,
-    "vol_ratio": 2.62,
-    "date_added": "2026-11-03",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
     "symbol": "VLTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",

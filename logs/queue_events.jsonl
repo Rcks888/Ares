@@ -198,3 +198,4 @@
 {"timestamp": "2026-11-04T13:31:37", "symbol": "FFIV", "action": "kept", "queued_at": "2026-10-30", "confluence": 3, "signal_price": 338.34, "drift_pct": -2.13, "rsi": 50.0, "ema20_ok": true, "live_price": 331.15, "drop_reason": null}
 {"timestamp": "2026-11-04T13:31:39", "symbol": "REGN", "action": "kept", "queued_at": "2026-10-30", "confluence": 3, "signal_price": 927.89, "drift_pct": 4.9, "rsi": 50.0, "ema20_ok": true, "live_price": 973.36, "drop_reason": null}
 {"timestamp": "2026-11-04T13:31:40", "symbol": "TBBB", "action": "kept", "queued_at": "2026-11-03", "confluence": 3, "signal_price": 62.99, "drift_pct": -0.03, "rsi": 50.0, "ema20_ok": true, "live_price": 62.97, "drop_reason": null}
+{"timestamp": "2026-11-04T17:30:25", "symbol": "TBBB", "action": "promoted", "queued_at": "2026-11-03", "confluence": 3, "signal_price": 62.99, "drift_pct": 2.41, "rsi": 50.0, "ema20_ok": true, "live_price": 64.51, "drop_reason": null}
