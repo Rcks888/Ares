@@ -1,5 +1,27 @@
 [
   {
+    "symbol": "TBBB",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 62.99,
+    "rsi_at_signal": 71.3,
+    "stdev_20": 0.0287,
+    "vol_ratio": 2.62,
+    "date_added": "2026-11-03",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-04T13:31:40",
+    "drift_pct": -0.03,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 62.97
+  },
+  {
     "symbol": "VLTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -14,11 +36,11 @@
     "screens": [
       "near_52w_high"
     ],
-    "checked_at": "2026-11-03T21:00:58",
+    "checked_at": "2026-11-04T13:31:35",
     "drift_pct": 0.54,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 116.33
+    "live_price": 116.32
   },
   {
     "symbol": "HOG",
@@ -36,11 +58,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-03T21:00:55",
-    "drift_pct": 0.82,
+    "checked_at": "2026-11-04T13:31:35",
+    "drift_pct": 0.79,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 33.33
+    "live_price": 33.32
   },
   {
     "symbol": "ROP",
@@ -58,7 +80,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-03T21:00:57",
+    "checked_at": "2026-11-04T13:31:36",
     "drift_pct": 1.5,
     "rsi": 50.0,
     "ema20_ok": true,
@@ -81,55 +103,11 @@
       "oversold_bounce",
       "big_movers_down"
     ],
-    "checked_at": "2026-11-03T21:00:58",
+    "checked_at": "2026-11-04T13:31:37",
     "drift_pct": -2.13,
     "rsi": 50.0,
     "ema20_ok": true,
     "live_price": 331.15
-  },
-  {
-    "symbol": "LNG",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 318.94,
-    "rsi_at_signal": 72.9,
-    "stdev_20": 0.0221,
-    "vol_ratio": 2.58,
-    "date_added": "2026-10-29",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-03T21:00:56",
-    "drift_pct": -2.48,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 311.03
-  },
-  {
-    "symbol": "GKOS",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 242.48,
-    "rsi_at_signal": 82.2,
-    "stdev_20": 0.0781,
-    "vol_ratio": 4.12,
-    "date_added": "2026-10-29",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-03T21:00:56",
-    "drift_pct": -3.91,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 233.0
   },
   {
     "symbol": "REGN",
@@ -147,7 +125,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-03T21:00:57",
+    "checked_at": "2026-11-04T13:31:39",
     "drift_pct": 4.9,
     "rsi": 50.0,
     "ema20_ok": true,
