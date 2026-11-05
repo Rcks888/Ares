@@ -1,9 +1,6 @@
 candidates_screened:103
-signals_found:2
-signal_details:DT | mean_reversion | conf3 | range
-  Price: $46.78 | RSI: 29.6 | Vol: 1.63x
-  Buy: $150 (3.2 shares)
-  SL: $42.94 | TP: $51.46 (+10%) | TS: 10%|||UNM | mean_reversion | conf3 | range
-  Price: $74.79 | RSI: 26.4 | Vol: 5.18x
-  Buy: $150 (2.0 shares)
-  SL: $68.60 | TP: $82.27 (+10%) | TS: 10%
+signals_found:1
+signal_details:BOBS | momentum_breakout | conf3 | uptrend
+  Price: $19.48 | RSI: 71.6 | Vol: 2.73x
+  Buy: $150 (7.7 shares)
+  SL: $18.01 | TP: $22.99 (+18%) | TS: 10%

@@ -1,47 +1,46 @@
 [
   {
-    "symbol": "BDX",
+    "symbol": "OGE",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 209.18,
-    "rsi_at_signal": 71.5,
-    "stdev_20": 0.0173,
-    "vol_ratio": 2.3,
+    "price_at_signal": 50.64,
+    "rsi_at_signal": 70.7,
+    "stdev_20": 0.0126,
+    "vol_ratio": 1.95,
     "date_added": "2026-11-04",
     "screens": [
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-05T13:31:15",
-    "drift_pct": 0.0,
+    "checked_at": "2026-11-05T21:01:56",
+    "drift_pct": 0.38,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 209.19
+    "live_price": 50.83
   },
   {
-    "symbol": "GSAT",
+    "symbol": "VLTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 84.58,
-    "rsi_at_signal": 59.8,
-    "stdev_20": 0.0081,
-    "vol_ratio": 1.79,
-    "date_added": "2026-11-04",
+    "price_at_signal": 115.7,
+    "rsi_at_signal": 78.8,
+    "stdev_20": 0.0191,
+    "vol_ratio": 2.02,
+    "date_added": "2026-11-02",
     "screens": [
-      "unusual_volume",
       "near_52w_high"
     ],
-    "checked_at": "2026-11-05T13:31:16",
-    "drift_pct": 0.0,
+    "checked_at": "2026-11-05T21:01:57",
+    "drift_pct": 0.73,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 84.58
+    "live_price": 116.55
   },
   {
     "symbol": "UNM",
@@ -60,76 +59,33 @@
       "oversold_bounce",
       "big_movers_down"
     ],
-    "checked_at": "2026-11-05T13:31:14",
-    "drift_pct": 0.01,
+    "checked_at": "2026-11-05T21:01:56",
+    "drift_pct": -1.08,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 74.79
+    "live_price": 73.97
   },
   {
-    "symbol": "OGE",
+    "symbol": "GSAT",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 50.64,
-    "rsi_at_signal": 70.7,
-    "stdev_20": 0.0126,
-    "vol_ratio": 1.95,
+    "price_at_signal": 84.58,
+    "rsi_at_signal": 59.8,
+    "stdev_20": 0.0081,
+    "vol_ratio": 1.79,
     "date_added": "2026-11-04",
     "screens": [
       "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-05T13:31:17",
-    "drift_pct": -0.02,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 50.63
-  },
-  {
-    "symbol": "CON",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 43.58,
-    "rsi_at_signal": 77.3,
-    "stdev_20": 0.0241,
-    "vol_ratio": 1.71,
-    "date_added": "2026-11-04",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-05T13:31:16",
-    "drift_pct": -0.05,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 43.56
-  },
-  {
-    "symbol": "VLTO",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 115.7,
-    "rsi_at_signal": 78.8,
-    "stdev_20": 0.0191,
-    "vol_ratio": 2.02,
-    "date_added": "2026-11-02",
-    "screens": [
       "near_52w_high"
     ],
-    "checked_at": "2026-11-05T13:31:13",
-    "drift_pct": 1.14,
+    "checked_at": "2026-11-05T21:01:55",
+    "drift_pct": -1.24,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 117.02
+    "live_price": 83.53
   },
   {
     "symbol": "HOG",
@@ -147,10 +103,54 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-05T13:31:14",
-    "drift_pct": 4.63,
+    "checked_at": "2026-11-05T21:01:58",
+    "drift_pct": -1.39,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 34.59
+    "live_price": 32.6
+  },
+  {
+    "symbol": "BDX",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 209.18,
+    "rsi_at_signal": 71.5,
+    "stdev_20": 0.0173,
+    "vol_ratio": 2.3,
+    "date_added": "2026-11-04",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-05T21:01:54",
+    "drift_pct": 2.06,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 213.49
+  },
+  {
+    "symbol": "CON",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 43.58,
+    "rsi_at_signal": 77.3,
+    "stdev_20": 0.0241,
+    "vol_ratio": 1.71,
+    "date_added": "2026-11-04",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-05T21:01:57",
+    "drift_pct": -3.58,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 42.02
   }
 ]
