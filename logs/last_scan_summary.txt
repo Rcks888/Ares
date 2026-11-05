@@ -1,18 +1,9 @@
 candidates_screened:103
-signals_found:5
-signal_details:UNM | mean_reversion | conf3 | range
-  Price: $74.78 | RSI: 26.4 | Vol: 4.91x
+signals_found:2
+signal_details:DT | mean_reversion | conf3 | range
+  Price: $46.78 | RSI: 29.6 | Vol: 1.63x
+  Buy: $150 (3.2 shares)
+  SL: $42.94 | TP: $51.46 (+10%) | TS: 10%|||UNM | mean_reversion | conf3 | range
+  Price: $74.79 | RSI: 26.4 | Vol: 5.18x
   Buy: $150 (2.0 shares)
-  SL: $68.59 | TP: $82.26 (+10%) | TS: 10%|||BDX | momentum_breakout | conf3 | uptrend
-  Price: $209.18 | RSI: 71.5 | Vol: 2.3x
-  Buy: $150 (0.7 shares)
-  SL: $201.94 | TP: $246.83 (+18%) | TS: 10%|||CON | momentum_breakout | conf3 | uptrend
-  Price: $43.58 | RSI: 77.3 | Vol: 1.71x
-  Buy: $150 (3.4 shares)
-  SL: $41.48 | TP: $51.42 (+18%) | TS: 10%|||GSAT | momentum_breakout | conf3 | uptrend
-  Price: $84.58 | RSI: 59.8 | Vol: 1.79x
-  Buy: $150 (1.8 shares)
-  SL: $83.21 | TP: $99.80 (+18%) | TS: 10%|||OGE | momentum_breakout | conf3 | uptrend
-  Price: $50.64 | RSI: 70.7 | Vol: 1.95x
-  Buy: $150 (3.0 shares)
-  SL: $49.36 | TP: $59.76 (+18%) | TS: 10%
+  SL: $68.60 | TP: $82.27 (+10%) | TS: 10%
