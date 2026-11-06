@@ -35,7 +35,7 @@ why if it differs from the plan.
 | Oct 12 – Oct 16 | recorder activation, Mon 16:10 UTC | HOLD from review → repair round 2 → pause → checkpoint, audit, cleanup, WBD closed → v3 update → inspection-tool rounds v4–v7 → **accepted Mon** → **activated Tue 13 Oct** (`5fd13e9`) → **inspection Thu 15 Oct: PASS, both nights** → checkpoint | one day late against the original Mon date, a week early against the replan |
 | Oct 19 – Oct 23 | step 0 review → steps 1–2 → checkpoint | (steps 0–2 done the week before) route audit, step 3 design r1–r5, **r5 accepted for implementation review Wed 21 Oct**. Monitor inspections Mon–Thu: 8 cycles, all PASS. Unplanned, Thu 22 Oct: eMudhra CA response, environment only (venv certifi 2026.10.19, emSign roots removed from the gateway JRE, DigitalOcean firewall inbound 22 only), all three verified 23 Oct. SKYD closed at TP (clean sample 10, W 2/10). Finding: AMP cache regression (known issue 8) | pulled forward; step 3 design done a week early; security work unplanned, no code change |
 | Oct 26 – Oct 30 | **1st: Finviz** (if still broken on 23 Oct night): identify the cause, design and review a minimal fix with the reviewer. **2nd, if time:** step 3 implementation on `recorder/admission-v1` (not activated) | **Both done.** Finviz fixed Tue 27 Oct (D-004, `2e45851`, no reviewer round, by user decision). On the VPS since the 27 Oct 13:32 report: 103 screened. Signals resumed: RRC and SGRY (27 Oct) filled 28 Oct, so 5/5 slots; ICLR, KNSA and BRZE queued (28 Oct). Step 3 split into milestones M1–M4. **M1** built Tue–Thu, committed Thu 29 Oct (`00aee55`, `d25bec3`). Implementation review v1, Thu 29 Oct: 2 blocking findings, fixed the same day (`a6dd2f1`). **v2 accepted for M1** (not merge, deploy or activation). Monitor inspections Mon–Thu nights: 8 cycles, all PASS (Fri's on Mon 2 Nov). Thu 29 Oct: INSM scaled out on a gap and closed at TP (clean sample 12, W 3/12); BRZE promoted by the monitor and filled. DST: D-005. Finding: the 13:30 scan reads a one-minute bar (known issue 11) | the reviewer round dropped for Finviz; step 3 implementation started a week early and is planned in four milestones, one a week |
-| Nov 2 – Nov 6 | **Step 3 M2**: capture controls, one per outcome (all 9 fill outcomes, both queue branches, every promotion early return and candidate outcome); completion and partial outcomes; cross-recorder pairing; monitor entrypoint ordering; recorder unimportable or unwritable; data-feed call counts; end-to-end run of the real `daily_report.py` entrypoint. Also D4 (A2 three-valued, inconsistency as a `contract_violation`), the G2 naming ruling, and `repro_pack.py --only N`. **Done when** implementation review v3 accepts M2. Checkpoint also runs the D-005 check | **Tue 3 Nov: review candidate built.** `2470a50` (D4 + controls) and `00303ec` (G2 §4.1 amendment) pushed on `recorder/admission-v1` only. Full-repo run at `00303ec`, 0 uncommitted paths: all exit 0 (A2 11, report entrypoint 16, capture 44 new, monitor admission entrypoint 34 new, report end-to-end new; isolation pairs 142/20/55 unchanged). G2: only `schema_version` → `record_schema_version` is naming-only; C1 (`missing_fields` not emitted), C2 (`run_kind` null on failure), C3 (§4.5 completion flags) open, reviewer's suggestion requested. O1 recorded (BaseException in the monitor flush skips the admission block). Bundle `review_bundle_admission_impl_v3` sent. **Review v3 (Tue 3 Nov): delta acceptable, no new blocker; M2 not yet accepted.** D4 closed; schema rename accepted; C2 accepted as explicit unknown evidence (not a valid scheduled/manual classification); C3 accepted if completion is read from the flag matching `decision_path`; O1 accepted as a recorded limitation, not coverage. **C1 blocks G2:** reviewer probe showed a returned-pending admission with no timestamps, position counts or `max_positions` gets `record_complete: true`, so it means "no implemented violation fired", not "capture complete". Reviewer reproduced hashes, pairs 142/20/55, smoke and end-to-end (stubbed indicators); 4 longer suites (25/16/34/44) timed out there and remain supplied evidence. **C1 fix `5d274de`** (branch only, pushed): `REQUIRED_FIELDS` per kind and state, `missing_fields` emitted, `record_complete` = returned + nothing missing + no violation; two rules for ruling (a raised call is never complete; unconditional saves on a returned path must be `completed`). Capture 55/55 (c50–c53, k01–k04, 11 mutants), e2e 22 checks; full run at `5d274de` 31/31 exit 0. Bundle `review_bundle_admission_impl_v4` sent. **Review v4 (Tue 3 Nov): C1 accepted, G2 closed** (R1: a raised call is never complete; R2: unconditional saves must be `completed`, call completion not disk persistence; C2, C3, O1 wording accepted). Reviewer reproduced hashes, capture 55/55 and end-to-end 22/22 (stubbed indicators). **M2 milestone ruling (Tue 3 Nov): ACCEPTED** for `2470a50` + `00303ec` + `5d274de`; D4 and G2 closed, O1 kept as a limitation. Reviewer reproduced `--only 4` 25/25, `--only 6` 16/16, `--only 7` 34/34; real-indicator full run is supplied evidence. Milestone only: no merge, deploy or activation. **Target done.** Rest of week: D-005 check and monitor inspections at the checkpoint | M3 not pulled forward |
+| Nov 2 – Nov 6 | **Step 3 M2**: capture controls, one per outcome (all 9 fill outcomes, both queue branches, every promotion early return and candidate outcome); completion and partial outcomes; cross-recorder pairing; monitor entrypoint ordering; recorder unimportable or unwritable; data-feed call counts; end-to-end run of the real `daily_report.py` entrypoint. Also D4 (A2 three-valued, inconsistency as a `contract_violation`), the G2 naming ruling, and `repro_pack.py --only N`. **Done when** implementation review v3 accepts M2. Checkpoint also runs the D-005 check | **Tue 3 Nov: review candidate built.** `2470a50` (D4 + controls) and `00303ec` (G2 §4.1 amendment) pushed on `recorder/admission-v1` only. Full-repo run at `00303ec`, 0 uncommitted paths: all exit 0 (A2 11, report entrypoint 16, capture 44 new, monitor admission entrypoint 34 new, report end-to-end new; isolation pairs 142/20/55 unchanged). G2: only `schema_version` → `record_schema_version` is naming-only; C1 (`missing_fields` not emitted), C2 (`run_kind` null on failure), C3 (§4.5 completion flags) open, reviewer's suggestion requested. O1 recorded (BaseException in the monitor flush skips the admission block). Bundle `review_bundle_admission_impl_v3` sent. **Review v3 (Tue 3 Nov): delta acceptable, no new blocker; M2 not yet accepted.** D4 closed; schema rename accepted; C2 accepted as explicit unknown evidence (not a valid scheduled/manual classification); C3 accepted if completion is read from the flag matching `decision_path`; O1 accepted as a recorded limitation, not coverage. **C1 blocks G2:** reviewer probe showed a returned-pending admission with no timestamps, position counts or `max_positions` gets `record_complete: true`, so it means "no implemented violation fired", not "capture complete". Reviewer reproduced hashes, pairs 142/20/55, smoke and end-to-end (stubbed indicators); 4 longer suites (25/16/34/44) timed out there and remain supplied evidence. **C1 fix `5d274de`** (branch only, pushed): `REQUIRED_FIELDS` per kind and state, `missing_fields` emitted, `record_complete` = returned + nothing missing + no violation; two rules for ruling (a raised call is never complete; unconditional saves on a returned path must be `completed`). Capture 55/55 (c50–c53, k01–k04, 11 mutants), e2e 22 checks; full run at `5d274de` 31/31 exit 0. Bundle `review_bundle_admission_impl_v4` sent. **Review v4 (Tue 3 Nov): C1 accepted, G2 closed** (R1: a raised call is never complete; R2: unconditional saves must be `completed`, call completion not disk persistence; C2, C3, O1 wording accepted). Reviewer reproduced hashes, capture 55/55 and end-to-end 22/22 (stubbed indicators). **M2 milestone ruling (Tue 3 Nov): ACCEPTED** for `2470a50` + `00303ec` + `5d274de`; D4 and G2 closed, O1 kept as a limitation. Reviewer reproduced `--only 4` 25/25, `--only 6` 16/16, `--only 7` 34/34; real-indicator full run is supplied evidence. Milestone only: no merge, deploy or activation. **Target done.** **Checkpoint Fri 6 Nov:** monitor inspections Mon–Thu nights, 8 cycles, all PASS (Fri's on Mon 9 Nov). D-005 check done: 21:00 price and RSI final, `vol_ratio` short by 2–22% (known issue 11); cron kept. Wed 4 Nov: RRC stopped out by the monitor (−$14.34, known issue 9), TBBB promoted and filled at the session's open (known issue 7); clean sample 13, W 3/13, −$94.47. Finding: winter 13:30 report uses extended-hours IBKR prices (known issue 13) | M3 not pulled forward |
 | Nov 9 – Nov 13 | **Step 3 M3**: verifier extensions (statement whitelist, call-site inventory, writer inventory and save data flow); persistence and save-chain controls, C-HANDOFF, C-ENUM. Done when the review accepts M3 | | moves a week if an M2 round runs over |
 | Nov 16 – Nov 20 | **Step 3 M4**: `tools/inspect_admission_cycles.py` (state-diff reconciliation, episodes, per-file check, trade links, A2), mutation test, final bundle. Done when the review accepts M4 | | as above |
 | after M4 | activation decision (design §8, owner's go-ahead), then evidence collection → step 4 | | no date until there is enough evidence to judge |
@@ -52,7 +52,9 @@ why if it differs from the plan.
 the UTC (and MYT) times above are kept. The 13:30 report runs before the open,
 so fills move to the 21:00 report, and its scan sees the previous day's final
 bar instead of a one-minute one (known issue 11). The 21:00 report runs at the
-close, so its scan may see a bar that is not final yet; this is checked on 6 Nov.
+close. Checked 6 Nov: its scan sees final price and RSI, but `vol_ratio`
+short by 2–22% (known issue 11). The 13:30 report's IBKR prices are
+extended-hours trades (known issue 13).
 
 Production state is in `logs/` (`virtual_trades.json` is authoritative), and is
 backed up to GitHub by the bot's own commits.
@@ -165,6 +167,10 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      (live $45.75); the 21:00 report filled it at the 29 Oct open, $45.80
      (+0.11%). The monitor's own record times the decision, so this one is
      established, not bounded. Now 12 fills (10 `clean_v3`).
+   - **New instance, 4 Nov: TBBB.** The 17:30 UTC monitor promoted it (live
+     $64.51) in the cycle that closed RRC; the 21:01 report filled it at the
+     4 Nov open, $63.80 (open $63.74 + slippage; −1.10%). Established. Now 13
+     fills (11 `clean_v3`).
 8. **The OHLCV cache accepts a history that goes backwards** (found
    2026-10-23).
    - `download_stock` (`engine/data_feed.py:72-80`) saves whatever yfinance
@@ -193,6 +199,10 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
      price it would book about $3.91 more.
    - Net with ITUB and INSM: the clean sample's −$80.13 (12 closed) is about
      −$103 to −$106 at observed prices.
+   - **RRC, 4 Nov.** The 17:30 monitor saw $51.44, below the $51.95 stop, and
+     booked $51.90 (−$14.34 after costs). At the observed price about $1.34
+     more. Clean sample −$94.47 (13 closed) is about −$119 to −$122 at
+     observed prices.
    - Recorded, not fixed (FROZEN). It bears on step 4, which exit policy is
      authoritative. The monitor recorder captures `observed_live` against
      `booked_exit_price`. The report path's parity record has the IBKR price.
@@ -234,6 +244,17 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
       one-minute bar; in winter, the previous session's final bar (bar a
       session old at 21:00). Stops and TP use the live price. Evidence:
       parity bar dates, 30 Oct 13:31 and 2 Nov 21:01. Logbook, 30 Oct → 3 Nov.
+      It also makes the entry-day skip (`tracker.py:865`, bar date ==
+      `entry_date`) skip a day-1 trade whose file is on the 21:00 cycle (TBBB,
+      5 Nov 13:31).
+    - **Winter form at 21:00 (D-005 check, 6 Nov).** The 21:00 scan runs at
+      16:00 ET. Against the final bars, its price is within $0.02 and RSI
+      within 0.1 on all 8 winter signals, but `vol_ratio` is short on all 8
+      by 2–22% (median about 12%). The summer 17:00 EDT baseline was within
+      +3% on 9 of 9. A short ratio can only remove a signal: a breakout
+      (`vol_ratio ≥ 1.5` gate, `signals.py:107`) with a final ratio up to
+      about 1.8× can be rejected; in mean reversion it costs a confluence
+      vote. Logbook, 3 → 6 Nov.
 12. **The trailing stop starts only at the first new high** (found 2026-11-03).
     - At fill, `trailing_stop = stop_loss` and `peak_price = entry`
       (`tracker.py:192-193`). The 10% trail is recomputed only when the price
@@ -247,6 +268,20 @@ cd /root/ares/Ares && git pull --ff-only && git log -1 --oneline
       SL is above entry × 0.90.
     - Code behaviour, not a regression. Recorded, not fixed (FROZEN). It bears
       on step 4, which exit policy is authoritative.
+13. **In winter the 13:30 report judges held positions at extended-hours IBKR
+    prices** (found 2026-11-06).
+    - `get_live_price` takes the last 1-minute `TRADES` bar with
+      `useRTH=False` and drops its timestamp (`data_feed.py:56-59`). At 08:30
+      ET no regular-session bar of that day exists.
+    - Evidence, against the final daily close: the 13:31 prices on 4 and 5 Nov
+      differ by −1.24% to +1.93% (TMO, AMP, SGRY, BRZE, TBBB); the 21:00
+      prices are within −0.23% to +0.49%. SGRY's $23.40 (4 Nov) is above
+      every regular-session high from 2 to 5 Nov.
+    - Peaks and trails advance on these prices (AMP 4 and 5 Nov, SGRY 4 Nov:
+      its trail $21.06 rests on that print). A stop or TP can fire on one;
+      none has yet.
+    - Summer had the same at 21:00 (17:00 EDT, logbook 12 Oct finding F).
+      Recorded, not fixed (FROZEN). It bears on step 4.
 
 ## Open questions (not being worked on)
 

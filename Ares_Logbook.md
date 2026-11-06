@@ -4252,6 +4252,255 @@ row written at 13:30 (extends known issue 11).**
   - The real-indicator full run is supplied evidence only.
   - This is milestone acceptance only, not merge, deploy or activation.
 
+### 2026-11-03 → 06 — RRC stopped out by the monitor, booked at the stop ($0.51 above the observed price); TBBB promoted and filled at the session's open (known issue 7); pre-open IBKR prices move peaks
+
+Six dashboards (21:32 MYT Nov 3 → 05:02 MYT Nov 6) and the monitor posts.
+**Clean sample 12 → 13, W 3/13, −$80.13 → −$94.47.** Every dashboard agrees
+with `virtual_trades.json` at its commit. 5/5 slots throughout.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:32 Nov 3 | `3fe5474` | ICLR, KNSA expired (age 6d > 5d); VLTO queued ($115.70, bar 11-02, RSI 78.8, vol 2.02×) |
+| 00:10 / 01:30 Nov 4 | `49f9755`, `0af4ba6` | no exits; BRZE trail $41.23 → $41.24 (live $45.82) |
+| 05:01 Nov 4 | `9e5fb78` | TBBB queued ($62.99, RSI 71.3, vol 2.62×) |
+| 21:32 Nov 4 | `7a31987` | LNG, GKOS expired; 0 signals; AMP and SGRY peaks advanced pre-open (finding below) |
+| 00:10 / 01:30 Nov 5 | `57ec77a`, `c7bdc04` | **RRC closed `stop_loss`**; **TBBB promoted** in the same 17:30 UTC cycle |
+| 05:02 Nov 5 | `b80ae3c` | **TBBB filled $63.80**; ROP dropped (drift +5.5%); UNM, BDX, CON, GSAT, OGE queued |
+| 21:32 Nov 5 | `b3c3651` | REGN, FFIV expired; DT queued ($46.78, bar 11-04); UNM re-signalled, already queued |
+| 00:10 / 01:30 Nov 6 | `83fb16e`, `1c237b3` | no exits; TBBB peak $64.44 |
+| 05:02 Nov 6 | `621a076` | DT dropped (drift −6.6%); BOBS queued ($19.48, RSI 71.6, vol 2.73×) |
+
+**RRC closed, 17:30 UTC Nov 4 (cycle `75d58754`).**
+- At 16:10 RRC was live $52.26. At 17:30 it was **$51.44**, below the stop
+  $51.95. The close was called with $51.95 and booked at **$51.90** (0.1%
+  slippage).
+- 2.63 shares: P&L −$12.34 (−8.29%), after $2 commission **−$14.34**.
+  Holding 8 days. Verdict `signal_failed`, MFE −0.01%: it never traded above
+  its entry, so its trail never moved off the SL (known issue 12).
+- Dashboard: "CLOSED at $51.95" is the close argument; "RRC −8.3%" is
+  `pnl_pct`.
+- Arithmetic:
+  - Realized −$80.13 − $14.34 = −$94.47.
+  - Expectancy −94.47 / 13 = −$7.27.
+  - Net/trade −4.48% → −4.88% implies about −9.6% for RRC. That matches
+    −14.34 / $149.
+  - Profit factor 0.28 implies gross losses ≈ $111.3 and gross wins ≈ $31.2,
+    so 31.2 / 125.6 = 0.25.
+  - All history −$102.70 − $14.34 = −$117.04 = pre-clean −$22.57 + clean
+    −$94.47.
+- **Known issue 9, new instance.** At the observed $51.44 (same slippage) the
+  loss is about $1.34 larger. With ITUB and INSM, the clean sample's −$94.47
+  is about **−$119 to −$122** at observed prices.
+- Parity: RRC's four `DECISION_CHANGING_MISMATCH` records this week are the
+  dual-precision peak of 3 Nov, unchanged in kind. They end with the close.
+
+**TBBB: promoted by the monitor, filled at the 4 Nov open (known issue 7,
+established).**
+- Signal at 21:01 UTC Nov 3 on bar 11-03. Screens `unusual_volume` and
+  `big_movers_up`. Kept at 13:31 Nov 4 (drift −0.03%).
+- RRC's close freed a slot. The same 17:30 cycle promoted TBBB at live
+  **$64.51** (drift +2.41%) and wrote it to `pending_signals.json`.
+- Filled by the 21:01 Nov 4 report (`fill_run_ts` 21:01:44). The bar-date
+  guard passed, and it was booked at the 11-04 open plus slippage, **$63.80**
+  (`tracker.py:129`). That open came three hours before the decision:
+  −1.10% against the decision price, so this one flatters the sample.
+- Second established monitor instance, after BRZE (29 Oct). Now **13 fills
+  (11 `clean_v3`)**.
+- The promotion re-based `signal_price` / `signal_date` to $64.51 / 11-04
+  (registered). RSI 71.3 and vol 2.62× are kept from the scan. `strength` is
+  `unknown` (queue route).
+- SL $60.14 = entry × (1 − 2 × stdev 0.0287); TP $75.29 = +18%.
+  - Peak $64.44 (monitor, 17:30 Nov 5). × 0.90 = $58.00, below the SL, so the
+    TS stays $60.14.
+- 13:31 Nov 5: IBKR $65.57 was above every earlier price, but the trade was
+  not evaluated.
+  - TBBB's cache file is on a 21:00 cycle since its fill, so its bar was still
+    11-04, which equals `entry_date`.
+  - The entry-day skip compares the bar date (`tracker.py:865`), so a day-1
+    trade was skipped as if it were day 0.
+  - This is the held-cache-bar finding of 3 Nov, seen on a new path.
+
+**Peaks and trails. All dashboard values are reproduced from the parity
+and monitor prices.**
+
+| Position | Change | Source |
+|---|---|---|
+| AMP | peak 2.5% → 3.0% | monitor 16:10 Nov 3, $506.80 |
+| AMP | → 4.2% | **13:31 Nov 4, IBKR $512.99, pre-open** (21:00 the day before: $504.33) |
+| AMP | → 7.2%, **trail $472.99 → $474.63, first time above SL** | 21:01 Nov 4, IBKR $527.37 |
+| AMP | → 7.4%, trail $475.65 | **13:31 Nov 5, IBKR $528.50, pre-open** |
+| SGRY | 0.3% → 0.5%, trail $21.02 → $21.06 | **13:31 Nov 4, IBKR $23.40, pre-open** (21:00 the day before: $23.15) |
+| BRZE | trail $41.23 → $41.24 → $41.28 | monitor, $45.82 (Nov 3) and $45.87 (Nov 4) |
+| BRZE | 0.6%, trail $41.48 | 21:01 Nov 4, IBKR $46.09 |
+| TMO | unchanged: peak $714.86, trail $643.37 | highest seen $711.83 (13:31 Nov 4) |
+
+<a id="preopen-ibkr"></a>
+**Finding: in winter the 13:30 report judges held positions at a pre-open
+IBKR price (extends finding F of 12 Oct and `DESIGN_monitor_recorder_v1`
+§2.4).**
+- `get_live_price` returns the last 1-minute `TRADES` bar with
+  `useRTH=False` and drops the bar's timestamp (`data_feed.py:56-59`).
+- The 13:30 UTC report now runs at 08:30 ET. The bar it gets cannot be from
+  that day's regular session. It is either an extended-hours trade or the
+  previous session's last minute.
+- Report IBKR prices against the final daily close (yfinance, read on the VPS
+  on 6 Nov):
+
+  | Report | TMO | AMP | SGRY | BRZE | TBBB | RRC |
+  |---|---|---|---|---|---|---|
+  | 13:31 Nov 3 (vs 11-02 close) | −0.02% | fallback = close | −0.09% | −0.07% | — | +0.50% |
+  | 21:00 Nov 3 (vs 11-03 close) | −0.00% | −0.11% | +0.09% | −0.07% | — | +0.09% |
+  | **13:31 Nov 4 (vs 11-03 close)** | **+1.93%** | **+1.61%** | **+1.17%** | fallback = close | — | — |
+  | 21:01 Nov 4 (vs 11-04 close) | −0.17% | −0.01% | +0.17% | −0.02% | −0.23% | closed |
+  | **13:31 Nov 5 (vs 11-04 close)** | **+0.70%** | **+0.21%** | **+0.39%** | **−1.24%** | **+0.77%** | closed |
+  | 21:01 Nov 5 (vs 11-05 close) | +0.49% | +0.32% | 0.00% | +0.02% | +0.03% | closed |
+
+- **These are extended-hours trades, not the previous close.** Every 13:31
+  IBKR price on Nov 4 and Nov 5 differs from the prior final close, by −1.24%
+  to +1.93%.
+  - Two lie outside every regular-session range nearby. SGRY's $23.40 is
+    above its 11-02 to 11-05 highs ($23.23, $23.22, $23.27, $23.24).
+    BRZE's $45.53 is below its 11-04 and 11-05 lows ($45.76, $45.75).
+  - The 21:00 prices, at 16:00 ET, are within −0.23% to +0.49% of the close.
+- Peaks and trails advanced on these prices: AMP on Nov 4 and Nov 5, SGRY on
+  Nov 4.
+  - **SGRY's trail, $21.06, rests on a price SGRY never traded in a regular
+    session this week.**
+  - A stop or TP could fire on such a print. None did this week.
+- Summer had the same at the 21:00 report (17:00 EDT, after-hours; finding
+  F). In winter it moves to the 13:30 report, with larger gaps (overnight
+  and pre-market moves).
+- Known issue 13. Recorded only (FROZEN). It matters for step 4's exit-policy
+  question.
+
+**Queue.**
+- This week's events:
+  - 6 expired by age (ICLR, KNSA, LNG, GKOS, REGN, FFIV; "age 6d exceeded max
+    5d").
+  - 2 dropped on drift (ROP +5.5%, DT −6.6%).
+  - 1 promoted (TBBB).
+  - 9 queued (VLTO, TBBB, UNM, BDX, CON, GSAT, OGE, DT, BOBS).
+- Every "QUEUED (n)" equals the entries kept by that report's maintenance,
+  before its insertions (registered display gap): 6, 7, 6, 4, 7, 7. The queue
+  is 8/10 now, with BOBS.
+- The 13:32 Nov 5 "2 signals" were DT and UNM. UNM was already queued.
+- DT was queued at 13:32 on the final 11-04 bar and dropped at 21:01 the same
+  day, at the close's cached price $43.69. That is the FTNT pattern of 29 Oct.
+- **Correction to the 2 Nov D-005 note.** Report maintenance validates
+  without `use_live` (`tracker.py:446`), so the queue event's `live_price` is
+  the cached daily close, not IBKR.
+  - The "six older entries got exactly Friday 21:01's live prices" were
+    therefore Monday's re-downloaded final closes. They equalled Friday 21:00's
+    closes, which in summer ran an hour after the close.
+  - The same field repeats unchanged from 21:00 to the next 13:31 whenever the
+    file is under 20 h old (ROP $473.58, FFIV $331.15, REGN $973.36,
+    3 → 4 Nov). The pre-open drift is then the at-the-close row's.
+
+**Monitor inspections: PASS, 6 cycles.**
+
+| Night | Command | Cycles |
+|---|---|---|
+| Tue | `inspect_monitor_cycles.py 3fe5474 49f9755 0af4ba6` | `47bc6fb7`, `9eb78f62` |
+| Wed | `inspect_monitor_cycles.py 7a31987 57ec77a c7bdc04` | `66568b11`, `75d58754` (RRC close) |
+| Thu | `inspect_monitor_cycles.py b3c3651 83fb16e 1c237b3` | `23b996bf`, `a7f0c415` |
+
+- 5 records in each cycle.
+- RRC's close record: `decision` closed, `observed_live` 51.44,
+  `close_price_argument` 51.95, `booked_exit_price` 51.9, `record_complete`
+  true.
+
+**Parity, 30 records: 26 MATCH, 4 `DECISION_CHANGING_MISMATCH` (RRC).**
+- Every 21:00 bar date was the previous session's, except for TBBB. This is
+  the held-cache-bar finding again.
+
+**System.**
+- 21:32 Nov 3: ⚠️ stall 1617 ms and 111 MB paged out in 16.5 h. The other
+  five dashboards were clean: stalls 48–688 ms, 0–88 MB paged out.
+- Swap 148 → 267 MB. Each step is the previous value plus the pages paged
+  out, except two small swap-ins (Nov 4 21:32: 268 → 258; Nov 5 21:32: −1).
+- Cache 1026 → 1084 symbols. Disk 13 → 14 GB. RAM free ≥ 992 MB.
+
+<a id="d005-check"></a>
+**D-005 check (21:00 bar finality): done. Price and RSI are final at the
+close; `vol_ratio` is understated by 2–22%.**
+- Method: final bars re-read on the VPS on 6 Nov. `yf.download(period="2y")`
+  as in production, plus `add_indicators`, in memory, with no cache write. No
+  dividends after any of the dates, so adjusted and raw prices agree.
+- Signal value → final bar:
+
+  | Run | Signal (bar) | Price | RSI | `vol_ratio` |
+  |---|---|---|---|---|
+  | summer 21:00 | RRC (10-27) | 56.38 → 56.38 | 84.5 → 84.5 | 3.53 → 3.53 |
+  | summer 21:00 | SGRY (10-27) | 23.36 → 23.36 | 84.6 → 84.6 | 2.18 → 2.18 |
+  | summer 21:00 | ICLR (10-28) | 214.16 → 214.16 | 73.8 → 73.8 | 3.87 → 3.88 |
+  | summer 21:00 | KNSA (10-28) | 95.18 → 95.18 | 67.7 → 67.7 | 2.14 → 2.15 |
+  | summer 21:00 | BRZE (10-28) | 45.78 → 45.78 | 80.4 → 80.4 | 1.60 → 1.61 |
+  | summer 21:00 | FFIV (10-30) | 338.34 → 338.34 | 27.5 → 27.5 | 2.75 → 2.75 |
+  | summer 21:00 | LNG (10-30) | 330.32 → 330.32 | 76.2 → 76.2 | 2.23 → 2.30 |
+  | summer 21:00 | REGN (10-30) | 927.89 → 927.89 | 73.7 → 73.7 | 3.83 → 3.85 |
+  | summer 21:00 | ROP (10-30) | 466.60 → 466.60 | 76.7 → 76.6 | 2.08 → 2.08 |
+  | **winter 21:00** | HOG (11-02) | 33.06 → 33.07 | 76.2 → 76.2 | **1.81 → 2.03 (+12%)** |
+  | **winter 21:00** | TBBB (11-03) | 62.99 → 62.97 | 71.3 → 71.4 | **2.62 → 2.77 (+6%)** |
+  | **winter 21:00** | UNM (11-04) | 74.78 → 74.79 | 26.4 → 26.4 | **4.91 → 5.18 (+6%)** |
+  | **winter 21:00** | BDX (11-04) | 209.18 → 209.19 | 71.5 → 71.5 | **2.30 → 2.59 (+13%)** |
+  | **winter 21:00** | CON (11-04) | 43.58 → 43.56 | 77.3 → 77.2 | **1.71 → 2.00 (+17%)** |
+  | **winter 21:00** | GSAT (11-04) | 84.58 → 84.58 | 59.8 → 59.8 | **1.79 → 1.83 (+2%)** |
+  | **winter 21:00** | OGE (11-04) | 50.64 → 50.63 | 70.7 → 70.6 | **1.95 → 2.37 (+22%)** |
+  | **winter 21:00** | BOBS (11-05) | 19.48 → 19.47 | 71.6 → 71.6 | **2.73 → 3.05 (+12%)** |
+  | winter 13:30 | VLTO (11-02) | 115.70 → 115.70 | 78.8 → 78.8 | 2.02 → 2.02 |
+  | winter 13:30 | UNM (11-04) | 74.79 → 74.79 | 26.4 → 26.4 | 5.18 → 5.18 |
+  | winter 13:30 | DT (11-04) | 46.78 → 46.78 | 29.6 → 29.6 | 1.63 → 1.63 |
+
+- **Summer baseline (17:00 EDT):** price and RSI exact on all 9 (ROP RSI 0.1).
+  `vol_ratio` is within +3% (LNG), from late volume revisions.
+- **Winter 21:00 (16:00 ET):** price is within $0.02 (≤ 0.05%) and RSI within
+  0.1 on all 8. **`vol_ratio` is short on all 8: by 2–22%, median about
+  12%.** The closing-auction volume is not in the row yet.
+- **Winter 13:30 (pre-open):** all three are exact. This confirms the 2 Nov
+  finding that the 13:30 scan now reads the final bar.
+- **Consequences.** A short bar can only lower `vol_ratio`, so it can remove
+  a signal, never create one.
+  - `momentum_breakout` gates on `vol_ratio ≥ 1.5` (`signals.py:107`). At the
+    observed shortfall, a breakout whose final ratio is up to about 1.8× can
+    be rejected at the close.
+  - In `mean_reversion` it is one confluence vote (`signals.py:69`), so it can
+    cost a point.
+  - `strength` is 'high' above 3.0×. BOBS read 2.73× (medium) against a
+    final 3.05×. It is lost on the queue route anyway.
+  - The 13:30 scan does not recover a missed signal reliably. A symbol is
+    re-scanned only if it is in the next candidate list, and by then its fill
+    is a session later.
+- **VLTO and DT** were found at 13:32 on bars the 21:00 scan had seen, but
+  the shortfall does not explain either. VLTO's 2.02× would have to read
+  below 1.5× at the close, a final 35% above the close reading (max seen
+  +22%). DT keeps at least conf 2 without the volume vote
+  (`min_confluence` 2), and its RSI moves 0.1 at most. Probable cause: the
+  candidate list differs between the close and the pre-open (the Finviz
+  screens). Inferred, not established.
+- **TBBB's fill confirmed:** 11-04 open $63.74 + slippage $0.0637 = $63.80.
+  RRC: 11-04 low $50.96, close $52.10, so the observed $51.44 lies inside the
+  bar.
+- **D-005 is unchanged: keep the UTC cron.** The 21:00 bar defect is recorded
+  as known issue 11 (winter form). Recorded only (FROZEN).
+
+### 2026-11-06 (Fri) — weekly checkpoint, week 2–6 Nov
+
+| Item | Result |
+|---|---|
+| Target: step 3 M2 | ✅ **Accepted** Tue 3 Nov (`2470a50` + `00303ec` + `5d274de`, `recorder/admission-v1`). D4 and G2 closed, O1 kept as a limitation. Not merged, not active. |
+| Monitor-cycle inspections | ✅ Mon–Thu nights, 8 cycles, all PASS. Fri's are inspected on Mon. |
+| D-005 check | ✅ Done. 21:00 price and RSI final; `vol_ratio` short by 2–22% (median ~12%) against a summer baseline within +3%. 13:30 bars final. Cron kept. Known issue 11 updated. |
+| Trades | RRC closed `stop_loss` (−$14.34; known issue 9). TBBB opened from the queue (known issue 7, now 13 fills). Clean sample 13, W 3/13, −$94.47. |
+| New known issue | 13: in winter the 13:30 report judges held positions at extended-hours IBKR prices. |
+| Hermes | DST offset check after the Friday close (Hermes checkpoint). |
+
+**Next week (9–13 Nov), one target:** step 3 M3.
+- Verifier extensions: statement whitelist, call-site inventory, writer
+  inventory and save data flow.
+- Persistence and save-chain controls, C-HANDOFF, C-ENUM.
+- **Done when** the review accepts M3.
+- Not pulled forward: M4.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
