@@ -1,27 +1,5 @@
 [
   {
-    "symbol": "BOBS",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 19.48,
-    "rsi_at_signal": 71.6,
-    "stdev_20": 0.0378,
-    "vol_ratio": 2.73,
-    "date_added": "2026-11-05",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-06T13:31:15",
-    "drift_pct": -0.05,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 19.47
-  },
-  {
     "symbol": "OGE",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -37,11 +15,77 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-06T13:31:12",
-    "drift_pct": 0.36,
+    "checked_at": "2026-11-06T21:01:11",
+    "drift_pct": -0.01,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 50.82
+    "live_price": 50.63
+  },
+  {
+    "symbol": "GSAT",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 84.58,
+    "rsi_at_signal": 59.8,
+    "stdev_20": 0.0081,
+    "vol_ratio": 1.79,
+    "date_added": "2026-11-04",
+    "screens": [
+      "unusual_volume",
+      "near_52w_high"
+    ],
+    "checked_at": "2026-11-06T21:01:12",
+    "drift_pct": -0.31,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 84.32
+  },
+  {
+    "symbol": "BOBS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 19.48,
+    "rsi_at_signal": 71.6,
+    "stdev_20": 0.0378,
+    "vol_ratio": 2.73,
+    "date_added": "2026-11-05",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-06T21:01:10",
+    "drift_pct": -0.67,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 19.35
+  },
+  {
+    "symbol": "HOG",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 33.06,
+    "rsi_at_signal": 76.2,
+    "stdev_20": 0.0232,
+    "vol_ratio": 1.81,
+    "date_added": "2026-11-02",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-06T21:01:13",
+    "drift_pct": -1.15,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 32.68
   },
   {
     "symbol": "VLTO",
@@ -58,11 +102,33 @@
     "screens": [
       "near_52w_high"
     ],
-    "checked_at": "2026-11-06T13:31:13",
-    "drift_pct": 0.73,
+    "checked_at": "2026-11-06T21:01:11",
+    "drift_pct": 1.2,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 116.55
+    "live_price": 117.09
+  },
+  {
+    "symbol": "BDX",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 209.18,
+    "rsi_at_signal": 71.5,
+    "stdev_20": 0.0173,
+    "vol_ratio": 2.3,
+    "date_added": "2026-11-04",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-06T21:01:13",
+    "drift_pct": 1.32,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 211.95
   },
   {
     "symbol": "UNM",
@@ -81,77 +147,11 @@
       "oversold_bounce",
       "big_movers_down"
     ],
-    "checked_at": "2026-11-06T13:31:13",
-    "drift_pct": -1.11,
+    "checked_at": "2026-11-06T21:01:12",
+    "drift_pct": 2.51,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 73.95
-  },
-  {
-    "symbol": "GSAT",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 84.58,
-    "rsi_at_signal": 59.8,
-    "stdev_20": 0.0081,
-    "vol_ratio": 1.79,
-    "date_added": "2026-11-04",
-    "screens": [
-      "unusual_volume",
-      "near_52w_high"
-    ],
-    "checked_at": "2026-11-06T13:31:14",
-    "drift_pct": -1.24,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 83.53
-  },
-  {
-    "symbol": "HOG",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 33.06,
-    "rsi_at_signal": 76.2,
-    "stdev_20": 0.0232,
-    "vol_ratio": 1.81,
-    "date_added": "2026-11-02",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-06T13:31:14",
-    "drift_pct": -1.45,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 32.58
-  },
-  {
-    "symbol": "BDX",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 209.18,
-    "rsi_at_signal": 71.5,
-    "stdev_20": 0.0173,
-    "vol_ratio": 2.3,
-    "date_added": "2026-11-04",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-06T13:31:15",
-    "drift_pct": 2.09,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 213.55
+    "live_price": 76.66
   },
   {
     "symbol": "CON",
@@ -169,10 +169,31 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-06T13:31:15",
-    "drift_pct": -3.28,
+    "checked_at": "2026-11-06T21:01:14",
+    "drift_pct": -3.18,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 42.15
+    "live_price": 42.19
+  },
+  {
+    "symbol": "DT",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 2,
+    "price_at_signal": 43.7,
+    "rsi_at_signal": 28.0,
+    "stdev_20": 0.0419,
+    "vol_ratio": 0.97,
+    "date_added": "2026-11-05",
+    "screens": [
+      "oversold_bounce"
+    ],
+    "checked_at": "2026-11-06T21:01:14",
+    "drift_pct": -0.58,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 43.44
   }
 ]

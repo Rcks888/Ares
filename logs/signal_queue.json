@@ -1,33 +1,16 @@
 [
   {
-    "symbol": "BOBS",
+    "symbol": "HOG",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 19.48,
-    "rsi_at_signal": 71.6,
-    "stdev_20": 0.0378,
-    "vol_ratio": 2.73,
-    "date_added": "2026-11-05",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
-    "symbol": "OGE",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 50.64,
-    "rsi_at_signal": 70.7,
-    "stdev_20": 0.0126,
-    "vol_ratio": 1.95,
-    "date_added": "2026-11-04",
+    "price_at_signal": 33.06,
+    "rsi_at_signal": 76.2,
+    "stdev_20": 0.0232,
+    "vol_ratio": 1.81,
+    "date_added": "2026-11-02",
     "screens": [
       "unusual_volume",
       "big_movers_up"
@@ -50,21 +33,20 @@
     ]
   },
   {
-    "symbol": "UNM",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+volume+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
+    "symbol": "OGE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 74.78,
-    "rsi_at_signal": 26.4,
-    "stdev_20": 0.0414,
-    "vol_ratio": 4.91,
+    "price_at_signal": 50.64,
+    "rsi_at_signal": 70.7,
+    "stdev_20": 0.0126,
+    "vol_ratio": 1.95,
     "date_added": "2026-11-04",
     "screens": [
       "unusual_volume",
-      "oversold_bounce",
-      "big_movers_down"
+      "big_movers_up"
     ]
   },
   {
@@ -85,23 +67,6 @@
     ]
   },
   {
-    "symbol": "HOG",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 33.06,
-    "rsi_at_signal": 76.2,
-    "stdev_20": 0.0232,
-    "vol_ratio": 1.81,
-    "date_added": "2026-11-02",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
     "symbol": "BDX",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -116,6 +81,24 @@
     "screens": [
       "unusual_volume",
       "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "UNM",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+volume+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 74.78,
+    "rsi_at_signal": 26.4,
+    "stdev_20": 0.0414,
+    "vol_ratio": 4.91,
+    "date_added": "2026-11-04",
+    "screens": [
+      "unusual_volume",
+      "oversold_bounce",
+      "big_movers_down"
     ]
   },
   {
@@ -136,19 +119,54 @@
     ]
   },
   {
-    "symbol": "DT",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 2,
-    "price_at_signal": 43.7,
-    "rsi_at_signal": 28.0,
-    "stdev_20": 0.0419,
-    "vol_ratio": 0.97,
+    "symbol": "BOBS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 19.48,
+    "rsi_at_signal": 71.6,
+    "stdev_20": 0.0378,
+    "vol_ratio": 2.73,
     "date_added": "2026-11-05",
     "screens": [
-      "oversold_bounce"
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "ARHS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 14.19,
+    "rsi_at_signal": 77.4,
+    "stdev_20": 0.0453,
+    "vol_ratio": 2.18,
+    "date_added": "2026-11-06",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "XERS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 15.2,
+    "rsi_at_signal": 78.2,
+    "stdev_20": 0.0714,
+    "vol_ratio": 2.47,
+    "date_added": "2026-11-06",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
     ]
   }
 ]

@@ -1,6 +1,15 @@
 candidates_screened:103
-signals_found:1
-signal_details:DT | mean_reversion | conf2 | range
-  Price: $43.70 | RSI: 28.0 | Vol: 0.97x
-  Buy: $150 (3.4 shares)
-  SL: $40.04 | TP: $48.07 (+10%) | TS: 10%
+signals_found:4
+signal_details:ARHS | momentum_breakout | conf3 | uptrend
+  Price: $14.19 | RSI: 77.4 | Vol: 2.18x
+  Buy: $150 (10.6 shares)
+  SL: $12.90 | TP: $16.74 (+18%) | TS: 10%|||XERS | momentum_breakout | conf3 | uptrend
+  Price: $15.20 | RSI: 78.2 | Vol: 2.47x
+  Buy: $150 (9.9 shares)
+  SL: $13.03 | TP: $17.94 (+18%) | TS: 10%|||CVI | mean_reversion | conf2 | range
+  Price: $38.08 | RSI: 28.0 | Vol: 1.21x
+  Buy: $150 (3.9 shares)
+  SL: $34.11 | TP: $41.89 (+10%) | TS: 10%|||BOBS | momentum_breakout | conf3 | uptrend
+  Price: $19.35 | RSI: 72.8 | Vol: 2.87x
+  Buy: $150 (7.8 shares)
+  SL: $17.89 | TP: $22.83 (+18%) | TS: 10%
