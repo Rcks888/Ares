@@ -1,5 +1,22 @@
 [
   {
+    "symbol": "BOBS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 19.48,
+    "rsi_at_signal": 71.6,
+    "stdev_20": 0.0378,
+    "vol_ratio": 2.73,
+    "date_added": "2026-11-05",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
     "symbol": "OGE",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -119,20 +136,19 @@
     ]
   },
   {
-    "symbol": "BOBS",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 19.48,
-    "rsi_at_signal": 71.6,
-    "stdev_20": 0.0378,
-    "vol_ratio": 2.73,
+    "symbol": "DT",
+    "strategy": "mean_reversion",
+    "trigger": "oversold+sma_support",
+    "regime": "range",
+    "category": "reversal_candidate",
+    "confluence": 2,
+    "price_at_signal": 43.7,
+    "rsi_at_signal": 28.0,
+    "stdev_20": 0.0419,
+    "vol_ratio": 0.97,
     "date_added": "2026-11-05",
     "screens": [
-      "unusual_volume",
-      "big_movers_up"
+      "oversold_bounce"
     ]
   }
 ]
