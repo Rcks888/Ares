@@ -1,6 +1,12 @@
 candidates_screened:103
-signals_found:1
-signal_details:CVI | mean_reversion | conf3 | range
-  Price: $38.13 | RSI: 28.0 | Vol: 1.7x
-  Buy: $150 (3.9 shares)
-  SL: $34.16 | TP: $41.94 (+10%) | TS: 10%
+signals_found:3
+signal_details:BOBS | momentum_breakout | conf3 | uptrend
+  Price: $20.92 | RSI: 75.9 | Vol: 1.81x
+  Buy: $150 (7.2 shares)
+  SL: $19.25 | TP: $24.69 (+18%) | TS: 10%|||TGTX | momentum_breakout | conf3 | uptrend
+  Price: $63.38 | RSI: 60.1 | Vol: 2.13x
+  Buy: $150 (2.4 shares)
+  SL: $59.68 | TP: $74.79 (+18%) | TS: 10%|||CVI | mean_reversion | conf2 | range
+  Price: $39.08 | RSI: 28.5 | Vol: 0.9x
+  Buy: $150 (3.8 shares)
+  SL: $34.98 | TP: $42.99 (+10%) | TS: 10%
