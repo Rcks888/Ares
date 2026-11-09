@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 46
+    "holding_days": 49
   },
   {
     "symbol": "WBD",
@@ -794,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 38
+    "holding_days": 41
   },
   {
     "symbol": "TWST",
@@ -1165,7 +1165,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 24,
+      "days_tracked": 27,
       "max_days": 30,
       "peak_after_exit": 11.76,
       "trough_after_exit": 6.64,
@@ -1173,7 +1173,7 @@
       "trough_date": "2026-11-05",
       "missed_upside_pct": 0.09,
       "avoided_downside_pct": 43.49,
-      "latest_price": 6.64
+      "latest_price": 7.12
     }
   },
   {
@@ -1241,7 +1241,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 11,
+      "days_tracked": 14,
       "max_days": 30,
       "peak_after_exit": 9.32,
       "trough_after_exit": 7.01,
@@ -1249,7 +1249,7 @@
       "trough_date": "2026-11-03",
       "missed_upside_pct": 0.11,
       "avoided_downside_pct": 24.7,
-      "latest_price": 7.37
+      "latest_price": 7.39
     }
   },
   {
@@ -1317,7 +1317,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 24,
+      "days_tracked": 27,
       "max_days": 30,
       "peak_after_exit": 143.83,
       "trough_after_exit": 108.82,
@@ -1325,7 +1325,7 @@
       "trough_date": "2026-10-16",
       "missed_upside_pct": 21.51,
       "avoided_downside_pct": 8.07,
-      "latest_price": 128.6
+      "latest_price": 138.78
     }
   },
   {
@@ -1393,7 +1393,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 23,
+      "days_tracked": 26,
       "max_days": 30,
       "peak_after_exit": 25.02,
       "trough_after_exit": 20.48,
@@ -1401,7 +1401,7 @@
       "trough_date": "2026-11-05",
       "missed_upside_pct": 1.21,
       "avoided_downside_pct": 17.15,
-      "latest_price": 20.48
+      "latest_price": 20.68
     }
   },
   {
@@ -1473,15 +1473,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 8,
+      "days_tracked": 11,
       "max_days": 30,
-      "peak_after_exit": 112.58,
+      "peak_after_exit": 114.41,
       "trough_after_exit": 104.44,
-      "peak_date": "2026-10-30",
+      "peak_date": "2026-11-06",
       "trough_date": "2026-11-03",
-      "missed_upside_pct": 4.24,
+      "missed_upside_pct": 5.94,
       "avoided_downside_pct": 3.3,
-      "latest_price": 108.76
+      "latest_price": 114.41
     }
   },
   {
@@ -1553,7 +1553,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 15,
+      "days_tracked": 18,
       "max_days": 30,
       "peak_after_exit": 8.39,
       "trough_after_exit": 7.61,
@@ -1561,7 +1561,7 @@
       "trough_date": "2026-10-27",
       "missed_upside_pct": 8.12,
       "avoided_downside_pct": 1.93,
-      "latest_price": 8.15
+      "latest_price": 8.01
     }
   },
   {
@@ -1610,7 +1610,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 9
+    "holding_days": 12
   },
   {
     "symbol": "RRC",
@@ -1677,15 +1677,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 2,
+      "days_tracked": 5,
       "max_days": 30,
       "peak_after_exit": 54.01,
-      "trough_after_exit": 50.19,
+      "trough_after_exit": 48.72,
       "peak_date": "2026-11-03",
-      "trough_date": "2026-11-05",
+      "trough_date": "2026-11-06",
       "missed_upside_pct": 4.07,
-      "avoided_downside_pct": 3.29,
-      "latest_price": 50.19
+      "avoided_downside_pct": 6.13,
+      "latest_price": 48.72
     }
   },
   {
@@ -1734,7 +1734,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 8
+    "holding_days": 11
   },
   {
     "symbol": "TBBB",
@@ -1755,7 +1755,7 @@
     "stop_loss": 60.14,
     "take_profit": 75.29,
     "trailing_stop": 60.14,
-    "peak_price": 65.25,
+    "peak_price": 65.62,
     "rsi_at_entry": 71.3,
     "vol_at_entry": 2.62,
     "stdev_20": 0.0287,
@@ -1782,6 +1782,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 2
+    "holding_days": 5
   }
 ]

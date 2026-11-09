@@ -15,11 +15,55 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-06T21:01:11",
-    "drift_pct": -0.01,
+    "checked_at": "2026-11-09T13:30:56",
+    "drift_pct": -0.0,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 50.63
+    "live_price": 50.64
+  },
+  {
+    "symbol": "ARHS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 14.19,
+    "rsi_at_signal": 77.4,
+    "stdev_20": 0.0453,
+    "vol_ratio": 2.18,
+    "date_added": "2026-11-06",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-09T13:30:59",
+    "drift_pct": -0.0,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 14.19
+  },
+  {
+    "symbol": "XERS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 15.2,
+    "rsi_at_signal": 78.2,
+    "stdev_20": 0.0714,
+    "vol_ratio": 2.47,
+    "date_added": "2026-11-06",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-09T13:31:00",
+    "drift_pct": -0.0,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 15.2
   },
   {
     "symbol": "GSAT",
@@ -37,7 +81,7 @@
       "unusual_volume",
       "near_52w_high"
     ],
-    "checked_at": "2026-11-06T21:01:12",
+    "checked_at": "2026-11-09T13:30:57",
     "drift_pct": -0.31,
     "rsi": 50.0,
     "ema20_ok": true,
@@ -59,54 +103,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-06T21:01:10",
-    "drift_pct": -0.67,
+    "checked_at": "2026-11-09T13:30:59",
+    "drift_pct": -0.31,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 19.35
-  },
-  {
-    "symbol": "HOG",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 33.06,
-    "rsi_at_signal": 76.2,
-    "stdev_20": 0.0232,
-    "vol_ratio": 1.81,
-    "date_added": "2026-11-02",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-06T21:01:13",
-    "drift_pct": -1.15,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 32.68
-  },
-  {
-    "symbol": "VLTO",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 115.7,
-    "rsi_at_signal": 78.8,
-    "stdev_20": 0.0191,
-    "vol_ratio": 2.02,
-    "date_added": "2026-11-02",
-    "screens": [
-      "near_52w_high"
-    ],
-    "checked_at": "2026-11-06T21:01:11",
-    "drift_pct": 1.2,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 117.09
+    "live_price": 19.42
   },
   {
     "symbol": "BDX",
@@ -124,11 +125,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-06T21:01:13",
-    "drift_pct": 1.32,
+    "checked_at": "2026-11-09T13:30:57",
+    "drift_pct": 1.29,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 211.95
+    "live_price": 211.88
   },
   {
     "symbol": "UNM",
@@ -147,11 +148,11 @@
       "oversold_bounce",
       "big_movers_down"
     ],
-    "checked_at": "2026-11-06T21:01:12",
-    "drift_pct": 2.51,
+    "checked_at": "2026-11-09T13:30:58",
+    "drift_pct": 2.63,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 76.66
+    "live_price": 76.75
   },
   {
     "symbol": "CON",
@@ -169,31 +170,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-06T21:01:14",
-    "drift_pct": -3.18,
+    "checked_at": "2026-11-09T13:30:59",
+    "drift_pct": -3.12,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 42.19
-  },
-  {
-    "symbol": "DT",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 2,
-    "price_at_signal": 43.7,
-    "rsi_at_signal": 28.0,
-    "stdev_20": 0.0419,
-    "vol_ratio": 0.97,
-    "date_added": "2026-11-05",
-    "screens": [
-      "oversold_bounce"
-    ],
-    "checked_at": "2026-11-06T21:01:14",
-    "drift_pct": -0.58,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 43.44
+    "live_price": 42.22
   }
 ]
