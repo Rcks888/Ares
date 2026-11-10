@@ -4501,6 +4501,100 @@ close; `vol_ratio` is understated by 2–22%.**
 - **Done when** the review accepts M3.
 - Not pulled forward: M4.
 
+### 2026-11-06 → 10 — no fills, no closes; SGRY +13.7% moves its trail above entry; first queue overflow (DT, CVI evicted); CVI's at-close volume 40% short
+
+Four dashboards (21:32 MYT Nov 6 → 05:02 MYT Nov 10) and the monitor posts.
+No fills and no closes, so the clean sample is still 13, W 3/13, −$94.47 on
+all four. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:32 Nov 6 | `a21776a` | 8 kept; DT re-queued ($43.70, bar 11-05, conf 2, vol 0.97×) |
+| 00:10 / 01:30 Nov 7 | `6672507`, `4a78572` | no exits; TBBB peak $64.82 |
+| 05:01 Nov 7 | `1e12035` | TBBB peak $65.25; ARHS, XERS queued; **DT and CVI evicted (queue full)**; queue 10/10 |
+| 21:31 Nov 9 | `dec2ecb` | HOG, VLTO expired (age 7d); **CVI queued at conf 3** on the final 11-06 bar |
+| 00:10 / 01:30 Nov 10 | `6a86188`, `d4bcabe` | no exits; **SGRY $26.48 (+13.7%)**, trail $21.06 → $23.83; TBBB trail leaves the SL; BRZE trail $41.64 |
+| 05:02 Nov 10 | `bf467ba` | TMO new peak $719.69, trail $647.72; ARHS, BOBS, UNM dropped on drift; BOBS re-queued, TGTX queued |
+
+**Peaks and trails. All values are reproduced from the monitor and parity
+prices.**
+
+| Position | Change | Source |
+|---|---|---|
+| TBBB | peak $64.44 → $64.82 | monitor 16:10 Nov 6 |
+| TBBB | → $65.25 (2.3%) | 21:01 Nov 6, IBKR |
+| TBBB | → $65.62 (2.9%) | 13:30 Nov 9, daily fallback (the 11-06 final close) |
+| TBBB | → $67.29, **trail $60.14 → $60.56, first time above SL** | monitor 16:10 Nov 9 |
+| TBBB | → $67.44 / $67.53 (5.8%), trail $60.70 / $60.78 | monitor 17:30 / 21:01 Nov 9, IBKR |
+| SGRY | $23.40 → **$26.48 (+13.7%)**, trail $21.06 → **$23.83, above entry (locks +2.4%)** | monitor 16:10 Nov 9 |
+| BRZE | $46.09 → $46.27, trail $41.48 → $41.64 | monitor 16:10 Nov 9 |
+| TMO | $714.86 → **$719.69 (10.0%)**, trail $643.37 → $647.72 | 21:01 Nov 9, IBKR at the close |
+| AMP | unchanged: $528.50, trail $475.65 | — |
+
+- SGRY's trail no longer rests on the 4 Nov extended-hours print (known issue
+  13). SGRY is now 3.7% below its TP, $27.47. The cause of the move was not
+  checked.
+- Known issue 13 this period: 13:31 Nov 6 TMO $668.39 IBKR against the 11-05
+  close $676.94 (−1.26%). It was below the peak, so nothing changed.
+
+<a id="cvi-evicted"></a>
+**CVI: the at-close bar cost it a confluence vote (known issue 11, winter
+form). The eviction would have happened anyway.**
+- 21:01 Nov 6, bar 11-06 at the close: `mean_reversion` **conf 2**, $38.08,
+  RSI 28.0, **vol 1.21×**, below 1.5×, so no volume vote.
+- 13:31 Nov 9, the same bar, final: **conf 3**, $38.13, RSI 28.0, **vol
+  1.70×**. The final ratio is 40% above the close reading.
+  - Wider than the 6 Nov check's 2–22%. Price differed by $0.05 (0.13%).
+- The queue was full. At 21:01:51 Nov 6:
+  - ARHS and XERS (both conf 3) were queued.
+  - DT (conf 2) was evicted.
+  - CVI (conf 2) was queued and evicted in the same second.
+- The eviction sort keeps higher confluence, then the older `date_added`
+  (`tracker.py:348`). The sort is stable, so among equals the last inserted
+  goes first.
+- At conf 3 CVI would still have been evicted. The other 10 were all conf 3
+  with `date_added` ≤ 11-06, and CVI was appended last. **The lost vote
+  changed CVI's recorded confluence, not the outcome.**
+- It came back only because Monday's pre-open scan listed it again. That was
+  2.5 days later, and its drift reference was reset to $38.13.
+- Recorded only (FROZEN).
+
+**Queue.**
+- DT was dropped at 21:01 Nov 5 (drift −6.6%, $43.69). The 13:32 Nov 6 scan
+  re-queued it at $43.70, conf 2. That reset its drift reference, the
+  FFIV/FTNT pattern.
+- **First queue overflow under the current rules.** 9 kept + ARHS + XERS +
+  CVI at 21:01 Nov 6 meant 2 evictions. BOBS's 21:01 Nov 6 signal was ignored
+  because BOBS was already queued.
+- HOG and VLTO expired at 13:30 Nov 9 ("age 7d"). The age counts calendar
+  days, so the weekend counts.
+- 21:01 Nov 9:
+  - ARHS +5.8%, BOBS +7.4% and UNM +7.3% were dropped on drift.
+  - **BOBS re-queued 43 s later at $20.92** (drift reset again).
+  - TGTX was queued ($63.38, RSI 60.1, vol 2.13×).
+  - CVI re-signalled at conf 2 (vol 0.90×). It keeps its conf 3 entry.
+- Queue 8/10.
+- Every "QUEUED (n)" equals the entries kept by that report's maintenance,
+  before its insertions: 8, 9, 8, 6.
+
+**Monitor inspections: PASS, 4 cycles.**
+
+| Night | Command | Cycles |
+|---|---|---|
+| Fri 6 Nov | `inspect_monitor_cycles.py a21776a 6672507 4a78572` | `ad8ca90e`, `a8335170` |
+| Mon 9 Nov | `inspect_monitor_cycles.py dec2ecb 6a86188 d4bcabe` | `9ce4f8e9`, `5b3a6b2f` |
+
+- 5 records in each cycle.
+- Week 2–6 Nov complete: 10 cycles, all PASS.
+
+**Parity, 20 records: all MATCH.**
+
+**System.**
+- ⚠️ stall 1077 ms in 16.5 h (21:32 Nov 6) and 1930 ms in 64.5 h (21:31
+  Nov 9, weekend). Otherwise 16 ms and 611 ms.
+- Swap 278 → 286 MB, 0–11 MB paged out.
+- Cache 1100 → 1049 (Monday `prune_cache`) → 1068.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
