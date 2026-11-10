@@ -479,8 +479,8 @@
     "position_size": 149.0,
     "stop_loss": 634.25,
     "take_profit": 772.36,
-    "trailing_stop": 647.72,
-    "peak_price": 719.69,
+    "trailing_stop": 652.16,
+    "peak_price": 724.62,
     "rsi_at_entry": 71.0,
     "vol_at_entry": null,
     "strength": "unknown",
@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 49
+    "holding_days": 50
   },
   {
     "symbol": "WBD",
@@ -794,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 41
+    "holding_days": 42
   },
   {
     "symbol": "TWST",
@@ -1165,7 +1165,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 27,
+      "days_tracked": 28,
       "max_days": 30,
       "peak_after_exit": 11.76,
       "trough_after_exit": 6.64,
@@ -1173,7 +1173,7 @@
       "trough_date": "2026-11-05",
       "missed_upside_pct": 0.09,
       "avoided_downside_pct": 43.49,
-      "latest_price": 7.12
+      "latest_price": 8.25
     }
   },
   {
@@ -1241,7 +1241,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 14,
+      "days_tracked": 15,
       "max_days": 30,
       "peak_after_exit": 9.32,
       "trough_after_exit": 7.01,
@@ -1249,7 +1249,7 @@
       "trough_date": "2026-11-03",
       "missed_upside_pct": 0.11,
       "avoided_downside_pct": 24.7,
-      "latest_price": 7.39
+      "latest_price": 7.56
     }
   },
   {
@@ -1317,15 +1317,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 27,
+      "days_tracked": 28,
       "max_days": 30,
-      "peak_after_exit": 143.83,
+      "peak_after_exit": 143.95,
       "trough_after_exit": 108.82,
-      "peak_date": "2026-10-28",
+      "peak_date": "2026-11-09",
       "trough_date": "2026-10-16",
-      "missed_upside_pct": 21.51,
+      "missed_upside_pct": 21.61,
       "avoided_downside_pct": 8.07,
-      "latest_price": 138.78
+      "latest_price": 143.95
     }
   },
   {
@@ -1393,7 +1393,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 26,
+      "days_tracked": 27,
       "max_days": 30,
       "peak_after_exit": 25.02,
       "trough_after_exit": 20.48,
@@ -1401,7 +1401,7 @@
       "trough_date": "2026-11-05",
       "missed_upside_pct": 1.21,
       "avoided_downside_pct": 17.15,
-      "latest_price": 20.68
+      "latest_price": 20.56
     }
   },
   {
@@ -1473,15 +1473,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 11,
+      "days_tracked": 12,
       "max_days": 30,
-      "peak_after_exit": 114.41,
+      "peak_after_exit": 116.1,
       "trough_after_exit": 104.44,
-      "peak_date": "2026-11-06",
+      "peak_date": "2026-11-09",
       "trough_date": "2026-11-03",
-      "missed_upside_pct": 5.94,
+      "missed_upside_pct": 7.5,
       "avoided_downside_pct": 3.3,
-      "latest_price": 114.41
+      "latest_price": 116.1
     }
   },
   {
@@ -1553,15 +1553,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 18,
+      "days_tracked": 19,
       "max_days": 30,
-      "peak_after_exit": 8.39,
+      "peak_after_exit": 8.7,
       "trough_after_exit": 7.61,
-      "peak_date": "2026-11-04",
+      "peak_date": "2026-11-09",
       "trough_date": "2026-10-27",
-      "missed_upside_pct": 8.12,
+      "missed_upside_pct": 12.11,
       "avoided_downside_pct": 1.93,
-      "latest_price": 8.01
+      "latest_price": 8.7
     }
   },
   {
@@ -1610,7 +1610,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 12
+    "holding_days": 13
   },
   {
     "symbol": "RRC",
@@ -1677,7 +1677,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 5,
+      "days_tracked": 6,
       "max_days": 30,
       "peak_after_exit": 54.01,
       "trough_after_exit": 48.72,
@@ -1734,7 +1734,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 11
+    "holding_days": 12
   },
   {
     "symbol": "TBBB",
@@ -1754,8 +1754,8 @@
     "position_size": 149.0,
     "stop_loss": 60.14,
     "take_profit": 75.29,
-    "trailing_stop": 60.78,
-    "peak_price": 67.53,
+    "trailing_stop": 60.82,
+    "peak_price": 67.58,
     "rsi_at_entry": 71.3,
     "vol_at_entry": 2.62,
     "stdev_20": 0.0287,
@@ -1782,6 +1782,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 5
+    "holding_days": 6
   }
 ]

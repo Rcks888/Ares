@@ -1,47 +1,47 @@
 [
   {
-    "symbol": "OGE",
+    "symbol": "TGTX",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 50.64,
-    "rsi_at_signal": 70.7,
-    "stdev_20": 0.0126,
-    "vol_ratio": 1.95,
-    "date_added": "2026-11-04",
+    "price_at_signal": 63.38,
+    "rsi_at_signal": 60.1,
+    "stdev_20": 0.0292,
+    "vol_ratio": 2.13,
+    "date_added": "2026-11-09",
     "screens": [
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-09T21:01:23",
-    "drift_pct": 0.04,
+    "checked_at": "2026-11-10T13:31:24",
+    "drift_pct": 0.0,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 50.66
+    "live_price": 63.38
   },
   {
-    "symbol": "GSAT",
+    "symbol": "BOBS",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 84.58,
-    "rsi_at_signal": 59.8,
-    "stdev_20": 0.0081,
-    "vol_ratio": 1.79,
-    "date_added": "2026-11-04",
+    "price_at_signal": 20.92,
+    "rsi_at_signal": 75.9,
+    "stdev_20": 0.0398,
+    "vol_ratio": 1.81,
+    "date_added": "2026-11-09",
     "screens": [
       "unusual_volume",
-      "near_52w_high"
+      "big_movers_up"
     ],
-    "checked_at": "2026-11-09T21:01:24",
-    "drift_pct": 1.42,
+    "checked_at": "2026-11-10T13:31:23",
+    "drift_pct": 0.24,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 85.78
+    "live_price": 20.97
   },
   {
     "symbol": "CVI",
@@ -58,55 +58,11 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-11-09T21:01:27",
-    "drift_pct": 2.49,
+    "checked_at": "2026-11-10T13:31:22",
+    "drift_pct": 2.54,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 39.08
-  },
-  {
-    "symbol": "CON",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 43.58,
-    "rsi_at_signal": 77.3,
-    "stdev_20": 0.0241,
-    "vol_ratio": 1.71,
-    "date_added": "2026-11-04",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-09T21:01:26",
-    "drift_pct": -2.71,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 42.4
-  },
-  {
-    "symbol": "BDX",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 209.18,
-    "rsi_at_signal": 71.5,
-    "stdev_20": 0.0173,
-    "vol_ratio": 2.3,
-    "date_added": "2026-11-04",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-09T21:01:25",
-    "drift_pct": 2.89,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 215.23
+    "live_price": 39.1
   },
   {
     "symbol": "XERS",
@@ -124,7 +80,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-09T21:01:24",
+    "checked_at": "2026-11-10T13:31:23",
     "drift_pct": 4.34,
     "rsi": 50.0,
     "ema20_ok": true,
