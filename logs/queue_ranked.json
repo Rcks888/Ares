@@ -15,11 +15,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-10T13:31:24",
-    "drift_pct": 0.0,
+    "checked_at": "2026-11-10T21:00:53",
+    "drift_pct": 1.39,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 63.38
+    "live_price": 64.26
   },
   {
     "symbol": "BOBS",
@@ -37,11 +37,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-10T13:31:23",
-    "drift_pct": 0.24,
+    "checked_at": "2026-11-10T21:00:53",
+    "drift_pct": 1.51,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 20.97
+    "live_price": 21.24
   },
   {
     "symbol": "CVI",
@@ -58,11 +58,11 @@
     "screens": [
       "oversold_bounce"
     ],
-    "checked_at": "2026-11-10T13:31:22",
-    "drift_pct": 2.54,
+    "checked_at": "2026-11-10T21:00:54",
+    "drift_pct": 1.63,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 39.1
+    "live_price": 38.75
   },
   {
     "symbol": "XERS",
@@ -80,10 +80,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-10T13:31:23",
-    "drift_pct": 4.34,
+    "checked_at": "2026-11-10T21:00:54",
+    "drift_pct": 4.14,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 15.86
+    "live_price": 15.83
   }
 ]

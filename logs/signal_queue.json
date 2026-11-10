@@ -65,5 +65,22 @@
       "unusual_volume",
       "big_movers_up"
     ]
+  },
+  {
+    "symbol": "GRDN",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 49.85,
+    "rsi_at_signal": 69.9,
+    "stdev_20": 0.0395,
+    "vol_ratio": 2.14,
+    "date_added": "2026-11-10",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
   }
 ]
