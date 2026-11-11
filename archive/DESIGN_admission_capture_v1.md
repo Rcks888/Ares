@@ -64,6 +64,22 @@ unmodified `expire_queue` and `maintain_queue` bodies
 | Found while checking finding 1: incomplete writer inventory | r4 listed seven save sites. There are thirteen: `save_trades` also at `:947`, `:1142` and `monitor_trades.py:276`, and `save_ranked` at `:436`, `:488`, `:610`. None of these six changes trade or queue membership, but all are now in the inventory, and trade key fields must be unchanged across commits | §3.5, §6.2 |
 | Verification: attachments arrived as file-not-found placeholders | The reproduction inputs also ship as one self-contained file, `repro_pack.py`, which writes the audit, tests, mutation script, probe and evidence to a scratch directory and runs them | README |
 
+### Revision r6 (proposed) — alignment with the M3 review, round 1 (2026-11-11)
+
+Proposed, not yet accepted. The M3 round 1 review (candidates `39f6c81`,
+`f13be1e`) ruled on W1–W5 and found two false passes. This revision aligns
+§3.2 and §6.2 with those rulings; it changes no capture statement and no
+production file.
+
+| M3 round 1 item | Resolution | Where |
+|---|---|---|
+| Finding 1: `tracker.__dict__["open_trade"]` in a new file passed the call-site inventory | The inventory also registers every reflective or process-launching construct in production (`DYNAMIC_SITES`), exactly, and rejects a target name as a string constant. A new lookup route fails even when the name is built at run time | §6.2 item 2 |
+| Finding 2 / W5 rejected: a read before binding passed | "Bound at that point" is defined as **definitely bound on every path** to the statement (definite-assignment analysis, conservative). Applies to every read and to the target root | §3.2 |
+| W1 accepted with design alignment | Token sequence added to the §3.2 table | §3.2 |
+| W2 accepted only as an exact-registered boundary | Module infrastructure is admitted by exact registration (file, scope, sha256, count) and source review, not by the fresh-private-name rule, which stays as a necessary shape check | §3.2 |
+| W3 accepted as an explicit exception | The M2-reviewed entry-point flush wrapper, one per entrypoint, exact-registered; not a whitelist form | §3.2 |
+| W4 accepted, belongs in the contract | Depth-1 targets and container initialisation/rebinding are now in the §3.2 constraints | §3.2 |
+
 ---
 
 ## 1. Purpose and strict scope
@@ -249,6 +265,33 @@ statement's AST:
 | **Clock read** | `obs['t_enter'] = _time.time()` | the only permitted call outside the builtins above; result never read by decision code |
 | Import | `import time as _time` | module level, once |
 | Reset | `_ADMISSION_EVAL.clear()`, `_ADMISSION_EVAL.update(_new_admission_store(token))` | first statements of the two entrypoint functions only |
+| **Token sequence** (r6, W1) | `global _ADMISSION_SEQ` / `_ADMISSION_SEQ += 1` | a new private module name, in an entrypoint function before the reset; mirrors monitor's `_INVOCATION_SEQ` |
+
+r6 constraints on the table above (M3 review round 1):
+
+- **Definitely bound (W5).** "Already bound at that point" means bound on
+  every path that reaches the statement, for every name read and for the
+  target root, so a capture can never raise `NameError` or
+  `UnboundLocalError`. The check is conservative: a loop body may not run, an
+  `except`/`finally` block may start before any statement of its `try` body,
+  a `with` body may be cut short, a walrus binding does not count. A
+  non-local name must be definitely bound at module end or be an unshadowed
+  builtin; `len`/`dict`/`list`/`_time` must not be local.
+- **Depth-1 targets (W4).** Targets are `root['key']` only, because a record
+  holds production objects by reference.
+- **Containers (W4).** A counter or append acts only on a key that every
+  store factory (including an import fallback) or the record literal
+  initialises as an int or `[]`, and that no capture assignment rebinds.
+- **Module infrastructure (W2).** Module-level additions (imports, private
+  assignments, private function definitions, `try` blocks of those) are not
+  capture forms. Each is admitted only by exact registration (file, scope,
+  sha256, count) in `tools/admission_whitelist_infrastructure.py` and by
+  source review of the registered text. Fresh private names remain a
+  necessary shape check, not a side-effect proof.
+- **Entry-point flush wrapper (W3).** One per entrypoint, the M2-reviewed
+  wrapper, admitted as an explicit exception by the same exact registration;
+  its behaviour is covered by the entrypoint controls. It is not a whitelist
+  form and sets no precedent for one.
 
 Anything else in a registered statement is a verifier FAIL: method calls on
 production objects, comparisons, branches, formatting, other calls.
@@ -928,7 +971,14 @@ false for the one entry that matters: the admission flush goes inside the
    `queue_signal` and `expire_queue` must equal a registered inventory
    (today: the five sites in §2.3, `tracker.py:84` and `:626` for
    `queue_signal`, `:434` and `:953` for `expire_queue`). A new caller is
-   a FAIL.
+   a FAIL. r6: an indirect caller is a FAIL too. A target name as a string
+   constant is rejected, and every reflective or process-launching construct
+   in production (reflective builtins such as `getattr`/`vars`/`eval`,
+   namespace attributes such as `__dict__`/`sys.modules`, reflective modules
+   such as `inspect`/`importlib`/`operator`, `subprocess`, `os.system`/
+   `exec*`/`spawn*`, star imports, pandas `eval`/`query`) must equal a
+   registered table exactly. The check is syntactic; a lookup inside a C
+   extension or another third-party call is outside it.
 3. **Writer inventory and save data flow (r5):**
    - The set of `save_pending`, `save_trades`, `save_queue`, `save_ranked`
      calls, and of `open(..., 'w'|'a')` on the four state files outside those

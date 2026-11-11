@@ -10,6 +10,12 @@ value is how many times that exact call occurs there. The nine sites are the
 five of design §2.3, plus `queue_signal` (two callers) and `expire_queue`
 (two callers), as listed in §6.2.
 
+DYNAMIC_SITES lists every reflective or process-launching construct in
+production (getattr and the other reflective builtins, __dict__ and the other
+namespace attributes, reflective modules such as inspect or importlib and
+their members, subprocess, os.system/exec*/spawn*). An indirect caller needs
+one of these, so a new one fails even when no target name is visible.
+
 THIS FILE IS EVIDENCE, NOT CONFIGURATION. Any change must be reviewed
 alongside the source change that caused it.
 """
@@ -50,5 +56,52 @@ CALL_SITES = {
     ('monitor_trades.py',
      '<module>/def monitor()',
      "promote_queue(source='monitor', use_live=True)"):
+        1,
+}
+
+DYNAMIC_SITES = {
+    ('engine/admission_observer.py',
+     '<module>',
+     'import subprocess'):
+        1,
+    ('engine/admission_observer.py',
+     '<module>/def _git_commit()',
+     "subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=str(ROOT), capture_output=True, text=True, timeout=10)"):
+        1,
+    ('engine/monitor_observer.py',
+     '<module>',
+     'import subprocess'):
+        1,
+    ('engine/monitor_observer.py',
+     '<module>/def _git_commit()',
+     "subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=str(ROOT), capture_output=True, text=True, timeout=10)"):
+        1,
+    ('engine/parity_compare.py',
+     '<module>',
+     'import inspect'):
+        1,
+    ('engine/parity_compare.py',
+     '<module>/def verify_marker_contract()',
+     "getattr(tracker_module, '__file__', None)"):
+        1,
+    ('engine/parity_compare.py',
+     '<module>/def verify_marker_contract()',
+     'inspect.getsource(tracker_module)'):
+        1,
+    ('engine/parity_hook.py',
+     '<module>/def _lineage()',
+     'import subprocess'):
+        1,
+    ('engine/parity_hook.py',
+     '<module>/def _lineage()',
+     "subprocess.run(['git', '-C', str(root), 'rev-parse', '--short', 'HEAD'], capture_output=True, text=True, timeout=10)"):
+        1,
+    ('engine/parity_hook.py',
+     '<module>/def _packets()',
+     "getattr(tracker, '_LAST_EVAL', None)"):
+        1,
+    ('engine/parity_hook.py',
+     '<module>/def _results()',
+     "getattr(tracker, '_LAST_EVAL', None)"):
         1,
 }

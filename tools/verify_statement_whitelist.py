@@ -33,15 +33,30 @@ Statements inside a function (capture statements) must be one of:
                      entry function before the reset (listed for review: not in
                      the §3.2 table)
 
-  v is a constant, a bound name, a str/name subscript of a read, an attribute
+  v is a constant, a definitely bound name, a str/name subscript of a read, an attribute
   of a name, the clock read _time.time(), or len/dict/list of a name or a
   constant-key subscript. Nothing else: no other call, method call,
   comparison, operator, formatting, branch or loop.
 
+Definitely bound (W5, M3 review round 1 finding 2). Every name a capture
+reads, and the root of its target, must be bound on every path that reaches
+the statement, so the capture cannot raise NameError or UnboundLocalError. A
+name local to the function must be definitely bound before the statement
+(class _Definite: a loop body may not run, an except or finally block may
+start before any statement of its try body, a with body may be cut short, a
+walrus is ignored); any other name must be definitely bound at module end or
+be a builtin the module does not rebind. len/dict/list and _time must not be
+local. In the entry-point block the module body is the flow.
+
 Module-level additions must be imports, assignments, function definitions or
 try blocks of those, and every name they bind must be private and absent from
 the base file, bound by one statement only. `_time` must be bound by
-`import time as _time`.
+`import time as _time`. That shape rule is necessary but does not admit a
+statement (W2): every module-level addition, and the entry-point flush
+wrapper (W3), must also be registered exactly, by (file, scope, sha256, count),
+in tools/admission_whitelist_infrastructure.py (`--register` prints it), and
+each registered entry is source-reviewed. `_p = save_trades([])` passes the
+shape rule and fails here.
 
 Because no name introduced by the capture appears in the base, and
 verify_recorder_isolation.py proves every other statement equals the base, no
@@ -49,8 +64,9 @@ production statement can read the store, a record or the clock value.
 
 The entry-point block (`if __name__ == '__main__'`) may contain store
 assignments and exactly one other added statement, the flush wrapper. The
-wrapper is outside §3.2; the report and monitor admission entrypoint controls
-cover it.
+wrapper is outside §3.2: it is the M2-reviewed wrapper, admitted only by its
+exact registration (W3); the report and monitor admission entrypoint controls
+cover its behaviour.
 
 Two rules are stricter than the §3.2 table. Targets are one level deep
 (root['key']), because a record holds production objects by reference. A
@@ -59,12 +75,13 @@ an import fallback) or the record literal initialises as an int or [], and
 that no capture assignment rebinds in any of the three files.
 
 Exit 0 only if every addition matches; 1 on any violation; 2 if a base is
-missing or its digest differs.
+missing or its digest differs, or the infrastructure table cannot be loaded.
 """
 
 import ast
 import builtins
 import hashlib
+import importlib
 import os
 import sys
 
@@ -73,6 +90,8 @@ DEFAULT_ROOT = os.path.dirname(HERE)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import verify_recorder_isolation as _iso                    # noqa: E402
+
+INFRA_TABLE = "admission_whitelist_infrastructure"
 
 STORE = "_ADMISSION_EVAL"
 FACTORY = "_new_admission_store"
@@ -184,6 +203,142 @@ def _bound_in(node):
     return out
 
 
+def _local_names(fn):
+    """Names local to a function: bound in its own scope (not in a nested
+    def, class, lambda or comprehension) and not declared global."""
+    out, declared = set(), set()
+    a = fn.args
+    out |= {x.arg for x in a.posonlyargs + a.args + a.kwonlyargs}
+    out |= {x.arg for x in (a.vararg, a.kwarg) if x}
+
+    def visit(node):
+        for c in ast.iter_child_nodes(node):
+            if isinstance(c, (ast.FunctionDef, ast.AsyncFunctionDef,
+                              ast.ClassDef)):
+                out.add(c.name)
+                continue
+            if isinstance(c, (ast.Lambda, ast.ListComp, ast.SetComp,
+                              ast.DictComp, ast.GeneratorExp)):
+                continue
+            if isinstance(c, ast.Name) and isinstance(c.ctx, (ast.Store,
+                                                              ast.Del)):
+                out.add(c.id)
+            elif isinstance(c, ast.ExceptHandler) and c.name:
+                out.add(c.name)
+            elif isinstance(c, ast.alias):
+                out.add(c.asname or c.name.split(".", 1)[0])
+            elif isinstance(c, (ast.Global, ast.Nonlocal)):
+                declared.update(c.names)
+            visit(c)
+
+    for s in fn.body:
+        if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef,
+                          ast.ClassDef)):
+            out.add(s.name)
+        elif isinstance(s, (ast.Global, ast.Nonlocal)):
+            declared.update(s.names)
+        else:
+            visit(ast.Module(body=[s], type_ignores=[]))
+    return out - declared
+
+
+def _targets(t):
+    if isinstance(t, ast.Name):
+        return {t.id}
+    if isinstance(t, (ast.Tuple, ast.List)):
+        return set().union(set(), *map(_targets, t.elts))
+    if isinstance(t, ast.Starred):
+        return _targets(t.value)
+    return set()
+
+
+_TERMINAL = (ast.Return, ast.Raise, ast.Continue, ast.Break)
+
+
+class _Definite:
+    """Names definitely bound before each statement of a body (W5, review
+    round 1 finding 2). Conservative: a loop body may not run, an except
+    handler or finally block may start before any statement of its try body,
+    a with body may be cut short by a suppressing manager, and a walrus
+    binding is ignored. A branch that ends in return, raise, continue or
+    break does not reach the code after it.
+
+    at[unparse(stmt)] lists the bound set at every occurrence of stmt."""
+
+    def __init__(self, body, params=()):
+        self.at = {}
+        self.end, _live = self.block(body, frozenset(params))
+
+    def block(self, stmts, d):
+        for s in stmts:
+            self.at.setdefault(ast.unparse(s), []).append(d)
+            d, live = self.stmt(s, d)
+            if not live:
+                return d, False
+        return d, True
+
+    def stmt(self, s, d):
+        if isinstance(s, _TERMINAL):
+            return d, False
+        if isinstance(s, ast.Assign):
+            return d | set().union(*map(_targets, s.targets)), True
+        if isinstance(s, ast.AugAssign) or (isinstance(s, ast.AnnAssign)
+                                            and s.value is not None):
+            return d | _targets(s.target), True
+        if isinstance(s, (ast.FunctionDef, ast.AsyncFunctionDef,
+                          ast.ClassDef)):
+            return d | {s.name}, True
+        if isinstance(s, (ast.Import, ast.ImportFrom)):
+            return d | {a.asname or a.name.split(".", 1)[0]
+                        for a in s.names}, True
+        if isinstance(s, ast.Delete):
+            return d - set().union(*map(_targets, s.targets)), True
+        if isinstance(s, ast.If):
+            outs = [o for o, live in (self.block(s.body, d),
+                                      self.block(s.orelse, d)) if live]
+            return (frozenset.intersection(*outs), True) if outs else (d, False)
+        if isinstance(s, (ast.For, ast.AsyncFor)):
+            self.block(s.body, d | _targets(s.target))
+            self.block(s.orelse, d)
+            return d, True
+        if isinstance(s, ast.While):
+            self.block(s.body, d)
+            self.block(s.orelse, d)
+            return d, True
+        if isinstance(s, (ast.With, ast.AsyncWith)):
+            v = set().union(set(), *(_targets(i.optional_vars)
+                                     for i in s.items if i.optional_vars))
+            self.block(s.body, d | v)
+            return d | v, True
+        if isinstance(s, (ast.Try, getattr(ast, "TryStar", ast.Try))):
+            body, live = self.block(s.body, d)
+            outs = []
+            if live:
+                o, olive = self.block(s.orelse, body)
+                if olive:
+                    outs.append(o)
+            for h in s.handlers:
+                named = {h.name} if h.name else set()
+                o, hlive = self.block(h.body, d | named)
+                if hlive:
+                    outs.append(o - named)
+            fin, flive = self.block(s.finalbody, d)
+            if not (outs and flive):
+                return d, False
+            return frozenset.intersection(*outs) | (fin - d), True
+        if isinstance(s, ast.Match):
+            for c in s.cases:
+                self.block(c.body, d)
+            return d, True
+        return d, True
+
+    def before(self, stmt):
+        """Bound set before stmt, intersected over its occurrences; None if
+        stmt does not occur."""
+        sets = self.at.get(ast.unparse(stmt))
+        return frozenset.intersection(*sets) if sets else None
+
+
 def _chain_root(node):
     """Root name of a subscript chain with str-constant keys, else None."""
     if not isinstance(node, ast.Subscript):
@@ -257,6 +412,39 @@ class _FileCheck:
         self.record_inits = {}
         self.container_uses = []
         self.factories = _factories(after_tree)
+        self.shadowing = set()
+        self.infrastructure = []
+        self.module_flow = _Definite(after_tree.body)
+        self.module_definite = self.module_flow.end | set(self.after_functions)
+        self.flows = {}
+
+    def bound_before(self, scope, stmt, fname):
+        """Names a capture may read at its own position (W5): a local name
+        only if it is definitely bound on every path to the statement; any
+        other name only if it is definitely bound at module end (functions
+        run after import) or a builtin that the module does not rebind.
+        In the entry-point block the module flow itself is used. Returns
+        (bound, locals) or None if the statement cannot be located."""
+        if fname is None:
+            d = self.module_flow.before(stmt)
+            if d is None:
+                return None
+            mod_locals = _bound_in(self.after)
+            return d | (self.builtins - mod_locals), mod_locals
+        fn = self.after_functions.get(fname)
+        if fn is None:
+            return None
+        if fname not in self.flows:
+            a = fn.args
+            params = {x.arg for x in a.posonlyargs + a.args + a.kwonlyargs}
+            params |= {x.arg for x in (a.vararg, a.kwarg) if x}
+            self.flows[fname] = (_Definite(fn.body, params), _local_names(fn))
+        flow, local = self.flows[fname]
+        d = flow.before(stmt)
+        if d is None:
+            return None
+        outer = (self.module_definite | (self.builtins - self.module_bound))
+        return (d & local) | (outer - local), local
 
     def fail(self, scope, src, why):
         self.problems.append(
@@ -275,14 +463,14 @@ class _FileCheck:
         if isinstance(node, ast.Name):
             if node.id in bound:
                 return None
-            return f"name {node.id!r} is not bound"
+            return f"name {node.id!r} is not definitely bound here"
         if isinstance(node, ast.Subscript):
             s = node.slice
             if not (isinstance(s, ast.Constant) and type(s.value) in (str, int)
                     or isinstance(s, ast.Name)):
                 return f"subscript key {ast.unparse(s)!r} is not a constant or name"
             if isinstance(s, ast.Name) and s.id not in bound:
-                return f"name {s.id!r} is not bound"
+                return f"name {s.id!r} is not definitely bound here"
             if not isinstance(node.value, (ast.Name, ast.Subscript,
                                            ast.Attribute)):
                 return f"subscript of {type(node.value).__name__}"
@@ -305,11 +493,15 @@ class _FileCheck:
         if (isinstance(f, ast.Attribute) and f.attr == "time"
                 and isinstance(f.value, ast.Name)
                 and f.value.id == CLOCK_MODULE):
+            if CLOCK_MODULE in self.shadowing:
+                return f"{CLOCK_MODULE} is local to this function"
             if node.args or node.keywords:
                 return "clock read with arguments"
             self.count("clock read")
             return None
         if isinstance(f, ast.Name) and f.id in BUILTIN_READS:
+            if f.id in self.shadowing:
+                return f"{f.id} is local to this function"
             if node.keywords or len(node.args) != 1:
                 return f"{f.id}() must take exactly one positional argument"
             a = node.args[0]
@@ -393,8 +585,14 @@ class _FileCheck:
         roots = {STORE} | records
         if isinstance(stmt, ast.Expr) and (self._is_reset(stmt, "clear")
                                            or self._is_reset(stmt, "update")):
+            c = stmt.value
+            used = {STORE} | ({FACTORY, c.args[0].args[0].id}
+                              if c.args else set())
             if fname not in self.entry_functions:
                 self.fail(scope, src, "reset outside an entry function")
+            elif used - bound:
+                self.fail(scope, src, f"name {sorted(used - bound)[0]!r} is "
+                          "not definitely bound here")
             else:
                 self.count("reset")
             return
@@ -417,6 +615,10 @@ class _FileCheck:
                 n = stmt.target.id
                 if (fname in self.entry_functions and n.startswith("_")
                         and n not in self.base_names):
+                    if n not in bound:
+                        self.fail(scope, src, f"name {n!r} is not definitely "
+                                  "bound at module level")
+                        return
                     self.count("token sequence")
                 else:
                     self.fail(scope, src, "counter on a name is permitted "
@@ -424,6 +626,10 @@ class _FileCheck:
                               "function")
                 return
             rk = _depth1(stmt.target)
+            if rk and rk[0] in roots and rk[0] not in bound:
+                self.fail(scope, src, f"root {rk[0]!r} is not definitely "
+                          "bound here")
+                return
             if rk and rk[0] in roots:
                 self.container_uses.append(("int", fname, rk, scope, src))
                 self.count("counter")
@@ -469,6 +675,10 @@ class _FileCheck:
                           "with the store or a record of this function as "
                           "root")
                 return
+            if rk[0] not in bound:
+                self.fail(scope, src, f"root {rk[0]!r} is not definitely "
+                          "bound here")
+                return
             why = self._value(stmt.value, bound)
             if why:
                 self.fail(scope, src, f"assigned value: {why}")
@@ -488,6 +698,10 @@ class _FileCheck:
                 if c.keywords or len(c.args) != 1:
                     self.fail(scope, src, "append takes exactly one "
                               "positional argument")
+                    return
+                if rk[0] not in bound:
+                    self.fail(scope, src, f"root {rk[0]!r} is not definitely "
+                              "bound here")
                     return
                 a = c.args[0]
                 elts = a.elts if isinstance(a, ast.Tuple) else [a]
@@ -534,24 +748,33 @@ def check_pair(root, rel, base_rel, pinned, entry_functions):
 
     binders = {}
     entry_other = []
-    for scope, _dig, src in aligned.additions:
+    for scope, dig, src in aligned.additions:
         stmt = ast.parse(src).body[0]
         fname = _function_of(scope)
         if scope == "<module>":
+            fc.infrastructure.append((scope, dig, src))
             fc.check_module(scope, stmt, src, binders)
         elif scope == ENTRY or scope.startswith(ENTRY + "/"):
             if isinstance(stmt, ast.Assign):
-                fc.check_capture(scope, stmt, src, None, set(),
-                                 fc.module_bound | fc.builtins
-                                 | _bound_in(after_tree), True)
+                located = fc.bound_before(scope, stmt, None)
+                if located is None:
+                    fc.fail(scope, src, "statement not located in the "
+                            "module body")
+                    continue
+                fc.shadowing = set()
+                fc.check_capture(scope, stmt, src, None, set(), located[0],
+                                 True)
             else:
+                fc.infrastructure.append((scope, dig, src))
                 entry_other.append((scope, src))
         elif fname:
-            fn = fc.after_functions.get(fname)
-            bound = (fc.module_bound | fc.builtins
-                     | (_bound_in(fn) if fn is not None else set()))
+            located = fc.bound_before(scope, stmt, fname)
+            if located is None:
+                fc.fail(scope, src, f"statement not located in {fname}()")
+                continue
+            fc.shadowing = located[1]
             fc.check_capture(scope, stmt, src, fname,
-                             records.get(fname, set()), bound, False)
+                             records.get(fname, set()), located[0], False)
         else:
             fc.fail(scope, src, "addition in a module-level compound "
                     "statement")
@@ -622,10 +845,84 @@ def check_containers(checks):
     return problems
 
 
+def _load_infrastructure():
+    try:
+        return importlib.import_module(INFRA_TABLE).INFRASTRUCTURE
+    except (ImportError, AttributeError):
+        return None
+
+
+def _label(src):
+    lines = [x.strip() for x in src.splitlines() if x.strip()]
+    if lines[0] == "try:" and len(lines) > 1:
+        return f"try: {lines[1]}"[:70]
+    return lines[0][:70]
+
+
+def check_infrastructure(checks, table):
+    """W2 and W3 (review round 1): module-level additions and the
+    entry-point flush wrapper are accepted only as an exact, separately
+    source-reviewed registration. Each (file, scope, digest) must be in
+    INFRASTRUCTURE with its count; a fresh private name alone is not enough,
+    because it says nothing about side effects (`_p = save_trades([])`)."""
+    problems = []
+    found, labels = {}, {}
+    for fc in checks:
+        for scope, dig, src in fc.infrastructure:
+            key = (fc.rel, scope, dig)
+            found[key] = found.get(key, 0) + 1
+            labels[key] = _label(src)
+    rels = {fc.rel for fc in checks}
+    for key, n in sorted(found.items()):
+        want = table.get(key)
+        if want is None:
+            problems.append(f"UNREGISTERED INFRASTRUCTURE {key[0]} [{key[1]}]"
+                            f"\n    {labels[key]}  ({n}x)  {key[2]}")
+        elif want[1] != n:
+            problems.append(f"INFRASTRUCTURE COUNT MISMATCH {key[0]} "
+                            f"[{key[1]}]\n    {labels[key]}  registered "
+                            f"{want[1]}x, found {n}x")
+    for key, (label, n) in sorted(table.items()):
+        if key[0] in rels and key not in found:
+            problems.append(f"REGISTERED INFRASTRUCTURE MISSING {key[0]} "
+                            f"[{key[1]}]\n    {label}  registered {n}x, "
+                            "found 0x")
+    return problems
+
+
+def register(root):
+    checks = []
+    for rel, base_rel, pinned, entries in PAIRS:
+        summary, problems, fc = check_pair(root, rel, base_rel, pinned,
+                                           entries)
+        if summary is None:
+            for p in problems:
+                print(f"# BASE: {p}")
+            return 2
+        checks.append(fc)
+    found, srcs = {}, {}
+    for fc in checks:
+        for scope, dig, src in fc.infrastructure:
+            key = (fc.rel, scope, dig)
+            found[key] = found.get(key, 0) + 1
+            srcs[key] = src
+    print("INFRASTRUCTURE = {")
+    for key, n in sorted(found.items()):
+        label = _label(srcs[key])
+        print(f"    ({key[0]!r},\n     {key[1]!r},\n     {key[2]!r}):\n"
+              f"        ({label!r}, {n}),")
+    print("}")
+    return 0
+
+
 def main(root):
     total_problems = []
     checks = []
     missing = False
+    infra = _load_infrastructure()
+    if infra is None:
+        print("  RESULT : NOT PROVEN -- infrastructure table not loadable")
+        return 2
     print(f"  root       : {root}")
     for rel, base_rel, pinned, entries in PAIRS:
         summary, problems, fc = check_pair(root, rel, base_rel, pinned,
@@ -645,6 +942,10 @@ def main(root):
         total_problems.extend(problems)
     if not missing:
         total_problems.extend(check_containers(checks))
+        total_problems.extend(check_infrastructure(checks, infra))
+        n_infra = sum(len(fc.infrastructure) for fc in checks)
+        print(f"  infrastructure : {n_infra} found, "
+              f"{sum(n for _l, n in infra.values())} registered")
     for p in total_problems:
         print(f"  PROBLEM: {p}")
     if missing:
@@ -660,6 +961,8 @@ def main(root):
 
 if __name__ == "__main__":
     argv = sys.argv[1:]
+    if argv and argv[0] == "--register":
+        sys.exit(register(argv[1] if len(argv) > 1 else DEFAULT_ROOT))
     if len(argv) > 1:
         print(__doc__)
         sys.exit(2)

@@ -90,7 +90,8 @@ def control_00_real_tree_passes():
             "module addition 7, reset 2, store assignment 6, token sequence 2",
             "monitor_trades.py: 10 additions, 0 deletions",
             "forms    : entry-point flush wrapper 1, module addition 3, "
-            "reset 2, store assignment 4"):
+            "reset 2, store assignment 4",
+            "infrastructure : 15 found, 15 registered"):
         assert line in out, f"missing {line!r}:\n{out}"
 
 
@@ -238,7 +239,7 @@ def control_21_builtin_read_of_an_expression():
 def control_22_unbound_name():
     code, out = _run(lambda t: _replace_once(
         t, TRACKER, FILLED, '            fe["outcome"] = probe_value\n'))
-    _rejected(out, code, "name 'probe_value' is not bound")
+    _rejected(out, code, "name 'probe_value' is not definitely bound here")
 
 
 def control_23_second_statement_in_the_entry_point_block():
@@ -253,6 +254,77 @@ def control_24_token_sequence_outside_an_entry_function():
         t, TRACKER, PENDING_SEEN, "    _ADMISSION_SEQ += 1\n"))
     _rejected(out, code, "counter on a name is permitted only for a new "
               "private token name in an entry function")
+
+
+POST_LOOP = '    fp["pending_save_attempted"] = True\n'
+
+
+def control_25_review_probe_read_before_binding():
+    code, out = _run(lambda t: _after(
+        t, TRACKER, '        fp["pending_seen"] = 0\n',
+        '        fp["probe"] = shares\n'))
+    _rejected(out, code, "name 'shares' is not definitely bound here")
+
+
+def control_26_handler_reads_a_name_bound_in_the_try_body():
+    code, out = _run(lambda t: _after(
+        t, TRACKER, '            fe["exception"] = e\n',
+        '            fe["entry_seen"] = entry_price\n'))
+    _rejected(out, code, "name 'entry_price' is not definitely bound here")
+
+
+def control_27_name_bound_on_both_branches_is_accepted():
+    code, out = _run(lambda t: _after(
+        t, TRACKER, '            take_profit = entry_price * (1 + tp_pct)\n',
+        '            fe["tp_pct"] = tp_pct\n'))
+    assert code == 0, f"tp_pct is bound on both branches, got {code}:\n{out}"
+
+
+def control_28_loop_variable_read_after_the_loop():
+    code, out = _run(lambda t: _replace_once(
+        t, TRACKER, POST_LOOP, '    fp["last_symbol"] = sig\n' + POST_LOOP))
+    _rejected(out, code, "name 'sig' is not definitely bound here")
+
+
+def control_29_record_root_not_bound_after_the_loop():
+    code, out = _run(lambda t: _replace_once(
+        t, TRACKER, POST_LOOP, '    fe["late"] = 1\n' + POST_LOOP))
+    _rejected(out, code, "root 'fe' is not definitely bound here")
+
+
+def control_30_entry_block_reads_a_name_bound_later():
+    code, out = _run(lambda t: _after(
+        t, REPORT, 'if __name__ == "__main__":\n',
+        '    _ADMISSION_EVAL["early_summary"] = _adm_summary\n'))
+    _rejected(out, code, "name '_adm_summary' is not definitely bound here")
+
+
+def control_31_review_probe_module_level_side_effect():
+    code, out = _run(lambda t: _append(
+        t, TRACKER, "\n_private_probe = save_trades([])\n"))
+    _rejected(out, code, "UNREGISTERED INFRASTRUCTURE engine/tracker.py")
+
+
+def control_32_registered_flush_wrapper_changed():
+    code, out = _run(lambda t: _replace_once(
+        t, REPORT, 'decision_path="report",', 'decision_path="report2",'))
+    _rejected(out, code, "UNREGISTERED INFRASTRUCTURE daily_report.py "
+                         "[<module>/if __name__ == '__main__']")
+    _rejected(out, code, "REGISTERED INFRASTRUCTURE MISSING daily_report.py")
+
+
+def control_33_registered_module_addition_changed():
+    code, out = _run(lambda t: _replace_once(
+        t, REPORT, "_ADMISSION_SEQ = 0", "_ADMISSION_SEQ = 1"))
+    _rejected(out, code, "UNREGISTERED INFRASTRUCTURE daily_report.py "
+                         "[<module>]")
+    _rejected(out, code, "REGISTERED INFRASTRUCTURE MISSING daily_report.py")
+
+
+def control_34_builtin_read_shadowed_by_a_local():
+    code, out = _run(lambda t: _replace_once(
+        t, TRACKER, POST_LOOP, '    len = list\n' + POST_LOOP))
+    _rejected(out, code, "len is local to this function")
 
 
 CONTROLS = [v for k, v in sorted(globals().items()) if k.startswith("control_")]
@@ -300,6 +372,38 @@ MUTANTS = (
      "    if len(entry_other) > 1:",
      "    if False:",
      "control_23_second_statement_in_the_entry_point_block"),
+    ("definite binding in functions",
+     "        return (d & local) | (outer - local), local",
+     "        return local | outer, local",
+     "control_25_review_probe_read_before_binding"),
+    ("handler starts before the try body",
+     "                o, hlive = self.block(h.body, d | named)",
+     "                o, hlive = self.block(h.body, body | named)",
+     "control_26_handler_reads_a_name_bound_in_the_try_body"),
+    ("loop body may not run",
+     "            self.block(s.body, d | _targets(s.target))\n"
+     "            self.block(s.orelse, d)\n"
+     "            return d, True",
+     "            d2, _l = self.block(s.body, d | _targets(s.target))\n"
+     "            self.block(s.orelse, d)\n"
+     "            return d2, True",
+     "control_28_loop_variable_read_after_the_loop"),
+    ("record root bound",
+     "                return\n            if rk[0] not in bound:",
+     "                return\n            if False:",
+     "control_29_record_root_not_bound_after_the_loop"),
+    ("module flow in the entry block",
+     "            return d | (self.builtins - mod_locals), mod_locals",
+     "            return d | mod_locals | self.builtins, mod_locals",
+     "control_30_entry_block_reads_a_name_bound_later"),
+    ("infrastructure registration",
+     "        total_problems.extend(check_infrastructure(checks, infra))",
+     "        total_problems.extend([])",
+     "control_31_review_probe_module_level_side_effect"),
+    ("local shadowing of builtin reads",
+     "            if f.id in self.shadowing:",
+     "            if False:",
+     "control_34_builtin_read_shadowed_by_a_local"),
 )
 
 
@@ -309,8 +413,9 @@ def _run_mutants():
         source = fh.read()
     results = []
     with tempfile.TemporaryDirectory() as tmp:
-        shutil.copy(os.path.join(ROOT, "tools", "verify_recorder_isolation.py"),
-                    tmp)
+        for helper in ("verify_recorder_isolation.py",
+                       "admission_whitelist_infrastructure.py"):
+            shutil.copy(os.path.join(ROOT, "tools", helper), tmp)
         for i, (label, old, new, must_fail) in enumerate(MUTANTS, 1):
             name = f"mutant_{i:02d}_{label.replace(' ', '_')}"
             if source.count(old) != 1:
