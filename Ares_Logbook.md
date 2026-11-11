@@ -4655,6 +4655,58 @@ prices.**
 **System.** All ✅. Stall 724 ms in 16.5 h, then 139 ms in 7.5 h. Swap 286 MB,
 0–3 MB paged out. Cache 1083 → 1100.
 
+### 2026-11-11 — step 3, implementation M3: review rounds 1 and 2; round 2 approved; persistence controls built
+
+- **Commits** on `recorder/admission-v1`, pushed, not merged, not active:
+  - `39f6c81`: call-site inventory (design §6.2 ext. 2), 13/13.
+  - `f13be1e`: statement whitelist (ext. 1), 34/34.
+  - `4d750d5`: writer inventory and save data flow (ext. 3), 41/41.
+  - `1b4efb5`: round 1 fixes; design r6 proposed.
+  - `f6e0776`: design r6 marked accepted.
+  - `a00b185`: persistence, save-chain, C-HANDOFF and C-ENUM controls.
+- **M3 review round 1** (`review_bundle_admission_m3_v1`, ext. 1 and 2,
+  W1–W5): **not approved**, two blocking false passes.
+  1. `tracker.__dict__["open_trade"]` in a new production file passed the
+     call-site inventory.
+  2. W5 rejected: a capture reading `shares` before it is assigned passed
+     the whitelist ("bound somewhere in the function" is not "bound at that
+     point").
+  - W1 accepted with design alignment; W2 only as an exact-registered,
+    source-reviewed boundary (the reviewer showed
+    `_private_probe = save_trades([])` passed the whitelist alone); W3 as an
+    explicit exception; W4 accepted.
+- **Round 1 fixes** (`1b4efb5`):
+  - Call-site inventory registers every reflective or process-launching
+    construct in production exactly (`DYNAMIC_SITES`, 11) and rejects a
+    target name as a string constant: 35/35 (always-pass stub 3/35,
+    always-fail 0/35).
+  - Whitelist: every read and target root must be definitely bound on every
+    path; module infrastructure and flush wrappers by exact registration
+    (15 entries): 51/51 (stubs 17/51, 16/51).
+  - Design r6: §3.2 token-sequence row and W2–W5 constraints, §6.2 item 2.
+- **M3 review round 2** (`review_bundle_admission_m3_v2`): **approved for
+  the requested scope.** Both round 1 findings closed, r6 accepted as
+  written, ext. 3 accepted with X1–X7 as documented boundaries. No blocking
+  finding. Reviewer reproduced the 36-file pack (10/10) and the full repo
+  run at `1b4efb5` (37 commands, 0 failed). Not M3 acceptance.
+- **Persistence controls** (`a00b185`, the M3 remainder, not yet reviewed):
+  - `tools/admission_persistence.py`: the §3.5 per-file check as one total
+    table (membership and trade counts), the §4.2 queue check, the §4.4
+    fill composition, save-chain reduction with `carrier_after_raise`,
+    committed-state readers. Inspection side only; M4 reuses it.
+  - `tests/run_persistence_controls.py` 61/61: C-ENUM over 36 + 48 + 36 + 9
+    + 864 tuples against hand-written tables (row deletion and overlap
+    detected); the ten save sites × three failure points in a scratch git
+    repo; C-HANDOFF in-process and through the real report entry point;
+    10 module mutants; always-consistent stub 21/49, always-FAIL 6/49.
+  - Full repo run with the new files: 37 commands, all exit 0.
+  - Questions for round 3: Y1–Y8 (verdict scale, a §7/§3.5 wording
+    conflict on the partial `:485` case, and six interpretations).
+  - Deferred to M4: `concurrent_runs`, `baseline_ambiguous`, trade links
+    over existing membership across runs, naming an `expiry_parse_failed`
+    removal.
+- **Next:** round 3 bundle for M3 acceptance.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
