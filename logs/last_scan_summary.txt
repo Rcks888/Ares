@@ -1,6 +1,6 @@
 candidates_screened:103
 signals_found:1
-signal_details:CVI | mean_reversion | conf2 | range
-  Price: $38.71 | RSI: 28.1 | Vol: 1.01x
-  Buy: $150 (3.9 shares)
-  SL: $34.99 | TP: $42.58 (+10%) | TS: 10%
+signal_details:NWE | momentum_breakout | conf3 | uptrend
+  Price: $84.97 | RSI: 83.4 | Vol: 1.9x
+  Buy: $150 (1.8 shares)
+  SL: $83.34 | TP: $100.26 (+18%) | TS: 10%

@@ -1685,7 +1685,7 @@
       "trough_date": "2026-11-06",
       "missed_upside_pct": 4.07,
       "avoided_downside_pct": 6.13,
-      "latest_price": 51.24
+      "latest_price": 51.85
     }
   },
   {
@@ -1706,8 +1706,8 @@
     "position_size": 149.0,
     "stop_loss": 35.08,
     "take_profit": 54.04,
-    "trailing_stop": 41.78,
-    "peak_price": 46.42,
+    "trailing_stop": 41.83,
+    "peak_price": 46.48,
     "rsi_at_entry": 80.4,
     "vol_at_entry": 1.6,
     "stdev_20": 0.117,

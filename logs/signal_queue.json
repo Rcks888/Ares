@@ -17,39 +17,6 @@
     ]
   },
   {
-    "symbol": "TGTX",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 63.38,
-    "rsi_at_signal": 60.1,
-    "stdev_20": 0.0292,
-    "vol_ratio": 2.13,
-    "date_added": "2026-11-09",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
-    "symbol": "CVI",
-    "strategy": "mean_reversion",
-    "trigger": "oversold+volume+sma_support",
-    "regime": "range",
-    "category": "reversal_candidate",
-    "confluence": 3,
-    "price_at_signal": 38.13,
-    "rsi_at_signal": 28.0,
-    "stdev_20": 0.0521,
-    "vol_ratio": 1.7,
-    "date_added": "2026-11-06",
-    "screens": [
-      "oversold_bounce"
-    ]
-  },
-  {
     "symbol": "BOBS",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -67,20 +34,36 @@
     ]
   },
   {
-    "symbol": "XERS",
+    "symbol": "TGTX",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 15.2,
-    "rsi_at_signal": 78.2,
-    "stdev_20": 0.0714,
-    "vol_ratio": 2.47,
-    "date_added": "2026-11-06",
+    "price_at_signal": 63.38,
+    "rsi_at_signal": 60.1,
+    "stdev_20": 0.0292,
+    "vol_ratio": 2.13,
+    "date_added": "2026-11-09",
     "screens": [
       "unusual_volume",
       "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "NWE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "volume_spike",
+    "confluence": 3,
+    "price_at_signal": 84.97,
+    "rsi_at_signal": 83.4,
+    "stdev_20": 0.0096,
+    "vol_ratio": 1.9,
+    "date_added": "2026-11-11",
+    "screens": [
+      "unusual_volume"
     ]
   }
 ]
