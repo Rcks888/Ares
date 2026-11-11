@@ -4595,6 +4595,66 @@ form). The eviction would have happened anyway.**
 - Swap 278 → 286 MB, 0–11 MB paged out.
 - Cache 1100 → 1049 (Monday `prune_cache`) → 1068.
 
+### 2026-11-10 → 11 — no fills, no closes; TMO's trail moves on a pre-open IBKR print (known issue 13); four 4 Nov entries expire; GRDN queued
+
+Two dashboards (21:32 MYT Nov 10 and 05:01 MYT Nov 11) and the monitor posts.
+No fills and no closes, so the clean sample is still 13, W 3/13, −$94.47 on
+both. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:32 Nov 10 | `561edf6` | OGE, GSAT, CON, BDX expired ("age 6d exceeded max 5d", queued 11-04); 4 kept; **TMO peak $724.62 from a pre-open IBKR price** |
+| 00:10 / 01:30 Nov 11 | `102897b`, `da6eccd` | no exits; SGRY peak $26.65 → $26.69 |
+| 05:01 Nov 11 | `ba8fcac` | 4 kept; TBBB peak $67.84; **GRDN queued** ($49.85, conf 3) |
+
+**Peaks and trails. All values are reproduced from the monitor and parity
+prices.**
+
+| Position | Change | Source |
+|---|---|---|
+| TMO | $719.69 → **$724.62 (10.7%)**, trail $647.72 → **$652.16** | 13:31 Nov 10, IBKR, **before the open** |
+| TBBB | $67.53 → $67.58 (5.9%), trail $60.78 → $60.82 | 13:31 Nov 10, daily fallback (the 11-09 final close) |
+| SGRY | $26.48 → $26.65 / **$26.69 (14.6%)**, trail $23.83 → $23.98 / $24.02 | monitor 16:10 / 17:30 Nov 10 |
+| TBBB | → **$67.84 (6.3%)**, trail → $61.06 | 21:00 Nov 10, IBKR at the close |
+| AMP, BRZE | unchanged: $528.50 / $46.27, trails $475.65 / $41.64 | — |
+
+- **Known issue 13 moved a peak this time.** TMO's 13:31 IBKR price $724.62
+  is 0.69% above the 11-09 close ($719.69). After it, the monitor saw $716.25
+  and $716.06, and the close read $719.00. TMO's trail now rests on a
+  pre-open print, as SGRY's did on 4 Nov. Whether the regular session reached
+  $724.62 was not checked.
+- AMP (13:31) and TBBB (13:31) fell back to the daily close. TBBB's peak
+  moved by $0.05 on it: the 11-09 final close was above the 21:00 Nov 9
+  at-close read.
+- At 21:00 Nov 10, four of the five held positions were evaluated on the
+  11-09 bar (only SGRY on 11-10). This is the 20 h cache pattern already
+  recorded for `check_open_trades` (2 Nov entry). It affects RSI and
+  divergence, not the price.
+
+**Queue.**
+- 13:31 Nov 10: OGE, GSAT, CON and BDX expired (queued 11-04, age 6d). The
+  13:32 signal was CVI at conf 2, already queued, so it was ignored. Queue 4/10.
+- 21:01 Nov 10: 4 kept, **GRDN queued** (`momentum_breakout`, $49.85, RSI
+  69.9, vol 2.14× at the close, which is understated (known issue 11)). CVI
+  re-signalled at conf 2 (vol 0.69×). It keeps its conf 3 entry. Queue 5/10.
+- Every kept event has `rsi` 50.0 (known issue 10).
+- Every "QUEUED (n)" equals the entries kept by that report's maintenance,
+  before its insertions: 4, 4. Every dashboard drift equals its event's
+  `drift_pct`.
+
+**Monitor inspection: PASS, 2 cycles.**
+
+| Night | Command | Cycles |
+|---|---|---|
+| Tue 10 Nov | `inspect_monitor_cycles.py 561edf6 102897b da6eccd` | `dbf8c972`, `13c67983` |
+
+- 5 records in each cycle.
+
+**Parity, 10 records: all MATCH.**
+
+**System.** All ✅. Stall 724 ms in 16.5 h, then 139 ms in 7.5 h. Swap 286 MB,
+0–3 MB paged out. Cache 1083 → 1100.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
