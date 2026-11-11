@@ -1,5 +1,22 @@
 [
   {
+    "symbol": "GRDN",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 49.85,
+    "rsi_at_signal": 69.9,
+    "stdev_20": 0.0395,
+    "vol_ratio": 2.14,
+    "date_added": "2026-11-10",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
     "symbol": "TGTX",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -10,23 +27,6 @@
     "rsi_at_signal": 60.1,
     "stdev_20": 0.0292,
     "vol_ratio": 2.13,
-    "date_added": "2026-11-09",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
-    "symbol": "BOBS",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 20.92,
-    "rsi_at_signal": 75.9,
-    "stdev_20": 0.0398,
-    "vol_ratio": 1.81,
     "date_added": "2026-11-09",
     "screens": [
       "unusual_volume",
@@ -50,6 +50,23 @@
     ]
   },
   {
+    "symbol": "BOBS",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 20.92,
+    "rsi_at_signal": 75.9,
+    "stdev_20": 0.0398,
+    "vol_ratio": 1.81,
+    "date_added": "2026-11-09",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
     "symbol": "XERS",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -61,23 +78,6 @@
     "stdev_20": 0.0714,
     "vol_ratio": 2.47,
     "date_added": "2026-11-06",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
-    "symbol": "GRDN",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 49.85,
-    "rsi_at_signal": 69.9,
-    "stdev_20": 0.0395,
-    "vol_ratio": 2.14,
-    "date_added": "2026-11-10",
     "screens": [
       "unusual_volume",
       "big_movers_up"
