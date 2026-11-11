@@ -1,7 +1,9 @@
-# Admission capture v1 — design (r5, accepted for implementation review)
+# Admission capture v1 — design (r6, accepted)
 
-Status: **r5 accepted for implementation review (2026-10-21); not authorised
-for activation.** No code exists. Ares stays FROZEN. Review history: r1–r4
+Status: **r5 accepted for implementation review (2026-10-21); r6 accepted by
+the M3 round 2 review (2026-11-11); not authorised for activation.**
+Implementation on branch `recorder/admission-v1` (M1 and M2 accepted, M3 in
+review), not merged. Ares stays FROZEN. Review history: r1–r4
 DRAFT/HOLD, r5 accepted; bundles `review_bundle_admission_capture_v1`–`v5`. This
 is step 3 of the plan in `STATUS.md`. The evidence behind it is
 `archive/AUDIT_2026-10-20_admission_routes.md` (cited below as "the audit").
@@ -64,9 +66,12 @@ unmodified `expire_queue` and `maintain_queue` bodies
 | Found while checking finding 1: incomplete writer inventory | r4 listed seven save sites. There are thirteen: `save_trades` also at `:947`, `:1142` and `monitor_trades.py:276`, and `save_ranked` at `:436`, `:488`, `:610`. None of these six changes trade or queue membership, but all are now in the inventory, and trade key fields must be unchanged across commits | §3.5, §6.2 |
 | Verification: attachments arrived as file-not-found placeholders | The reproduction inputs also ship as one self-contained file, `repro_pack.py`, which writes the audit, tests, mutation script, probe and evidence to a scratch directory and runs them | README |
 
-### Revision r6 (proposed) — alignment with the M3 review, round 1 (2026-11-11)
+### Revision r6 — alignment with the M3 review, round 1 (2026-11-11)
 
-Proposed, not yet accepted. The M3 round 1 review (candidates `39f6c81`,
+**Accepted as written by the M3 round 2 review (2026-11-11, candidate
+`1b4efb5`).** That review also closed both round 1 findings and accepted
+extension 3 with its documented boundaries X1–X7; it is not M3 acceptance.
+The M3 round 1 review (candidates `39f6c81`,
 `f13be1e`) ruled on W1–W5 and found two false passes. This revision aligns
 §3.2 and §6.2 with those rulings; it changes no capture statement and no
 production file.
