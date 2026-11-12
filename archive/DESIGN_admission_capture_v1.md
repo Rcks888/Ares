@@ -2,8 +2,8 @@
 
 Status: **r5 accepted for implementation review (2026-10-21); r6 accepted by
 the M3 round 2 review (2026-11-11); not authorised for activation.**
-Implementation on branch `recorder/admission-v1` (M1 and M2 accepted, M3 in
-review), not merged. Ares stays FROZEN. Review history: r1–r4
+Implementation on branch `recorder/admission-v1` (M1, M2 and M3 accepted),
+not merged. Ares stays FROZEN. Review history: r1–r4
 DRAFT/HOLD, r5 accepted; bundles `review_bundle_admission_capture_v1`–`v5`. This
 is step 3 of the plan in `STATUS.md`. The evidence behind it is
 `archive/AUDIT_2026-10-20_admission_routes.md` (cited below as "the audit").
@@ -84,6 +84,17 @@ production file.
 | W2 accepted only as an exact-registered boundary | Module infrastructure is admitted by exact registration (file, scope, sha256, count) and source review, not by the fresh-private-name rule, which stays as a necessary shape check | §3.2 |
 | W3 accepted as an explicit exception | The M2-reviewed entry-point flush wrapper, one per entrypoint, exact-registered; not a whitelist form | §3.2 |
 | W4 accepted, belongs in the contract | Depth-1 targets and container initialisation/rebinding are now in the §3.2 constraints | §3.2 |
+
+**M3 accepted (review round 3, 2026-11-12, candidate `a00b185`).** Y1–Y8
+accepted as stated in that round's README: verdict scale consistent <
+incident < INCONCLUSIVE < FAIL (Y1); the §7 sentence on a failed `:485`
+after a completed expiry corrected to follow §3.5 (Y2); impossible fill order
+is FAIL `trades_save_before_pending_save_completed` (Y3); fill oracle composed
+from the hand tables (Y4); names `removed`, `removed_over_existing_trade`,
+`retained` (Y5); queue save-fact rules (Y6); the inner expiry is associated
+with its maintenance call by record order, `seq + 1` (Y7); `concurrent_runs`,
+`baseline_ambiguous`, cross-run trade links and inspection naming are M4
+(Y8). Not merge, deployment or activation.
 
 ---
 
@@ -1065,7 +1076,8 @@ Plus:
   intent = baseline for expiry; `maintain_queue`'s own drops are checked
   against `:485`.
 - Expiry completed, then `:485` fails at each point: the expiry is
-  consistent in every case; `maintain_queue`'s drops are `= baseline`
+  consistent at `open` and `close`; INCONCLUSIVE at the partial dump
+  (§3.5, M3 review round 3, Y2); `maintain_queue`'s drops are `= baseline`
   (`queue_not_persisted`), `= intent` or `unreadable`.
 - Synthetic recorder input with `:485` attempted after `:379` raised:
   FAIL `carrier_after_raise`.
