@@ -14,11 +14,11 @@
     "screens": [
       "unusual_volume"
     ],
-    "checked_at": "2026-11-12T13:31:06",
-    "drift_pct": 0.0,
+    "checked_at": "2026-11-12T21:00:55",
+    "drift_pct": 0.74,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 84.97
+    "live_price": 85.6
   },
   {
     "symbol": "GRDN",
@@ -36,11 +36,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-12T13:31:04",
-    "drift_pct": 0.26,
+    "checked_at": "2026-11-12T21:00:55",
+    "drift_pct": -0.98,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 49.98
+    "live_price": 49.36
   },
   {
     "symbol": "BOBS",
@@ -58,11 +58,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-12T13:31:05",
-    "drift_pct": 2.34,
+    "checked_at": "2026-11-12T21:00:56",
+    "drift_pct": -1.39,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 21.41
+    "live_price": 20.63
   },
   {
     "symbol": "TGTX",
@@ -80,10 +80,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-12T13:31:05",
-    "drift_pct": 3.76,
+    "checked_at": "2026-11-12T21:00:56",
+    "drift_pct": 1.86,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 65.76
+    "live_price": 64.56
   }
 ]
