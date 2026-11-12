@@ -1,5 +1,21 @@
 [
   {
+    "symbol": "NWE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "volume_spike",
+    "confluence": 3,
+    "price_at_signal": 84.97,
+    "rsi_at_signal": 83.4,
+    "stdev_20": 0.0096,
+    "vol_ratio": 1.9,
+    "date_added": "2026-11-11",
+    "screens": [
+      "unusual_volume"
+    ]
+  },
+  {
     "symbol": "GRDN",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -48,22 +64,6 @@
     "screens": [
       "unusual_volume",
       "big_movers_up"
-    ]
-  },
-  {
-    "symbol": "NWE",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "volume_spike",
-    "confluence": 3,
-    "price_at_signal": 84.97,
-    "rsi_at_signal": 83.4,
-    "stdev_20": 0.0096,
-    "vol_ratio": 1.9,
-    "date_added": "2026-11-11",
-    "screens": [
-      "unusual_volume"
     ]
   }
 ]

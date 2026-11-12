@@ -1,5 +1,26 @@
 [
   {
+    "symbol": "NWE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "volume_spike",
+    "confluence": 3,
+    "price_at_signal": 84.97,
+    "rsi_at_signal": 83.4,
+    "stdev_20": 0.0096,
+    "vol_ratio": 1.9,
+    "date_added": "2026-11-11",
+    "screens": [
+      "unusual_volume"
+    ],
+    "checked_at": "2026-11-12T13:31:06",
+    "drift_pct": 0.0,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 84.97
+  },
+  {
     "symbol": "GRDN",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -15,11 +36,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-11T21:00:53",
-    "drift_pct": 0.32,
+    "checked_at": "2026-11-12T13:31:04",
+    "drift_pct": 0.26,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 50.01
+    "live_price": 49.98
   },
   {
     "symbol": "BOBS",
@@ -37,11 +58,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-11T21:00:54",
-    "drift_pct": 2.2,
+    "checked_at": "2026-11-12T13:31:05",
+    "drift_pct": 2.34,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 21.38
+    "live_price": 21.41
   },
   {
     "symbol": "TGTX",
@@ -59,7 +80,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-11T21:00:54",
+    "checked_at": "2026-11-12T13:31:05",
     "drift_pct": 3.76,
     "rsi": 50.0,
     "ema20_ok": true,

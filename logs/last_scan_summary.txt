@@ -1,6 +1,3 @@
 candidates_screened:103
-signals_found:1
-signal_details:NWE | momentum_breakout | conf3 | uptrend
-  Price: $84.97 | RSI: 83.4 | Vol: 1.9x
-  Buy: $150 (1.8 shares)
-  SL: $83.34 | TP: $100.26 (+18%) | TS: 10%
+signals_found:0
+signal_details:
