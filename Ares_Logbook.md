@@ -4707,6 +4707,65 @@ prices.**
     removal.
 - **Next:** round 3 bundle for M3 acceptance.
 
+### 2026-11-11 → 12 — no fills, no closes; CVI and XERS dropped on drift (+6.5%, +8.7%); NWE queued; BRZE peak 1.5%
+
+Two dashboards (21:32 MYT Nov 11 and 05:01 MYT Nov 12) and the monitor posts.
+No fills and no closes, so the clean sample is still 13, W 3/13, −$94.47 on
+both. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB. Every dashboard agrees with
+`virtual_trades.json` at its commit.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:32 Nov 11 | `8f37251` | 5 kept; CVI re-signalled at conf 2, already queued; no peak moved |
+| 00:10 / 01:30 Nov 12 | `26ebfd3`, `125da4c` | no exits; BRZE peak $46.27 → $46.37 → $46.42 |
+| 05:01 Nov 12 | `a67bbf6` | **CVI and XERS dropped on drift**; 3 kept; BRZE peak $46.48; **NWE queued** ($84.97, conf 3) |
+
+**Peaks and trails. All values are reproduced from the monitor and parity
+prices.**
+
+| Position | Change | Source |
+|---|---|---|
+| BRZE | $46.27 → $46.37 / $46.42, trail $41.64 → $41.73 / $41.78 | monitor 16:10 / 17:30 Nov 11 |
+| BRZE | → **$46.48 (1.5%)**, trail → **$41.83** | 21:00 Nov 11, IBKR at the close |
+| TMO, AMP, SGRY, TBBB | unchanged: $724.62 / $528.50 / $26.69 / $67.84, trails $652.16 / $475.65 / $24.02 / $61.06 | — |
+
+- At 13:31 Nov 11 (08:31 ET, before the open), TMO, AMP, SGRY and BRZE were
+  priced from IBKR (known issue 13): $716.29, $520.10, $26.36, $45.81. All
+  were below their peaks, so this time no peak moved. TBBB fell back to the
+  daily close ($67.83, the 11-10 final close, $0.01 under the 21:00 Nov 10
+  read that set its peak).
+- At 21:00 Nov 11, four of the five positions were again evaluated on the
+  11-10 bar (only SGRY on 11-11): the 20 h cache pattern (2 Nov entry).
+
+**Queue.**
+- 13:31 Nov 11: TGTX, BOBS, CVI, XERS and GRDN kept. The 13:32 signal was
+  CVI at conf 2 (RSI 28.1, vol 1.01×), already queued, so it was ignored.
+  Queue 5/10.
+- 21:00 Nov 11: GRDN, TGTX and BOBS kept. **CVI dropped**, "drifted +6.5%
+  (max ±5.0%)" ($38.13 → $40.60, queued 11-06). **XERS dropped**, "drifted
+  +8.7%" ($15.20 → $16.52, queued 11-06). Both were within ±5% at 13:31
+  (+1.5%, +4.1%).
+- 21:01 Nov 11: **NWE queued** (`momentum_breakout`, $84.97, RSI 83.4, vol
+  1.9× at the close, which is understated (known issue 11)). Its SL $83.34
+  is 1.9% below the signal price; TP $100.26 (+18%). Queue 4/10.
+- Every kept and dropped event has `rsi` 50.0 (known issue 10).
+- Every "QUEUED (n)" equals the entries kept by that report's maintenance,
+  before its insertions: 5, 3. Every dashboard drift equals its event's
+  `drift_pct`.
+
+**Monitor inspection: PASS, 2 cycles.**
+
+| Night | Command | Cycles |
+|---|---|---|
+| Wed 11 Nov | `inspect_monitor_cycles.py 8f37251 26ebfd3 125da4c` | `bced05b8`, `a69fa234` |
+
+- 5 records in each cycle.
+
+**Parity, 10 records: all MATCH.**
+
+**System.** All ✅. Stall 778 ms in 16.5 h, then 22 ms in 7.5 h. Swap 287 MB,
+0 MB paged out. Cache 1104 → 1109. cron.log 0.9 → 1.0 MB.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
