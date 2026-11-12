@@ -4706,6 +4706,17 @@ prices.**
     over existing membership across runs, naming an `expiry_parse_failed`
     removal.
 - **Next:** round 3 bundle for M3 acceptance.
+- **M3 review round 3** (`review_bundle_admission_m3_v3`, Thu 12 Nov):
+  **M3 APPROVED at `a00b185`**, no blocking finding.
+  - Y1–Y8 accepted. Y2 is a wording error in §7, not a defect: §3.5
+    controls, so the partial `:485` dump makes the expiry INCONCLUSIVE; §7
+    corrected on the branch. Y7: the `seq + 1` order rule stands for M3;
+    no change to the accepted capture code. Y8: the deferrals are
+    inspection concerns and belong to M4.
+  - Reviewer confirmed the pack (42 files, hashes match, 11/11) and the
+    full run at `a00b185` (38 commands, 0 failed).
+  - Milestone acceptance only: no merge, deploy, activation or unfreeze.
+    **Week target done.** Next: M4, week of 16 Nov.
 
 ### 2026-11-11 → 12 — no fills, no closes; CVI and XERS dropped on drift (+6.5%, +8.7%); NWE queued; BRZE peak 1.5%
 
