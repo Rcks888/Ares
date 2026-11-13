@@ -4777,6 +4777,74 @@ prices.**
 **System.** All ✅. Stall 778 ms in 16.5 h, then 22 ms in 7.5 h. Swap 287 MB,
 0 MB paged out. Cache 1104 → 1109. cron.log 0.9 → 1.0 MB.
 
+### 2026-11-12 → 13 — no fills, no closes; TBBB's peak moves on a pre-open IBKR print (known issue 13); MANE and MBGL queued; stall 1064 ms
+
+Two dashboards (21:32 MYT Nov 12 and 05:01 MYT Nov 13) and the monitor posts.
+No fills and no closes, so the clean sample is still 13, W 3/13, −$94.47 on
+both. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB. Every dashboard agrees with
+`virtual_trades.json` at its commit.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:32 Nov 12 | `524ff7e` | 4 kept; 0 signals; **TBBB peak $68.30 from a pre-open IBKR price**; EROC and MANE shadow tracking ends (30 days) |
+| 00:10 / 01:30 Nov 13 | `2b8a5f6`, `c6f5af3` | no exits; BRZE peak $46.48 → $46.56 → $46.69 |
+| 05:01 Nov 13 | `090cda9` | 4 kept; **MANE and MBGL queued** (conf 3) |
+
+**Peaks and trails. All values are reproduced from the monitor and parity
+prices.**
+
+| Position | Change | Source |
+|---|---|---|
+| TBBB | $67.84 → **$68.30 (7.1%)**, trail $61.06 → **$61.47** | 13:31 Nov 12, IBKR, **before the open** |
+| BRZE | $46.48 → $46.56 / **$46.69 (1.9%)**, trail $41.83 → $41.90 / **$42.02** | monitor 16:10 / 17:30 Nov 12 |
+| TMO, AMP, SGRY | unchanged: $724.62 / $528.50 / $26.69, trails $652.16 / $475.65 / $24.02 | — |
+
+- **Known issue 13 moved a peak again**, as for TMO on 10 Nov. TBBB's 13:31
+  IBKR price $68.30 is 0.8% above the 21:00 Nov 11 at-close read ($67.75).
+  After it the monitor saw $68.11 and $67.98, and the close read $68.01.
+  Whether the regular session reached $68.30 was not checked.
+- At 13:31, AMP fell back to the daily close ($520.06); TMO, SGRY and BRZE
+  were IBKR pre-open prices below their peaks.
+- At 21:00 Nov 12, four of the five positions were again evaluated on the
+  11-11 bar (only SGRY on 11-12): the 20 h cache pattern (2 Nov entry).
+- TMO is 7.5–7.8% up at the monitor ($703.85, $705.50; close read $702.81),
+  down from 10.1–10.5% on Nov 11. Its trail ($652.16) is unchanged.
+
+**Queue.**
+- 13:31 Nov 12: GRDN, BOBS, TGTX and NWE kept. No signals. Queue 4/10.
+- 21:00 Nov 12: the same four kept, drifts −1.4% to +1.9%.
+- 21:01 Nov 12: **MANE queued** (`momentum_breakout`, $135.30, RSI 58.4,
+  vol 3.13×, SL $119.36, TP $159.65) and **MBGL queued**
+  (`momentum_breakout`, $23.15, RSI 71.2, vol 1.75×, SL $21.30, TP $27.32).
+  Volumes are at-close reads and understated (known issue 11). Queue 6/10.
+- **The dashboard listed only MANE** ("2 signals"): it shows only the first
+  entry of `signal_details` (`|||`-joined), as recorded on 3 Nov. Display
+  only; both are in the queue.
+- **MANE was a clean-sample trade**: entered 10-12, stopped out 10-13
+  (−9.03%). Its 30-day shadow tracking ended at 13:31 Nov 12 with a
+  post-exit peak of $156.56 (missed upside 32.3%). It re-signalled the
+  same evening at $135.30. Recorded, not analysed.
+- Every kept event has `rsi` 50.0 (known issue 10).
+- Every "QUEUED (n)" equals the entries kept by that report's maintenance,
+  before its insertions: 4, 4. Every dashboard drift equals its event's
+  `drift_pct`.
+
+**Monitor inspection: PASS, 2 cycles.**
+
+| Night | Command | Cycles |
+|---|---|---|
+| Thu 12 Nov | `inspect_monitor_cycles.py 524ff7e 2b8a5f6 c6f5af3` | `6b16c988`, `b2fbd7c6` |
+
+- 5 records in each cycle.
+
+**Parity, 10 records: all MATCH.**
+
+**System.** ⚠️ stall **1064 ms in 16.5 h**, flagged "memory pressure event",
+with 1 MB paged out. It is just over the 1000 ms flag, as on earlier
+occasions (e.g. 1055 ms, 1188 ms); RAM free 1095 MB. Then 9 ms in 7.5 h.
+Swap 287 MB. Cache 1109 → 1120 → 1105 (cause of the drop not checked).
+cron.log 1.0 MB.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
