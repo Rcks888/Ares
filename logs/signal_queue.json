@@ -1,19 +1,18 @@
 [
   {
-    "symbol": "MANE",
+    "symbol": "NWE",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
-    "category": "reversal_candidate",
+    "category": "volume_spike",
     "confluence": 3,
-    "price_at_signal": 135.3,
-    "rsi_at_signal": 58.4,
-    "stdev_20": 0.0589,
-    "vol_ratio": 3.13,
-    "date_added": "2026-11-12",
+    "price_at_signal": 84.97,
+    "rsi_at_signal": 83.4,
+    "stdev_20": 0.0096,
+    "vol_ratio": 1.9,
+    "date_added": "2026-11-11",
     "screens": [
-      "unusual_volume",
-      "big_movers_down"
+      "unusual_volume"
     ]
   },
   {
@@ -33,22 +32,6 @@
     ]
   },
   {
-    "symbol": "NWE",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "volume_spike",
-    "confluence": 3,
-    "price_at_signal": 84.97,
-    "rsi_at_signal": 83.4,
-    "stdev_20": 0.0096,
-    "vol_ratio": 1.9,
-    "date_added": "2026-11-11",
-    "screens": [
-      "unusual_volume"
-    ]
-  },
-  {
     "symbol": "GRDN",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -60,6 +43,23 @@
     "stdev_20": 0.0395,
     "vol_ratio": 2.14,
     "date_added": "2026-11-10",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "TGTX",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 63.38,
+    "rsi_at_signal": 60.1,
+    "stdev_20": 0.0292,
+    "vol_ratio": 2.13,
+    "date_added": "2026-11-09",
     "screens": [
       "unusual_volume",
       "big_movers_up"
@@ -83,17 +83,51 @@
     ]
   },
   {
-    "symbol": "TGTX",
+    "symbol": "MANE",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 135.3,
+    "rsi_at_signal": 58.4,
+    "stdev_20": 0.0589,
+    "vol_ratio": 3.13,
+    "date_added": "2026-11-12",
+    "screens": [
+      "unusual_volume",
+      "big_movers_down"
+    ]
+  },
+  {
+    "symbol": "LFTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 63.38,
-    "rsi_at_signal": 60.1,
-    "stdev_20": 0.0292,
-    "vol_ratio": 2.13,
-    "date_added": "2026-11-09",
+    "price_at_signal": 24.45,
+    "rsi_at_signal": 73.8,
+    "stdev_20": 0.0789,
+    "vol_ratio": 7.96,
+    "date_added": "2026-11-13",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "WWW",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 24.89,
+    "rsi_at_signal": 69.1,
+    "stdev_20": 0.039,
+    "vol_ratio": 2.23,
+    "date_added": "2026-11-13",
     "screens": [
       "unusual_volume",
       "big_movers_up"

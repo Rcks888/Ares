@@ -1,3 +1,9 @@
-candidates_screened:55
-signals_found:0
-signal_details:
+candidates_screened:103
+signals_found:2
+signal_details:LFTO | momentum_breakout | conf3 | uptrend
+  Price: $24.45 | RSI: 73.8 | Vol: 7.96x
+  Buy: $150 (6.1 shares)
+  SL: $20.59 | TP: $28.85 (+18%) | TS: 10%|||WWW | momentum_breakout | conf3 | uptrend
+  Price: $24.89 | RSI: 69.1 | Vol: 2.23x
+  Buy: $150 (6.0 shares)
+  SL: $22.95 | TP: $29.37 (+18%) | TS: 10%
