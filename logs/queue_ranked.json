@@ -1,27 +1,5 @@
 [
   {
-    "symbol": "WWW",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 24.89,
-    "rsi_at_signal": 69.1,
-    "stdev_20": 0.039,
-    "vol_ratio": 2.23,
-    "date_added": "2026-11-13",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-16T13:31:11",
-    "drift_pct": -0.0,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 24.89
-  },
-  {
     "symbol": "LFTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -37,11 +15,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-16T13:31:10",
-    "drift_pct": -0.04,
+    "checked_at": "2026-11-16T21:01:04",
+    "drift_pct": 0.04,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 24.44
+    "live_price": 24.46
   },
   {
     "symbol": "NWE",
@@ -58,11 +36,33 @@
     "screens": [
       "unusual_volume"
     ],
-    "checked_at": "2026-11-16T13:31:10",
+    "checked_at": "2026-11-16T21:01:05",
     "drift_pct": -0.07,
     "rsi": 50.0,
     "ema20_ok": true,
     "live_price": 84.91
+  },
+  {
+    "symbol": "WWW",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 24.89,
+    "rsi_at_signal": 69.1,
+    "stdev_20": 0.039,
+    "vol_ratio": 2.23,
+    "date_added": "2026-11-13",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-16T21:01:04",
+    "drift_pct": 1.73,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 25.32
   },
   {
     "symbol": "MBGL",
@@ -79,32 +79,10 @@
     "screens": [
       "big_movers_up"
     ],
-    "checked_at": "2026-11-16T13:31:10",
-    "drift_pct": 0.56,
+    "checked_at": "2026-11-16T21:01:05",
+    "drift_pct": 3.8,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 23.28
-  },
-  {
-    "symbol": "MANE",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "reversal_candidate",
-    "confluence": 3,
-    "price_at_signal": 135.3,
-    "rsi_at_signal": 58.4,
-    "stdev_20": 0.0589,
-    "vol_ratio": 3.13,
-    "date_added": "2026-11-12",
-    "screens": [
-      "unusual_volume",
-      "big_movers_down"
-    ],
-    "checked_at": "2026-11-16T13:31:10",
-    "drift_pct": -4.17,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 129.66
+    "live_price": 24.03
   }
 ]
