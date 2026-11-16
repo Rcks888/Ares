@@ -257,6 +257,11 @@ Ares/
 ├── restart_gateway.sh          # IB Gateway health check + auto-restart
 ├── start_gateway.sh            # IB Gateway background launcher
 ├── archive/                    # Finished investigation documents (Oct 2026)
+├── tools/
+│   ├── inspect_monitor_cycles.py    # Monitor recorder v7 cycle inspection (read-only)
+│   ├── inspect_admission_cycles.py  # Admission capture v1 cycle inspection (read-only)
+│   └── admission_persistence.py     # §3.5/§4.2/§4.4 tables the admission inspection imports
+├── tests/                      # Control suites, plain scripts (no pytest)
 ├── STATUS.md                   # One-page current state -- read this first
 ├── Ares_Logbook.md             # Daily trading journal
 ├── ROADMAP.md                  # Phased plan + unimplemented risk controls
