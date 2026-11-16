@@ -283,11 +283,12 @@ command finds the commit by, so no SHA has to be typed.
 
 The inverse is tested against the actual activation commit, created locally
 and **not pushed** until the test passes. Rehearsed 16 Nov in a clone of
-`main` at `baaf2a3` with the branch at `d8c9633`: squash clean (`README.md`
-auto-merged), one parent, 35 files, none under `logs/`; revert applied cleanly;
-deployment-owned paths restored exactly, the three entrypoint files back to the
-§3.1 md5 values, the observer removed. It is repeated on the day against the
-real commit.
+`main` at `baaf2a3` with this round's branch tip, using the commands below
+verbatim (`repro/squash_revert_rehearsal.sh` in the review bundle): squash
+clean (`README.md` auto-merged), one parent, 38 files, none under `logs/`;
+revert applied cleanly; deployment-owned paths restored exactly, the three
+entrypoint files back to the §3.1 md5 values, the observer removed. It is
+repeated on the day against the real commit.
 
 | Path | On rollback |
 |---|---|
