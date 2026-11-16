@@ -3,6 +3,17 @@
 
     python3 tools/verify_recorder_isolation.py BEFORE.py AFTER.py
     python3 tools/verify_recorder_isolation.py --register BEFORE.py AFTER.py
+    python3 tools/verify_recorder_isolation.py --registry MODULE BEFORE.py AFTER.py
+
+--registry selects the registration table (a module in tools/). The default,
+recorder_registration, is the monitor_trades.py pair. Admission capture v1
+adds one table per further pair (design §6.2):
+
+    admission_registration_tracker        engine/tracker.py
+    admission_registration_daily_report   daily_report.py
+
+A table may set REQUIRE_ENTRYPOINT = False for a file with no `__main__`
+wrapper (engine/tracker.py). Every other rule is identical for every table.
 
 Exit 0 only if every difference between BEFORE and AFTER is an exactly
 registered observation addition, and the one registered replacement.
@@ -73,18 +84,30 @@ def _digest(node):
     return hashlib.sha256(_norm(node).encode()).hexdigest()
 
 
+def _decorated(node, text):
+    """Prefix decorators, which are part of a definition's header: adding
+    @property to a function changes what the name binds to."""
+    decos = "".join(f"@{_norm(d)} " for d in node.decorator_list)
+    return decos + text
+
+
 def _signature(node):
     """Shallow identity used for alignment, excluding nested bodies.
 
     Compound statements must align on their header so their bodies can be
     compared recursively. Leaves align on their whole normalised source.
+    Decorators, return annotations and class bases are header, so they are
+    included; they are omitted from the text only when absent, which keeps
+    every existing registered scope string unchanged.
     """
-    if isinstance(node, ast.FunctionDef):
-        return f"def {node.name}({_norm(node.args)})"
-    if isinstance(node, ast.AsyncFunctionDef):
-        return f"async def {node.name}({_norm(node.args)})"
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        kw = "async def" if isinstance(node, ast.AsyncFunctionDef) else "def"
+        ret = f" -> {_norm(node.returns)}" if node.returns is not None else ""
+        return _decorated(node, f"{kw} {node.name}({_norm(node.args)}){ret}")
     if isinstance(node, ast.ClassDef):
-        return f"class {node.name}"
+        bases = [_norm(b) for b in node.bases] + [_norm(k) for k in node.keywords]
+        tail = f"({', '.join(bases)})" if bases else ""
+        return _decorated(node, f"class {node.name}{tail}")
     if isinstance(node, ast.If):
         return f"if {_norm(node.test)}"
     if isinstance(node, ast.While):
@@ -100,6 +123,25 @@ def _signature(node):
 
 _COMPOUND = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.If,
              ast.While, ast.For, ast.With, ast.Try)
+
+_BODY_FIELDS = ("body", "orelse", "finalbody", "handlers")
+
+
+def _header_dump(node):
+    """Everything about a compound statement except its nested statement
+    lists, as an ast.dump. Fail-closed backstop for _signature: any header
+    field it does not spell out (type parameters, type comments, a future
+    field) still makes the headers unequal."""
+    import copy
+    shell = copy.copy(node)
+    for field in _BODY_FIELDS:
+        if hasattr(shell, field):
+            setattr(shell, field, [])
+    return ast.dump(shell, include_attributes=False)
+
+
+def _handler_header(h):
+    return (_norm(h.type) if h.type is not None else None, h.name)
 
 
 # --------------------------------------------------------------------------
@@ -119,6 +161,25 @@ except ImportError:                                   # pragma: no cover
         from recorder_registration import (REGISTERED_ADDITIONS,
                                            REGISTERED_REPLACEMENTS)
     except ImportError:
+        REGISTERED_ADDITIONS = None
+        REGISTERED_REPLACEMENTS = None
+REQUIRE_ENTRYPOINT = True
+
+
+def _load_registry(name):
+    """Swap in another registration table. A table that cannot be imported
+    leaves nothing registered, so nothing can be accepted (exit 2)."""
+    global REGISTERED_ADDITIONS, REGISTERED_REPLACEMENTS, REQUIRE_ENTRYPOINT
+    import importlib
+    here = __file__.rsplit("/", 1)[0]
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        mod = importlib.import_module(name)
+        REGISTERED_ADDITIONS = mod.REGISTERED_ADDITIONS
+        REGISTERED_REPLACEMENTS = mod.REGISTERED_REPLACEMENTS
+        REQUIRE_ENTRYPOINT = getattr(mod, "REQUIRE_ENTRYPOINT", True)
+    except (ImportError, AttributeError):
         REGISTERED_ADDITIONS = None
         REGISTERED_REPLACEMENTS = None
 
@@ -182,6 +243,11 @@ class Aligner:
         if not isinstance(pre_s, _COMPOUND):
             return
         child = f"{scope}/{_signature(pre_s)}"
+        if (type(pre_s) is not type(post_s)
+                or _header_dump(pre_s) != _header_dump(post_s)):
+            self.deletions.append((scope, _digest(pre_s), _norm(pre_s)))
+            self.additions.append((scope, _digest(post_s), _norm(post_s)))
+            return
         for field in ("body", "orelse", "finalbody"):
             a = getattr(pre_s, field, None) or []
             b = getattr(post_s, field, None) or []
@@ -196,7 +262,7 @@ class Aligner:
             self.additions.append((child, _digest(post_s), _norm(post_s)))
             return
         for ph, qh in zip(pre_h, post_h):
-            if _norm(ph.type or ast.Constant(None)) != _norm(qh.type or ast.Constant(None)):
+            if _handler_header(ph) != _handler_header(qh):
                 self.deletions.append((child, _digest(ph), _norm(ph)))
                 self.additions.append((child, _digest(qh), _norm(qh)))
                 continue
@@ -287,7 +353,7 @@ def main(before_path, after_path):
     _check(a.deletions, REGISTERED_REPLACEMENTS, "REMOVAL")
 
     wrappers = [s for s, _, _ in a.additions if s == ENTRYPOINT_SCOPE]
-    if len(wrappers) != 1:
+    if REQUIRE_ENTRYPOINT and len(wrappers) != 1:
         problems.append(
             f"expected exactly one entry-point addition in {ENTRYPOINT_SCOPE}, "
             f"found {len(wrappers)}")
@@ -314,12 +380,16 @@ def main(before_path, after_path):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--register":
-        sys.exit(register(sys.argv[2], sys.argv[3]))
-    if len(sys.argv) != 3:
+    argv = sys.argv[1:]
+    if len(argv) >= 2 and argv[0] == "--registry":
+        _load_registry(argv[1])
+        argv = argv[2:]
+    if len(argv) == 3 and argv[0] == "--register":
+        sys.exit(register(argv[1], argv[2]))
+    if len(argv) != 2:
         print(__doc__)
         sys.exit(2)
-    sys.exit(main(sys.argv[1], sys.argv[2]))
+    sys.exit(main(argv[0], argv[1]))
 
 
 

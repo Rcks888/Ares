@@ -1,7 +1,9 @@
-# Admission capture v1 — design (r5, accepted for implementation review)
+# Admission capture v1 — design (r6, accepted)
 
-Status: **r5 accepted for implementation review (2026-10-21); not authorised
-for activation.** No code exists. Ares stays FROZEN. Review history: r1–r4
+Status: **r5 accepted for implementation review (2026-10-21); r6 accepted by
+the M3 round 2 review (2026-11-11); not authorised for activation.**
+Implementation on branch `recorder/admission-v1` (M1, M2 and M3 accepted),
+not merged. Ares stays FROZEN. Review history: r1–r4
 DRAFT/HOLD, r5 accepted; bundles `review_bundle_admission_capture_v1`–`v5`. This
 is step 3 of the plan in `STATUS.md`. The evidence behind it is
 `archive/AUDIT_2026-10-20_admission_routes.md` (cited below as "the audit").
@@ -63,6 +65,36 @@ unmodified `expire_queue` and `maintain_queue` bodies
 | Found while checking finding 1: silent queue removal in expiry | `expire_queue`'s `except Exception: pass` (`:376-377`) drops an entry from `active` with no event, for example a malformed `date_added` (probe H2). Recorded as §2.2.3 and captured; not fixed | §2.2.3, §4.2 |
 | Found while checking finding 1: incomplete writer inventory | r4 listed seven save sites. There are thirteen: `save_trades` also at `:947`, `:1142` and `monitor_trades.py:276`, and `save_ranked` at `:436`, `:488`, `:610`. None of these six changes trade or queue membership, but all are now in the inventory, and trade key fields must be unchanged across commits | §3.5, §6.2 |
 | Verification: attachments arrived as file-not-found placeholders | The reproduction inputs also ship as one self-contained file, `repro_pack.py`, which writes the audit, tests, mutation script, probe and evidence to a scratch directory and runs them | README |
+
+### Revision r6 — alignment with the M3 review, round 1 (2026-11-11)
+
+**Accepted as written by the M3 round 2 review (2026-11-11, candidate
+`1b4efb5`).** That review also closed both round 1 findings and accepted
+extension 3 with its documented boundaries X1–X7; it is not M3 acceptance.
+The M3 round 1 review (candidates `39f6c81`,
+`f13be1e`) ruled on W1–W5 and found two false passes. This revision aligns
+§3.2 and §6.2 with those rulings; it changes no capture statement and no
+production file.
+
+| M3 round 1 item | Resolution | Where |
+|---|---|---|
+| Finding 1: `tracker.__dict__["open_trade"]` in a new file passed the call-site inventory | The inventory also registers every reflective or process-launching construct in production (`DYNAMIC_SITES`), exactly, and rejects a target name as a string constant. A new lookup route fails even when the name is built at run time | §6.2 item 2 |
+| Finding 2 / W5 rejected: a read before binding passed | "Bound at that point" is defined as **definitely bound on every path** to the statement (definite-assignment analysis, conservative). Applies to every read and to the target root | §3.2 |
+| W1 accepted with design alignment | Token sequence added to the §3.2 table | §3.2 |
+| W2 accepted only as an exact-registered boundary | Module infrastructure is admitted by exact registration (file, scope, sha256, count) and source review, not by the fresh-private-name rule, which stays as a necessary shape check | §3.2 |
+| W3 accepted as an explicit exception | The M2-reviewed entry-point flush wrapper, one per entrypoint, exact-registered; not a whitelist form | §3.2 |
+| W4 accepted, belongs in the contract | Depth-1 targets and container initialisation/rebinding are now in the §3.2 constraints | §3.2 |
+
+**M3 accepted (review round 3, 2026-11-12, candidate `a00b185`).** Y1–Y8
+accepted as stated in that round's README: verdict scale consistent <
+incident < INCONCLUSIVE < FAIL (Y1); the §7 sentence on a failed `:485`
+after a completed expiry corrected to follow §3.5 (Y2); impossible fill order
+is FAIL `trades_save_before_pending_save_completed` (Y3); fill oracle composed
+from the hand tables (Y4); names `removed`, `removed_over_existing_trade`,
+`retained` (Y5); queue save-fact rules (Y6); the inner expiry is associated
+with its maintenance call by record order, `seq + 1` (Y7); `concurrent_runs`,
+`baseline_ambiguous`, cross-run trade links and inspection naming are M4
+(Y8). Not merge, deployment or activation.
 
 ---
 
@@ -249,6 +281,33 @@ statement's AST:
 | **Clock read** | `obs['t_enter'] = _time.time()` | the only permitted call outside the builtins above; result never read by decision code |
 | Import | `import time as _time` | module level, once |
 | Reset | `_ADMISSION_EVAL.clear()`, `_ADMISSION_EVAL.update(_new_admission_store(token))` | first statements of the two entrypoint functions only |
+| **Token sequence** (r6, W1) | `global _ADMISSION_SEQ` / `_ADMISSION_SEQ += 1` | a new private module name, in an entrypoint function before the reset; mirrors monitor's `_INVOCATION_SEQ` |
+
+r6 constraints on the table above (M3 review round 1):
+
+- **Definitely bound (W5).** "Already bound at that point" means bound on
+  every path that reaches the statement, for every name read and for the
+  target root, so a capture can never raise `NameError` or
+  `UnboundLocalError`. The check is conservative: a loop body may not run, an
+  `except`/`finally` block may start before any statement of its `try` body,
+  a `with` body may be cut short, a walrus binding does not count. A
+  non-local name must be definitely bound at module end or be an unshadowed
+  builtin; `len`/`dict`/`list`/`_time` must not be local.
+- **Depth-1 targets (W4).** Targets are `root['key']` only, because a record
+  holds production objects by reference.
+- **Containers (W4).** A counter or append acts only on a key that every
+  store factory (including an import fallback) or the record literal
+  initialises as an int or `[]`, and that no capture assignment rebinds.
+- **Module infrastructure (W2).** Module-level additions (imports, private
+  assignments, private function definitions, `try` blocks of those) are not
+  capture forms. Each is admitted only by exact registration (file, scope,
+  sha256, count) in `tools/admission_whitelist_infrastructure.py` and by
+  source review of the registered text. Fresh private names remain a
+  necessary shape check, not a side-effect proof.
+- **Entry-point flush wrapper (W3).** One per entrypoint, the M2-reviewed
+  wrapper, admitted as an explicit exception by the same exact registration;
+  its behaviour is covered by the entrypoint controls. It is not a whitelist
+  form and sets no precedent for one.
 
 Anything else in a registered statement is a verifier FAIL: method calls on
 production objects, comparisons, branches, formatting, other calls.
@@ -438,13 +497,70 @@ One stream holds all records: `logs/admission_v1.jsonl`. Each record has a
 
 | Field | Source |
 |---|---|
-| `schema_version`, `kind` | constant |
+| `record_schema_version`, `kind` | constant (`record_schema_version` is `RECORD_SCHEMA_VERSION`, integer, never null). Named `schema_version` before the G2 amendment below; naming only |
 | `cycle_id` | minted by `admission_observer.flush` (§3.4) |
 | `invocation_token` | admission store, set at reset |
 | `decision_path` | `report` \| `monitor` (set by the flushing entrypoint) |
 | `run_kind`, `run_kind_detect` | `sample.fill_context()`, called by the observer at flush (same process, same environment): `scheduled\|manual`, `env\|tty_inferred` |
 | bracket fields (`t_*`) | clock reads at the capture site (§3.3); serialised by the observer as tz-aware UTC ISO strings |
 | `record_complete`, `missing_fields`, `contract_violations` | derived in the observer |
+
+**G2 amendment (impl review v3, 2026-11-03).** Mapping of this table to
+`engine/admission_observer.py` at the M2 candidate. Only the first row is a
+naming difference and is amended above. The rest are recorded, not absorbed:
+
+| Item | Code | Classification |
+|---|---|---|
+| `schema_version` | `record_schema_version` (records and heartbeat); the heartbeat also carries `heartbeat_schema_version` | naming only: same constant, type and persistence. Amended |
+| `missing_fields` | at the M2 candidate: not emitted | **G2-C1**, not closed by review v3; contract below |
+| `record_complete` | at the M2 candidate: `not contract_violations`, so a record with no timestamps, counts or `max_positions` was complete (review v3 probe) | **G2-C1**; contract below |
+| `run_kind`, `run_kind_detect` | `None` and `"unavailable: <exception>"` when `sample.fill_context()` raises | **G2-C2, accepted (review v3)** as explicit unknown evidence. It is not a valid `scheduled\|manual` classification: any check that needs one is INCONCLUSIVE for that run |
+| not in the table | `seq`, `parent_seq` (§5 linkage), `repository_commit` on every record | additions, listed for review; no existing field changes meaning |
+
+Found while mapping, in §4.5: the code emits no `completed` field, and emits
+both `report_completed` and `monitor_completed` as booleans on every
+heartbeat, so a report heartbeat carries `monitor_completed: false` where
+§4.5 has the field absent. **G2-C3, accepted (review v3)** on one condition:
+completion is read only from the flag that matches the heartbeat's
+`decision_path`. The other path's `false` says nothing and is never a failed
+invocation.
+
+**G2-C1 contract (after review v3).** `REQUIRED_FIELDS` in the observer
+names, per record kind and observed state, the fields that must be non-null.
+The state comes from the record's own progress evidence: an admission's call
+state (returned, branch reached, entered), a fill's outcome or
+`reached_not_completed`, a pass's `return_reason` or `not_returned`, a
+candidate's outcome. The tracker sets each listed field unconditionally
+before the point the state proves was passed, so a null is lost capture,
+never a value production made. A field that itself defines the state
+(`returned`, a fill's `t_exit`, a pass's `return_reason`) is not listed;
+losing it changes the state, and the record is then incomplete because the
+call did not return.
+
+- `missing_fields`: the listed fields that are null, in table order;
+  candidates as `candidates[i].<field>`.
+- Production-field absence (`signal_fields_absent`,
+  `queue_entry_fields_absent`, Q3) describes the source dict and stays out
+  of this contract.
+- A save that is unconditional on a returned path (fill pass: pending and
+  trades; completed promotion pass that removed a candidate: queue and
+  ranked; inserted queue entry; expiry that removed one; maintenance) must
+  be `completed`. Anything else is the violation
+  `<save>_not_completed_at_return`.
+- `record_complete` is true only when the call returned, `missing_fields` is
+  empty and `contract_violations` is empty. A call that raised is recorded
+  and never complete (§7: "the record is incomplete, not absent").
+
+The heartbeat's `records_incomplete` counts records with `record_complete`
+false, so a run with a raised call counts it. G2 closes when the review
+accepts this contract.
+
+**Recorded limitation O1 (review v3).** The pre-existing monitor flush is
+not guarded against `BaseException`. A KeyboardInterrupt inside it ends the
+`finally` before the admission block, so no admission evidence and no
+admission health line are written (control 89). Admission output is
+therefore not guaranteed on every failure path; changing this would alter
+the registered monitor block.
 
 ### 4.2 `kind: admission` — one per `open_trade` call
 
@@ -871,7 +987,14 @@ false for the one entry that matters: the admission flush goes inside the
    `queue_signal` and `expire_queue` must equal a registered inventory
    (today: the five sites in §2.3, `tracker.py:84` and `:626` for
    `queue_signal`, `:434` and `:953` for `expire_queue`). A new caller is
-   a FAIL.
+   a FAIL. r6: an indirect caller is a FAIL too. A target name as a string
+   constant is rejected, and every reflective or process-launching construct
+   in production (reflective builtins such as `getattr`/`vars`/`eval`,
+   namespace attributes such as `__dict__`/`sys.modules`, reflective modules
+   such as `inspect`/`importlib`/`operator`, `subprocess`, `os.system`/
+   `exec*`/`spawn*`, star imports, pandas `eval`/`query`) must equal a
+   registered table exactly. The check is syntactic; a lookup inside a C
+   extension or another third-party call is outside it.
 3. **Writer inventory and save data flow (r5):**
    - The set of `save_pending`, `save_trades`, `save_queue`, `save_ranked`
      calls, and of `open(..., 'w'|'a')` on the four state files outside those
@@ -953,7 +1076,8 @@ Plus:
   intent = baseline for expiry; `maintain_queue`'s own drops are checked
   against `:485`.
 - Expiry completed, then `:485` fails at each point: the expiry is
-  consistent in every case; `maintain_queue`'s drops are `= baseline`
+  consistent at `open` and `close`; INCONCLUSIVE at the partial dump
+  (§3.5, M3 review round 3, Y2); `maintain_queue`'s drops are `= baseline`
   (`queue_not_persisted`), `= intent` or `unreadable`.
 - Synthetic recorder input with `:485` attempted after `:379` raised:
   FAIL `carrier_after_raise`.
@@ -1105,9 +1229,12 @@ Plus:
 
 ## 8. Activation constraints
 
-- The Finviz screener is broken, so R1 cannot occur live until it recovers.
-  R1 is therefore covered by controls only. Activation is not blocked: R2 and
-  R3 still run off the queue.
+- ~~The Finviz screener is broken, so R1 cannot occur live until it recovers.
+  R1 is therefore covered by controls only.~~ Superseded 2026-11-16: the
+  screener was fixed on 27 Oct (D-004, `2e45851`) and has been live since the
+  27 Oct 13:32 report, so R1 (scan-direct admission) can occur from the first
+  activated report onwards, alongside R2 and R3. Activation was never blocked
+  on it.
 - Activation goes by the same route as `5fd13e9`: squash on `main`, one parent;
   the revert is tested before the push; suites rerun on the VPS; deploy on a
   weekday 05:00–13:00 UTC, outside the cron times.

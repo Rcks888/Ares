@@ -24,6 +24,27 @@ except Exception as _exc:                           # noqa: BLE001
     _obs = None
     _OBS_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
 
+# Admission capture v1 (archive/DESIGN_admission_capture_v1.md). Guarded the
+# same way and for the same reason: a missing admission recorder, or a tracker
+# deployed without the store, degrades evidence and never trading. The fallback
+# store is a plain dict, so the capture statements below still succeed.
+try:
+    from engine.tracker import _ADMISSION_EVAL, _new_admission_store
+    _ADM_STORE_ERROR = None
+except Exception as _exc:                           # noqa: BLE001
+    _ADMISSION_EVAL = {}
+
+    def _new_admission_store(token):
+        return {"invocation_token": token}
+
+    _ADM_STORE_ERROR = f"{type(_exc).__name__}: {_exc}"
+try:
+    from engine import admission_observer as _adm_obs
+    _ADM_OBS_IMPORT_ERROR = None
+except Exception as _exc:                           # noqa: BLE001
+    _adm_obs = None
+    _ADM_OBS_IMPORT_ERROR = f"{type(_exc).__name__}: {_exc}"
+
 # Decision-site capture for the CURRENT invocation. Plain dict, mirroring
 # tracker._LAST_EVAL: the loop stores raw values and does nothing else, so every
 # derivation and write happens after the loop where it cannot reach a decision.
@@ -105,6 +126,31 @@ def _emit_observation_health_failure(reason, detail):
     except BaseException:                           # noqa: BLE001
         pass
 
+
+def _emit_admission_health_failure(reason, detail):
+    """Admission-recorder counterpart of the function above. Separate file,
+    same contract: stdlib only, never raises, announced on stderr."""
+    try:
+        path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)),
+                             "logs", "admission_health_v1.jsonl")
+        _os.makedirs(_os.path.dirname(path), exist_ok=True)
+        line = _json.dumps({
+            "health_schema_version": 1,
+            "decision_path": "monitor",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "invocation_token": _ADMISSION_EVAL.get("invocation_token"),
+            "observation_failed": True,
+            "reason": reason,
+            "detail": detail,
+            "monitor_completed": _ADMISSION_EVAL.get("monitor_completed"),
+        }, sort_keys=True, default=str)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(line + "\n")
+            fh.flush()
+        print(f"ADMISSION-HEALTH: {reason}: {detail}", file=_sys.stderr)
+    except BaseException:                           # noqa: BLE001
+        pass
+
 def monitor():
     # Rotate invocation identity BEFORE anything else. Clear first, then publish
     # the token: the reverse order leaves a new token beside prior-invocation
@@ -113,6 +159,8 @@ def monitor():
     _INVOCATION_SEQ += 1
     _MONITOR_EVAL.clear()
     _MONITOR_EVAL.update(_new_invocation_store(_INVOCATION_SEQ))
+    _ADMISSION_EVAL.clear()
+    _ADMISSION_EVAL.update(_new_admission_store(_INVOCATION_SEQ))
 
     today_str = datetime.now(MYT).strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
@@ -131,6 +179,7 @@ def monitor():
         # identical silence.
         _MONITOR_EVAL["early_return_reason"] = "no_open_positions"
         _MONITOR_EVAL["monitor_completed"] = True
+        _ADMISSION_EVAL["monitor_completed"] = True
         print("  No open positions to monitor.")
         disconnect_ib()
         return
@@ -277,10 +326,12 @@ def monitor():
         _MONITOR_EVAL["trade_state_save_completed"] = True
         # A close freed a slot — promote from the ranked queue rather than
         # leaving it idle until the next scan. No rescanning here.
+        _ADMISSION_EVAL["promotion_expected"] = True
         promote_queue(source="monitor", use_live=True)
 
     disconnect_ib()
     _MONITOR_EVAL["monitor_completed"] = True
+    _ADMISSION_EVAL["monitor_completed"] = True
     print(f"\n{'='*50}\n")
 
 if __name__ == "__main__":
@@ -293,6 +344,7 @@ if __name__ == "__main__":
         monitor()
     except BaseException as exc:
         _MONITOR_EVAL["loop_exception"] = f"{type(exc).__name__}: {exc}"
+        _ADMISSION_EVAL["loop_exception"] = _MONITOR_EVAL["loop_exception"]
         raise
     finally:
         if _obs is None:
@@ -311,3 +363,25 @@ if __name__ == "__main__":
                     "recorder_write_failed", _json.dumps(_summary,
                                                          sort_keys=True,
                                                          default=str))
+        # Admission recorder: strictly AFTER the monitor flush and its health
+        # check, and in its own handler, so it can neither pre-empt nor mask
+        # the monitor evidence or the in-flight exception. It only READS the
+        # monitor store, for cross-recorder pairing (design §3.4).
+        try:
+            if _adm_obs is None or _ADM_STORE_ERROR is not None:
+                _emit_admission_health_failure(
+                    "recorder_import_failed",
+                    _ADM_OBS_IMPORT_ERROR or _ADM_STORE_ERROR)
+            else:
+                _adm_summary = _adm_obs.flush(_ADMISSION_EVAL,
+                                              decision_path="monitor",
+                                              peer=_MONITOR_EVAL)
+                if (not _adm_summary.get("heartbeat_written")
+                        or _adm_summary.get("write_failures")
+                        or _adm_summary.get("flush_error")):
+                    _emit_admission_health_failure(
+                        "recorder_write_failed", _json.dumps(_adm_summary,
+                                                             sort_keys=True,
+                                                             default=str))
+        except BaseException:                       # noqa: BLE001
+            pass

@@ -64,6 +64,11 @@ logs/*
 !logs/monitor_observation_v1.jsonl
 !logs/monitor_heartbeat_v1.jsonl
 !logs/monitor_health_v1.jsonl
+# Admission-capture recorder evidence, heartbeat and health (design
+# archive/DESIGN_admission_capture_v1.md §4). Same reasons as above.
+!logs/admission_v1.jsonl
+!logs/admission_heartbeat_v1.jsonl
+!logs/admission_health_v1.jsonl
 
 # Deliberately NOT re-included: logs/psi_state.json (per-host counter
 # baseline), logs/archive/ (V1 data), *.bak (repair backups), cron.log.
