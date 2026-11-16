@@ -1229,9 +1229,12 @@ Plus:
 
 ## 8. Activation constraints
 
-- The Finviz screener is broken, so R1 cannot occur live until it recovers.
-  R1 is therefore covered by controls only. Activation is not blocked: R2 and
-  R3 still run off the queue.
+- ~~The Finviz screener is broken, so R1 cannot occur live until it recovers.
+  R1 is therefore covered by controls only.~~ Superseded 2026-11-16: the
+  screener was fixed on 27 Oct (D-004, `2e45851`) and has been live since the
+  27 Oct 13:32 report, so R1 (scan-direct admission) can occur from the first
+  activated report onwards, alongside R2 and R3. Activation was never blocked
+  on it.
 - Activation goes by the same route as `5fd13e9`: squash on `main`, one parent;
   the revert is tested before the push; suites rerun on the VPS; deploy on a
   weekday 05:00–13:00 UTC, outside the cron times.
