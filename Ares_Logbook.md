@@ -4919,6 +4919,81 @@ this is not the 19 Oct failure (3 screened).
 1070 MB. Swap 286 MB, 0 MB paged out. Cache 1105 → 1114 → 1123. cron.log
 1.0 MB.
 
+### 2026-11-16 — step 3, implementation M4: inspection tool and controls built; review bundle ready
+
+- **Commit** `dd5f2f0` on `recorder/admission-v1`, pushed, not merged, not
+  active. No production file changed (the README gets a directory listing).
+- `tools/inspect_admission_cycles.py` (`R C1 [C2 ...]`, exit 0 PASS, 1 FAIL,
+  2 INCONCLUSIVE):
+  - the v7 structural checks;
+  - state-diff reconciliation of pending, trades and queue against the
+    captured intents, independent of save facts;
+  - the §3.5 per-file check, imported from `tools/admission_persistence.py`;
+  - episodes carried along the chain, §5 rules 1–8 and trade links;
+  - A2 derived per new link;
+  - promoted-candidate and monitor-peer cross-checks.
+  - It also closes the M3 deferrals: `concurrent_runs`, baseline ambiguity,
+    links over existing membership, `expiry_parse_failed_removal`.
+- `tests/run_admission_inspection_controls.py` **73/73**:
+  - 44 controls on three real report/monitor chains in scratch git repos.
+  - 27 tool mutants, each failing its named control.
+  - Always-PASS and always-FAIL stub tools both make the suite fail.
+  - The A2 classifier and the frozen schema copies are pinned to the
+    observer.
+- The real-run controls caught three tool defects before commit, all fixed:
+  - promotion `source` vocabulary;
+  - the heartbeat's `expiry_parse_failed` event shape;
+  - rule 8 firing on a same-intent later mutation.
+- Full repo run at `dd5f2f0`: 39 commands, 0 failed. Repro pack: 44 files,
+  hashes match, 12/12 PASS.
+- On `main` the tool FAILs, as intended: there is no admission evidence
+  before activation.
+- Bundle `review_bundle_admission_m4_v1` (9 attachments) built.
+  - Questions for ruling: Z1–Z9.
+  - Z8 lists the §7 cases covered only at unit level: the real-run trade
+    link over existing membership, its `removal_not_persisted` variant,
+    rule 3, two open episodes at the base, and re-promotion after a
+    demotion.
+- **M4 review round 1** (`review_bundle_admission_m4_v1`): **reviewed,
+  changes required**. No implementation defect found.
+  - Z1–Z7 and Z9 accepted; no change to the inspection semantics requested.
+  - Z8 is the only blocker: dedicated controls are required for the five
+    compositions. The reviewer noted that u04/u05 synthesise the
+    existing-trade state instead of running the two-run production path.
+  - Reviewer confirmed 73/73, the pack (44 files, 12/12) and the full run
+    at `dd5f2f0` (39, 0 failed).
+- **Round 2 controls** (test file only; the tool is unchanged):
+  - **Chain D, real runs:** the fill books LNK's trade, then stdout raises
+    at the `EXECUTED` print (`booked_pending_retained`, one link). The next
+    report's `discarded_already_open` closes the episode linked. PASS
+    (z01).
+  - **Chain E:** the same, then `save_pending` fails at `open`
+    (`removal_not_persisted`, report aborted, episode open with its link).
+    A later report closes it linked; INCONCLUSIVE from the abort, no FAIL
+    (z02).
+  - **Rule 3** on chain B's real rep2 (z03):
+    - re-keying SDA's fill entry, or swapping it with SDB's, means no
+      episode closes: FAIL, rules 2 and 7.
+  - **Duplicate symbol at the base** (z04): fails closed before any cycle
+    is judged.
+    - Chain G: two pre-activation DUP pendings, then a real report.
+    - Chain B: a `history` episode plus a pre-activation one.
+  - **Chain F, real runs** (z05):
+    - The report demotes PRY, closing its pre-activation episode.
+    - The monitor promotes PRY under the same key, opening a new
+      `queue_monitor` episode.
+    - The next report fills it; the link and A2 go to the admitted
+      episode.
+  - One new mutant per control (28–32), each caught by its assertion
+    rather than a crash. With the base check removed (mutant 31), the tool
+    PASSes a real report over two DUP pendings.
+  - Suite **83/83** (49 controls, 32 mutants, 2 stubs). Commit `d8c9633`
+    (test file only), pushed.
+  - Full repo run at `d8c9633`: 39 commands, 0 failed. Pack: 44 files,
+    hashes match, 12/12 PASS.
+  - Bundle `review_bundle_admission_m4_v2` (8 attachments, Z10: z03 uses
+    derived commits) ready; the owner sends it.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
