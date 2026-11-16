@@ -4845,6 +4845,80 @@ occasions (e.g. 1055 ms, 1188 ms); RAM free 1095 MB. Then 9 ms in 7.5 h.
 Swap 287 MB. Cache 1109 → 1120 → 1105 (cause of the drop not checked).
 cron.log 1.0 MB.
 
+### 2026-11-13 → 14 — no fills, no closes; 13:31 scan screens only 55; TBBB and SGRY peaks rise; LFTO and WWW queued (8/10)
+
+Two dashboards (21:31 MYT Nov 13 and 05:01 MYT Nov 14) and the monitor posts.
+No fills and no closes, so the clean sample is still 13, W 3/13, −$94.47 on
+both. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB. Every dashboard agrees with
+`virtual_trades.json` at its commit.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:31 Nov 13 | `4915e67` | 6 kept; **55 screened**, 0 signals; TBBB peak $68.52 from a pre-open IBKR price; TWST shadow tracking ends (30 days) |
+| 00:10 / 01:30 Nov 14 | `be199b1`, `d1cd240` | no exits; TBBB peak $69.90, SGRY $26.72, BRZE $46.74 → $46.75 |
+| 05:01 Nov 14 | `6d1133f` | 6 kept; **LFTO and WWW queued** (conf 3); SGRY peak $26.85, TBBB $69.96 |
+
+**Peaks and trails. All values are reproduced from the monitor and parity
+prices.**
+
+| Position | Change | Source |
+|---|---|---|
+| TBBB | $68.30 → $68.52 → $69.90 → **$69.96 (9.7%)**, trail $61.47 → $61.67 → $62.91 → **$62.96** | 13:31 IBKR before the open / monitor 16:10 / 21:00 IBKR |
+| SGRY | $26.69 → $26.72 → **$26.85 (15.3%)**, trail $24.02 → $24.05 → **$24.17** | monitor 16:10 / 21:00 IBKR (11-13 bar) |
+| BRZE | $46.69 → $46.74 → **$46.75 (2.1%)**, trail $42.02 → $42.07 → **$42.08** | monitor 16:10 / 17:30 |
+| TMO, AMP | unchanged: $724.62 / $528.50, trails $652.16 / $475.65 | — |
+
+- **Known issue 13, third time**: TBBB's 13:31 IBKR price $68.52 is 0.75%
+  above the 21:00 Nov 12 close read ($68.01). This time the regular session
+  went higher (monitor $69.90), so the pre-open peak was superseded the same
+  night and leaves no mark on the trail.
+- TBBB's trail ($62.96) is now 1.3% below its entry ($63.80); SGRY's ($24.17)
+  is 3.8% above its entry ($23.28).
+- At 13:31, AMP fell back to the daily close ($513.48); TMO ($700.00), SGRY
+  and BRZE were IBKR pre-open prices below their peaks.
+- At 21:00 Nov 13, four of the five positions were again evaluated on the
+  11-12 bar (only SGRY on 11-13): the 20 h cache pattern (2 Nov entry).
+- The monitor posted TMO at $696.12 in both cycles, and AMP at $517.56 at
+  16:10 on Wed 11, Fri 13 ($517.55 on Thu 12). The monitor records do not
+  carry the observed price, so whether these are stale quotes was not
+  checked. Neither is near a stop or target. Recorded, not analysed.
+
+**Scan.** ⚠️ The 13:31 Nov 13 scan screened **55** candidates (0 signals).
+It is the first count other than 103 in any report since 24 Oct. The 21:00
+scan was back to 103 (2 signals). The cause was not checked; `cron.log` on
+the VPS has the screener output. Finviz itself is working (103 at 21:00), so
+this is not the 19 Oct failure (3 screened).
+
+**Queue.**
+- 13:31 Nov 13: NWE, GRDN, BOBS, TGTX, MANE and MBGL kept. Queue 6/10.
+- 21:00 Nov 13: the same six kept, drifts −4.25% (MANE) to +1.78%.
+- 21:01 Nov 13: **LFTO queued** (`momentum_breakout`, $24.45, RSI 73.8,
+  vol 7.96×, SL $20.59, TP $28.85) and **WWW queued** (`momentum_breakout`,
+  $24.89, RSI 69.1, vol 2.23×, SL $22.95, TP $29.37). Volumes are at-close
+  reads and understated (known issue 11). Queue 8/10.
+- The dashboard listed only LFTO ("2 signals"): first entry of
+  `signal_details` only (3 Nov). Display only.
+- BOBS and TGTX (queued 11-09) and GRDN (11-10) pass the 5-day age limit
+  over the weekend; their expiry is expected at 13:31 Mon 16 Nov.
+- Every kept event has `rsi` 50.0 (known issue 10).
+- Every "QUEUED (n)" equals the entries kept by that report's maintenance,
+  before its insertions: 6, 6. Every dashboard drift equals its event's
+  `drift_pct`.
+
+**Monitor inspection: PASS, 2 cycles.**
+
+| Night | Command | Cycles |
+|---|---|---|
+| Fri 13 Nov | `inspect_monitor_cycles.py 4915e67 be199b1 d1cd240` | `c2598e97`, `16c82a39` |
+
+- 5 records in each cycle.
+
+**Parity, 10 records: all MATCH.**
+
+**System.** Stall 515 ms in 16.5 h, then 155 ms in 7.5 h. RAM free 1069 →
+1070 MB. Swap 286 MB, 0 MB paged out. Cache 1105 → 1114 → 1123. cron.log
+1.0 MB.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
