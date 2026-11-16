@@ -18,6 +18,15 @@ monitor recorder and the entry points are the real copies.
            close and promotion, the promoted pending filled next report.
   chain B  scan-direct: two scan admissions, one filled next report, one
            retained for missing data.
+  chain C  a pending save failing at open; a malformed queue date_added.
+  chain D  trade link over existing membership (§7 r5): the fill books the
+           trade and stdout raises at the EXECUTED print (pending kept);
+           the next report discards it as already open.
+  chain E  the same, then save_pending fails at open (removal not
+           persisted, report aborted); a later report discards it.
+  chain F  demotion to the queue and re-promotion of the same key by the
+           monitor, then the fill.
+  chain G  two pendings for one symbol at the base, then a report.
 
 Negative controls derive a commit from a real one (same parent, one file
 changed, the cron subject) and name the rule that must fire. Unit controls
@@ -149,6 +158,17 @@ def drive(entry, src, opts_json):
     tracker._fill_window_ok = lambda params: (opts.get("window", True),
                                               "control")
     tracker._validate_queued = _validator(opts)
+    frag = opts.get("print_raises")
+    if frag:
+        real_print = print
+        fired = []
+
+        def fake_print(*args, **kw):
+            if not fired and args and frag in str(args[0]):
+                fired.append(True)
+                raise RuntimeError("control: stdout raised at the print")
+            return real_print(*args, **kw)
+        tracker.print = fake_print
     ctx = contextlib.nullcontext()
     if opts.get("fail"):
         sys.path.insert(0, HERE)
@@ -329,6 +349,68 @@ def build_c(tmp):
     return c
 
 
+def _link_runs(c):
+    """rep1 admits LNK; rep2's fill books the trade, then stdout raises at
+    the EXECUTED print, so the pending is retained (booked_pending_retained,
+    the reviewer's r3 probe)."""
+    c.run("rep1", "daily_report.py", {"signals": ["LNK"]})
+    c.run("rep2", "daily_report.py", {"signals": [],
+                                      "print_raises": "EXECUTED"})
+
+
+def build_d(tmp):
+    """Trade link over existing membership (§7 r5): R -> rep1 -> rep2 ->
+    rep3. rep3 discards LNK as already open, over the trade rep2 linked."""
+    c = Chain.create(tmp, "D", {TRADES: [], PENDING: [], QUEUE: [],
+                                RANKED: []})
+    _link_runs(c)
+    c.run("rep3", "daily_report.py", {"signals": []})
+    c.save()
+    return c
+
+
+def build_e(tmp):
+    """The same, but rep3's fill-pass save_pending fails at open (the report
+    aborts; removal_not_persisted); rep4 then discards LNK normally."""
+    c = Chain.create(tmp, "E", {TRADES: [], PENDING: [], QUEUE: [],
+                                RANKED: []})
+    _link_runs(c)
+    c.run("rep3", "daily_report.py", {"signals": [],
+                                      "fail": [PENDING, "open", 1]})
+    c.run("rep4", "daily_report.py", {"signals": []})
+    c.save()
+    return c
+
+
+def build_f(tmp):
+    """Demotion and re-promotion of one key: R -> rep1 -> mon1 -> rep2.
+    rep1 fills PFX (slots now full) and demotes PRY to the queue; mon1
+    closes F1 at its target and promotes PRY under the same key
+    (PRY, today); rep2 fills it."""
+    c = Chain.create(tmp, "F", {
+        TRADES: [_open_trade(s) for s in ("FA", "FB", "FC", "FD")],
+        PENDING: [_pending("PFX"), _pending("PRY")], QUEUE: [], RANKED: []})
+    c.run("rep1", "daily_report.py", {"signals": []})
+    c.run("mon1", "monitor_trades.py", {"live": {
+        "FA": round(price("FA") * 1.2, 2), "FB": price("FB"),
+        "FC": price("FC"), "FD": price("FD"), "PFX": price("PFX")}})
+    c.run("rep2", "daily_report.py", {"signals": []})
+    c.save()
+    return c
+
+
+def build_g(tmp):
+    """Two pendings for one symbol at the base (DUP yesterday and today),
+    then one real report: R -> rep1."""
+    old = _pending("DUP") | {"date": (_today() - timedelta(days=1))
+                             .isoformat()}
+    c = Chain.create(tmp, "G", {TRADES: [], PENDING: [old, _pending("DUP")],
+                                QUEUE: [], RANKED: []})
+    c.run("rep1", "daily_report.py", {"signals": []})
+    c.save()
+    return c
+
+
 def build_a_tail(a):
     """Chain A, then a report whose maintenance save leaves a partial
     queue file."""
@@ -343,7 +425,9 @@ def chains():
     if given:
         return {k: Chain(v) for k, v in json.loads(given).items()}, None
     tmp = tempfile.mkdtemp(prefix="adm_inspect_")
-    out = {"A": build_a(tmp), "B": build_b(tmp), "C": build_c(tmp)}
+    out = {"A": build_a(tmp), "B": build_b(tmp), "C": build_c(tmp),
+           "D": build_d(tmp), "E": build_e(tmp), "F": build_f(tmp),
+           "G": build_g(tmp)}
     build_a_tail(out["A"])
     return out, tmp
 
@@ -524,7 +608,9 @@ def p05_frozen_copy_pinned(c, ch):
     c(t.HEARTBEAT.endswith(ao.HEARTBEAT_NAME) and
       t.RECORDS.endswith(ao.RECORDS_NAME), "file names")
     kinds = set()
-    for chn, tip in (("A", "rep2"), ("B", "rep3"), ("C", "rep1")):
+    for chn, tip in (("A", "rep2"), ("B", "rep3"), ("C", "rep1"),
+                     ("D", "rep3"), ("E", "rep4"), ("F", "rep2"),
+                     ("G", "rep1")):
         for hb in ch[chn].lines(tip, HEARTBEAT):
             c(set(hb) == t.HEARTBEAT_FIELDS,
               f"heartbeat keys {set(hb) ^ t.HEARTBEAT_FIELDS}")
@@ -1066,6 +1152,188 @@ def u12_a2_brackets_per_route(c, ch):
         c(t.cycle_code(V) == 0, f"{V}")
 
 
+# ------------------- round 2: Z8 compositions, real runs -------------------
+
+YDAY = (_today() - timedelta(days=1)).isoformat()
+LNK = f"('LNK', '{TODAY}')"
+NO_LINK_FAIL = ("unowned_existing_trade", "second_trade_link", "rule 4",
+                "rule 5", "rule 7")
+
+
+def _fills(ch, ref, symbol):
+    new = ch.lines(ref, RECORDS)[len(ch.lines(parent(ch, ref), RECORDS)):]
+    return [r for r in new if r["kind"] == "fill" and r["symbol"] == symbol]
+
+
+def _ntrades(ch, ref, symbol):
+    return sum(1 for t in json.loads(ch.show(ref, TRADES))
+               if t["symbol"] == symbol)
+
+
+def _held(ch, ref, symbol):
+    return any(p["symbol"] == symbol
+               for p in json.loads(ch.show(ref, PENDING)))
+
+
+def _link_evidence(c, ch):
+    """rep1 and rep2 of chains D and E, from the committed evidence."""
+    f = _fills(ch, "rep2", "LNK")
+    c(len(f) == 1 and f[0]["outcome"] == "retained_exception"
+      and f[0]["trade_appended"] is True
+      and f[0]["executed_marked"] is False, f"rep2 fill {f}")
+    c(_ntrades(ch, "rep1", "LNK") == 0 and _ntrades(ch, "rep2", "LNK") == 1
+      and _held(ch, "rep2", "LNK"), "rep2: trade booked, pending retained")
+    expect(c, ch, ["--verbose", "R", "rep1", "rep2"], 0, "RESULT: PASS",
+           f"episode opened {LNK} (scan_direct)",
+           f"booked_pending_retained {LNK}", "A2 LNK",
+           "open episodes: 1 (1 linked)", absent=NO_LINK_FAIL)
+
+
+@control
+def z01_existing_trade_two_runs(c, ch):
+    """§7 r5, real runs: rep2 books the trade and keeps the pending (new
+    link, episode open); rep3 discards it as already open over m = n = 1:
+    no second link, the episode closes linked to rep2's trade, PASS."""
+    d = ch["D"]
+    c(all(d.refs.get(k + ".rc") == 0 for k in ("rep1", "rep2", "rep3")),
+      f"a run failed: {[d.refs.get(k + '.err') for k in ('rep2', 'rep3')]}")
+    _link_evidence(c, d)
+    f = _fills(d, "rep3", "LNK")
+    c(len(f) == 1 and f[0]["outcome"] == "discarded_already_open"
+      and f[0]["trade_appended"] is False
+      and f[0]["executed_marked"] is True, f"rep3 fill {f}")
+    c(_ntrades(d, "rep3", "LNK") == 1 and not _held(d, "rep3", "LNK"),
+      "rep3: one trade, pending removed")
+    out = expect(c, d, ["--verbose", "R", "rep1", "rep2", "rep3"], 0,
+                 "RESULT: PASS",
+                 f"fill removed_over_existing_trade {LNK} "
+                 "(discarded_already_open)",
+                 f"episode closed {LNK} (removed_over_existing_trade, "
+                 "linked)", "open episodes: 0", absent=NO_LINK_FAIL)
+    c(out.count("A2 LNK") == 1, "more than one link reported for LNK")
+
+
+@control
+def z02_removal_not_persisted_keeps_link(c, ch):
+    """The same two runs, then rep3's save_pending fails at open: the
+    pending stays, m = n = 1, removal_not_persisted, the run INCONCLUSIVE
+    (aborted) and the episode still open with its link; rep4's discard
+    closes it linked. No FAIL anywhere."""
+    e = ch["E"]
+    c(e.refs.get("rep3.rc") not in (0, None) and e.refs.get("rep4.rc") == 0,
+      f"rep3 must abort, rep4 succeed: {e.refs.get('rep3.err')}")
+    _link_evidence(c, e)
+    f = _fills(e, "rep3", "LNK")
+    c(len(f) == 1 and f[0]["outcome"] == "discarded_already_open",
+      f"rep3 fill {f}")
+    c(_ntrades(e, "rep3", "LNK") == 1 and _held(e, "rep3", "LNK"),
+      "rep3: pending kept, one trade")
+    out = expect(c, e, ["--verbose", "R", "rep1", "rep2", "rep3"], 2,
+                 "RESULT: INCONCLUSIVE", f"removal_not_persisted {LNK}",
+                 "aborted report run", "open episodes: 1 (1 linked)",
+                 absent=NO_LINK_FAIL)
+    c(not any(x.lstrip().startswith("FAIL") for x in out.splitlines()),
+      f"a FAIL line: {out[-600:]}")
+    out = expect(c, e, ["--verbose", "R", "rep1", "rep2", "rep3", "rep4"], 2,
+                 f"episode closed {LNK} (removed_over_existing_trade, "
+                 "linked)", "open episodes: 0", absent=NO_LINK_FAIL)
+    c(not any(x.lstrip().startswith("FAIL") for x in out.splitlines()),
+      f"a FAIL line: {out[-600:]}")
+    c(out.count(f"episode closed {LNK}") == 1, "LNK closed more than once")
+
+
+def _swap_fill_keys(lines):
+    f = {r["symbol"]: r for r in lines if r["kind"] == "fill"}
+    f["SDA"]["symbol"], f["SDB"]["symbol"] = "SDB", "SDA"
+
+
+@control
+def z03_rule3_closure_exclusive(c, ch):
+    """§5 rule 3 on chain B's real rep2 (SDA filled, SDB retained): only the
+    fill entry matched to an episode closes it. Re-keying SDA's entry to
+    another signal_date, or swapping the two entries' symbols, leaves no
+    entry that may close SDA's episode: nothing closes, FAIL."""
+    b = ch["B"]
+    out = expect(c, b, ["--verbose"] + B_REFS, 0, "RESULT: PASS",
+                 f"episode closed ('SDA', '{TODAY}') (filled, linked)",
+                 "open episodes: 1")
+    c(out.count("episode closed") == 1, "a second episode closed")
+    rekey = edit_appended(b, "rep2", RECORDS, _set(
+        lambda r: r["kind"] == "fill" and r["symbol"] == "SDA",
+        signal_date=YDAY))
+    swap = edit_appended(b, "rep2", RECORDS, _swap_fill_keys)
+    for label, data, subs in (
+            ("re-keyed", rekey,
+             (f"rule 2: fill_without_episode ('SDA', '{YDAY}')",
+              f"rule 7: episode open without a pending ('SDA', '{TODAY}')")),
+            ("swapped", swap,
+             (f"rule 7: episode open without a pending ('SDA', '{TODAY}')",
+              f"fill ('SDB', '{TODAY}')", f"fill ('SDA', '{TODAY}')"))):
+        x = b.derive("rep2", {RECORDS: data})
+        out = expect(c, b, ["--verbose", "R", "rep1", x], 1, "RESULT: FAIL",
+                     *subs)
+        c("episode closed" not in out, f"{label}: an episode closed: "
+          f"{out[-600:]}")
+
+
+@control
+def z04_duplicate_symbol_at_base(c, ch):
+    """Two pendings for one symbol at <R> fail closed before any cycle is
+    judged (§5 rule 1): pre-activation pair (chain G, followed by a real
+    report), and a history episode plus a pre-activation one (chain B's
+    rep1 with SDA yesterday added, rep2 replayed on top)."""
+    g = ch["G"]
+    c(g.refs.get("rep1.rc") == 0, f"G rep1 failed: {g.refs.get('rep1.err')}")
+    out = expect(c, g, ["--verbose", "R", "rep1"], 1,
+                 f"FAIL: rule 1: several pending episodes per symbol at "
+                 f"{g.refs['R'][:7]}: ['DUP']")
+    c("cycle 1" not in out and "RESULT" not in out, f"judged: {out}")
+    b = ch["B"]
+    base = b.derive("rep1", {PENDING: edit_state(
+        b, "rep1", PENDING,
+        lambda p: p + [_pending("SDA") | {"date": YDAY}])})
+    tip = b.derive("rep2", {PENDING: b.show("rep2", PENDING)}, parent=base)
+    expect(c, b, [base, tip], 1,
+           f"FAIL: rule 1: several pending episodes per symbol at "
+           f"{base[:7]}: ['SDA']")
+
+
+@control
+def z05_demotion_repromotion_new_episode(c, ch):
+    """Real runs: rep1 demotes PRY (pre-activation episode closes, queue
+    insert); mon1 promotes it under the same key (a new episode,
+    queue_monitor); rep2 fills it and links the trade to the new episode,
+    not to the pre-activation one."""
+    f = ch["F"]
+    c(all(f.refs.get(k + ".rc") == 0 for k in ("rep1", "mon1", "rep2")),
+      f"a run failed: {[f.refs.get(k + '.err') for k in ('rep1', 'mon1')]}")
+    k = f"('PRY', '{TODAY}')"
+    d = _fills(f, "rep1", "PRY")
+    c(len(d) == 1 and d[0]["outcome"] == "demoted_to_queue", f"rep1 {d}")
+    q = [x["symbol"] for x in json.loads(f.show("rep1", QUEUE))]
+    c("PRY" in q and not _held(f, "rep1", "PRY"), f"rep1 queue {q}")
+    c(_held(f, "mon1", "PRY") and "PRY" not in [
+        x["symbol"] for x in json.loads(f.show("mon1", QUEUE))],
+      "mon1: PRY promoted back to pending")
+    out = expect(c, f, ["--verbose", "R", "rep1", "mon1", "rep2"], 0,
+                 "RESULT: PASS", f"fill removed {k} (demoted_to_queue)",
+                 "queue consistent PRY (insert)",
+                 f"episode closed {k} (removed)",
+                 "queue consistent PRY (candidate)",
+                 f"pending admitted {k}",
+                 f"episode opened {k} (queue_monitor)",
+                 f"fill filled {k} (filled)",
+                 f"episode closed {k} (filled, linked)", "open episodes: 0",
+                 absent=("rule 1", "rule 2", "rule 7",
+                         f"unlinked_preactivation {k}"))
+    a2 = [x for x in out.splitlines() if "A2 PRY" in x]
+    c(len(a2) == 1 and a2[0].endswith("episode admitted]"),
+      f"PRY link not on the promoted episode: {a2}")
+    c(out.index(f"episode closed {k} (removed)")
+      < out.index(f"episode opened {k}")
+      < out.index(f"episode closed {k} (filled, linked)"), "episode order")
+
+
 # ---------------------------------------------------------------------------
 # Meta: mutants of the tool, stub tools
 # ---------------------------------------------------------------------------
@@ -1156,6 +1424,30 @@ MUTANTS = (
      '        if ep.origin == "preactivation":\n            V.append((INCIDENT',
      '        if False:\n            V.append((INCIDENT',
      "p01_chain_a_reconciles"),
+    ("a new link is not carried by the episode",
+     "        ep.link = tk\n", "        pass\n",
+     "z01_existing_trade_two_runs"),
+    ("a retained removal closes the episode",
+     '    if ap.pending_membership(obs["pending"], *key) == "absent":\n'
+     '        if name == "removed_over_existing_trade":',
+     '    if r["executed_marked"]:\n'
+     '        if name == "removed_over_existing_trade":',
+     "z02_removal_not_persisted_keeps_link"),
+    ("a failed fill entry still closes its episode",
+     '        V.append((FAIL, f"fill {key}: {res[\'reasons\']}"))\n'
+     "        return\n",
+     '        V.append((FAIL, f"fill {key}: {res[\'reasons\']}"))\n',
+     "z03_rule3_closure_exclusive"),
+    ("duplicate symbols at the base accepted",
+     "        if dup:\n", "        if False:\n",
+     "z04_duplicate_symbol_at_base"),
+    ("a demotion leaves the episode open",
+     '    if ap.pending_membership(obs["pending"], *key) == "absent":\n'
+     '        if name == "removed_over_existing_trade":',
+     '    if ap.pending_membership(obs["pending"], *key) == "absent" \\\n'
+     '            and r["outcome"] != "demoted_to_queue":\n'
+     '        if name == "removed_over_existing_trade":',
+     "z05_demotion_repromotion_new_episode"),
 )
 
 STUBS = (
