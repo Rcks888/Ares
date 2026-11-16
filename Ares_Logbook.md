@@ -4993,6 +4993,16 @@ this is not the 19 Oct failure (3 screened).
     hashes match, 12/12 PASS.
   - Bundle `review_bundle_admission_m4_v2` (8 attachments, Z10: z03 uses
     derived commits) ready; the owner sends it.
+- **M4 review round 2** (`review_bundle_admission_m4_v2`): **M4 APPROVED at
+  `d8c9633`**, no blocking finding.
+  - Z8 closed: z01–z05 each control their composition; mutants 28–32 each
+    fail their control; the stubs still fail the suite.
+  - Z10 accepted: z03's derived commits are a negative control on top of
+    the real chain B run, not a substitute for it.
+  - Reviewer confirmed 83/83, the pack (44 files, 12/12) and the full run
+    at `d8c9633` (39, 0 failed); scope test file only.
+  - Milestone acceptance only: no merge, deploy, activation or unfreeze.
+    **Week target done.** Step 3 implementation M1–M4 all accepted.
 
 ### [DATE TEMPLATE — Copy for new days]
 
