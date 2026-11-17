@@ -5004,6 +5004,118 @@ this is not the 19 Oct failure (3 screened).
   - Milestone acceptance only: no merge, deploy, activation or unfreeze.
     **Week target done.** Step 3 implementation M1–M4 all accepted.
 
+### 2026-11-16 — admission capture: activation decision approved; activated `4ff6bfe`
+
+- **Pulled forward:** the owner is free this week, so the activation decision
+  (design §8) was started on Monday, after M4.
+- **Drafting found one coverage gap:** production runs the report with
+  `ARES_PARITY=1`, but every accepted admission suite ran with parity off.
+  - **A1** `tests/run_admission_parity_rehearsal.py` closes it. The real
+    `daily_report.py` runs twice, parity on, as P0 (pre-admission fixtures,
+    i.e. what `main` ran) and P1 (recorder). The seed gives a real stop exit
+    (OPD), `check_open_trades`' own expiry, a demotion, a scan promotion and
+    a fill. Production state, report stdout and parity evidence are identical
+    between P0 and P1 (time and lineage fields aside); the M4 tool passes P1;
+    five negative controls. 10/10.
+  - Found while building it: `check_shadow_trades()` (`tracker.py:1356`)
+    rewrites a just-closed trade's shadow block after the parity hash point,
+    so the parity state hash binds to the committed trades file only in runs
+    that close nothing. Production behaviour, not a defect.
+- **A2** `tools/run_activation_checks.sh`: every verifier and suite in one
+  command, 40 commands. **A3** design §8: the "Finviz broken" bullet
+  superseded. **A4** VPS fast rollback is worktree-only (`git restore`): the
+  monitor recorder's `git checkout <PRE> --` would have staged the code
+  rollback into the bot's next log commit. **A5** first report inspected the
+  same evening, before the first monitor cycle. **A6** `INCONCLUSIVE` is a
+  hold, not an abort.
+- `ACTIVATION_admission_capture_v1.md` + A1 + A2: `e51d24a`, `4042de9` on the
+  branch. Squash rehearsal in a clone of `main`: one parent, 38 files, no
+  `logs/`, inverse applies, entrypoints restored. Full run 40/40; pack 45
+  files, 13/13. Bundle `review_bundle_admission_activation_v1`.
+- **Activation review v1: APPROVED.** Q-A1 (parity normalisation), Q-A4,
+  Q-A5, Q-A6 accepted; deployment, rollback, first-cycle inspection contract
+  and abort criteria accepted. The reviewer reproduced A1 10/10 and the pack
+  13/13, all hashes matching. Approval for the documented procedure only, on
+  the owner's go-ahead in the window; no unfreeze, no Phase 5.
+- **Deployment, Mon 16 Nov (owner's go-ahead):**
+  - §3.1 at 07:40 UTC: VPS at `6d1133f` (Fri 13 Nov 21:01 report), clean
+    tree, Python 3.12.3, git 2.43.0. All 10 md5s equal `main`, which equals the
+    three pre-admission fixtures. Admission files absent. Baselines: parity
+    332 records / 68 heartbeats, monitor recorder 221 / 48, queue events 323.
+    State backed up to `/root/ares/preact_admission/`.
+  - Laptop: squash `4ff6bfe` `activate: admission capture v1` on `baaf2a3`, one
+    parent, 38 files, none in `logs/`. §3.5 inverse test passed before the
+    push. Pushed 07:45 UTC.
+  - VPS: `--ff-only` `6d1133f` → `4ff6bfe`; md5s `dca3ae20…`, `d3cd1cf4…`,
+    `87a2114a…`, `7af06141…` match; `parses`; `run_activation_checks.sh`
+    under the venv 07:46–07:52 UTC: 40 commands, 0 failed, 0 uncommitted
+    paths after; admission files still absent; tree clean. Output kept in
+    `/root/ares/activation_checks_admission.txt`.
+- **First inspection: Tue 17 Nov morning, all four cycles together.**
+  - ⚠️ **Deviation from A5:** the owner was busy on Monday evening, so the
+    13:32 report was not inspected before the 16:10 UTC monitor. Both
+    monitor cycles and the 21:01 report therefore ran before any evidence
+    was reviewed: the exposure A5 was meant to avoid. No consequence (below).
+  - `inspect_admission_cycles.py --verbose 4ff6bfe 0c35f4c 859b5cc 624052c
+    763a662`: **PASS**, exit 0. 13:32 report 4 records (fill pass,
+    maintenance, expiry, promotion pass); both monitors 0 records
+    (`promotion_monitor` `no_state_update`); 21:01 report 8 records (the same
+    four plus MBGL and LFTO `admission` → `queue_insert`). 0 open episodes,
+    0 unknown. No incidents: no pending signals existed, so there was nothing
+    pre-activation to link.
+  - `inspect_monitor_cycles.py 0c35f4c 859b5cc 624052c`: **PASS** (5 records
+    each). The base is the report before the first monitor, not `4ff6bfe`
+    (the first attempt FAILed on that).
+  - Parity: 10 new records (5 per report), all `MATCH`, no differing fields,
+    no capture defect; 2 heartbeats, `contract_valid`, `lineage_complete`.
+  - Each cycle commit has one parent and touches `logs/` only; no code
+    change since `4ff6bfe`. Line counts: parity 332 → 342, parity heartbeat
+    68 → 70, monitor recorder 221 → 231 / 48 → 50, queue events 323 → 336;
+    each older file's first lines are byte-identical (append-only).
+    `admission_v1` 12, `admission_heartbeat_v1` 4 (one per cycle), no
+    `admission_health_v1.jsonl`.
+  - Heartbeats: each cycle's own entrypoint completed (`report_completed` on
+    both reports, `monitor_completed` on both monitors), `loop_exception`
+    null, `records_incomplete` 0, manifests and lineage complete.
+  - `cron.log` (18,625 lines): no `ADMISSION-HEALTH`. The last Traceback is
+    at line 2135; the activated cycles start at line 18324 (report header
+    "2026-11-16 21:30" MYT), so there are none in the activated cycles. The last
+    12 old Tracebacks are all `ModuleNotFoundError: No module named 'tzdata'`
+    → `ZoneInfoNotFoundError: 'No time zone found with key US/Eastern'`
+    (part of the 38 left unclassified in the Oct audit; not investigated).
+  - **First-cycle inspection contract (§5) met. No abort criterion (§6).**
+
+### 2026-11-16 → 17 — no fills, no closes; first activated cycles; BOBS, TGTX, GRDN expire; MANE dropped on drift; MBGL and LFTO re-signalled (4/10); SGRY peak from a pre-open IBKR print
+
+Two dashboards (21:32 MYT Nov 16 and 05:01 MYT Nov 17) and the monitor posts.
+No fills and no closes, so the clean sample is still 13, W 3/13, −$94.47 on
+both. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB. Every dashboard agrees with
+`virtual_trades.json` at its commit (peaks and trails checked).
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:32 Nov 16 | `0c35f4c` | **BOBS, TGTX (11-09) and GRDN (11-10) expired**; 5 kept; 103 screened, 0 signals; SGRY peak $26.85 → **$26.89** |
+| 00:10 / 01:30 Nov 17 | `859b5cc`, `624052c` | no exits; no peak moved |
+| 05:01 Nov 17 | `763a662` | **MANE dropped** (drift −5.4%, limit ±5.0%; −4.2% at 13:31); 4 kept; 103 screened, 2 signals: **MBGL and LFTO re-signalled** (both already queued), queue 4/10 |
+
+- **Known issue 13, fourth time:** SGRY's 13:31 price $26.89 is IBKR at
+  08:31 ET, before the open (bar 11-13). The monitor later posted $26.71 and
+  $26.84, so the pre-open print stays as the peak and raised the trail
+  $24.17 → **$24.20** (3.9% above the $23.28 entry). TMO ($700.50), BRZE and
+  TBBB were also pre-open IBKR prices, below their peaks; AMP used the daily
+  close ($519.43).
+- Monitor prices: TMO $694.63 / $696.66, AMP $518.27 / $515.30, SGRY $26.71 /
+  $26.84, BRZE $46.66 / $46.72, TBBB $68.47 / $68.34. Closest to a level: SGRY,
+  2.3% below its $27.47 target.
+- Queue: the expiries were due (5 days). MANE was kept at 13:31 at −4.17%
+  and dropped at 21:01 at −5.36%. The 21:01 scan's two signals were MBGL
+  (momentum breakout, $24.03, RSI 77.3) and LFTO ($24.46, RSI 76.2), both
+  already queued; recorded by the admission recorder as `queued` →
+  `queue_insert`. The dashboard's scan line names only MBGL.
+- System: ⚠️ stall **1599 ms** in 64.5 h (weekend window; 1064 ms on 12→13
+  Nov), 5 MB paged out; 05:01 back to 41 ms in 7.5 h. RAM 1022–1047 MB used.
+  Recorded, not analysed.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
