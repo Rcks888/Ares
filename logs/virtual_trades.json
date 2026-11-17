@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 56
+    "holding_days": 57
   },
   {
     "symbol": "WBD",
@@ -794,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 48
+    "holding_days": 49
   },
   {
     "symbol": "TWST",
@@ -1241,7 +1241,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 21,
+      "days_tracked": 22,
       "max_days": 30,
       "peak_after_exit": 9.32,
       "trough_after_exit": 7.01,
@@ -1249,7 +1249,7 @@
       "trough_date": "2026-11-03",
       "missed_upside_pct": 0.11,
       "avoided_downside_pct": 24.7,
-      "latest_price": 7.53
+      "latest_price": 7.13
     }
   },
   {
@@ -1473,15 +1473,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 18,
+      "days_tracked": 19,
       "max_days": 30,
-      "peak_after_exit": 121.16,
+      "peak_after_exit": 122.88,
       "trough_after_exit": 104.44,
-      "peak_date": "2026-11-13",
+      "peak_date": "2026-11-16",
       "trough_date": "2026-11-03",
-      "missed_upside_pct": 12.19,
+      "missed_upside_pct": 13.78,
       "avoided_downside_pct": 3.3,
-      "latest_price": 121.16
+      "latest_price": 122.88
     }
   },
   {
@@ -1553,15 +1553,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 25,
+      "days_tracked": 26,
       "max_days": 30,
       "peak_after_exit": 8.7,
-      "trough_after_exit": 7.52,
+      "trough_after_exit": 7.04,
       "peak_date": "2026-11-09",
-      "trough_date": "2026-11-13",
+      "trough_date": "2026-11-16",
       "missed_upside_pct": 12.11,
-      "avoided_downside_pct": 3.09,
-      "latest_price": 7.52
+      "avoided_downside_pct": 9.28,
+      "latest_price": 7.04
     }
   },
   {
@@ -1610,7 +1610,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 19
+    "holding_days": 20
   },
   {
     "symbol": "RRC",
@@ -1677,7 +1677,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 12,
+      "days_tracked": 13,
       "max_days": 30,
       "peak_after_exit": 54.01,
       "trough_after_exit": 48.72,
@@ -1685,7 +1685,7 @@
       "trough_date": "2026-11-06",
       "missed_upside_pct": 4.07,
       "avoided_downside_pct": 6.13,
-      "latest_price": 51.83
+      "latest_price": 50.45
     }
   },
   {
@@ -1734,7 +1734,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 18
+    "holding_days": 19
   },
   {
     "symbol": "TBBB",
@@ -1782,6 +1782,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 12
+    "holding_days": 13
   }
 ]

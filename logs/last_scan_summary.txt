@@ -1,9 +1,3 @@
-candidates_screened:103
-signals_found:2
-signal_details:MBGL | momentum_breakout | conf3 | uptrend
-  Price: $24.03 | RSI: 77.3 | Vol: 2.12x
-  Buy: $150 (6.2 shares)
-  SL: $22.13 | TP: $28.36 (+18%) | TS: 10%|||LFTO | momentum_breakout | conf3 | uptrend
-  Price: $24.46 | RSI: 76.2 | Vol: 2.9x
-  Buy: $150 (6.1 shares)
-  SL: $20.62 | TP: $28.86 (+18%) | TS: 10%
+candidates_screened:102
+signals_found:0
+signal_details:

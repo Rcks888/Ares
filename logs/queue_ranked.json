@@ -15,32 +15,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-16T21:01:04",
+    "checked_at": "2026-11-17T13:30:56",
     "drift_pct": 0.04,
     "rsi": 50.0,
     "ema20_ok": true,
     "live_price": 24.46
-  },
-  {
-    "symbol": "NWE",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "volume_spike",
-    "confluence": 3,
-    "price_at_signal": 84.97,
-    "rsi_at_signal": 83.4,
-    "stdev_20": 0.0096,
-    "vol_ratio": 1.9,
-    "date_added": "2026-11-11",
-    "screens": [
-      "unusual_volume"
-    ],
-    "checked_at": "2026-11-16T21:01:05",
-    "drift_pct": -0.07,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 84.91
   },
   {
     "symbol": "WWW",
@@ -58,11 +37,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-16T21:01:04",
-    "drift_pct": 1.73,
+    "checked_at": "2026-11-17T13:30:57",
+    "drift_pct": 1.61,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 25.32
+    "live_price": 25.29
   },
   {
     "symbol": "MBGL",
@@ -79,10 +58,10 @@
     "screens": [
       "big_movers_up"
     ],
-    "checked_at": "2026-11-16T21:01:05",
-    "drift_pct": 3.8,
+    "checked_at": "2026-11-17T13:30:57",
+    "drift_pct": 3.84,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 24.03
+    "live_price": 24.04
   }
 ]
