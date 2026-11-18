@@ -1,25 +1,25 @@
 [
   {
-    "symbol": "LFTO",
+    "symbol": "WWW",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
-    "category": "reversal_candidate",
+    "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 22.67,
-    "rsi_at_signal": 70.9,
-    "stdev_20": 0.0814,
-    "vol_ratio": 1.5,
-    "date_added": "2026-11-17",
+    "price_at_signal": 24.89,
+    "rsi_at_signal": 69.1,
+    "stdev_20": 0.039,
+    "vol_ratio": 2.23,
+    "date_added": "2026-11-13",
     "screens": [
       "unusual_volume",
-      "big_movers_down"
+      "big_movers_up"
     ],
-    "checked_at": "2026-11-18T13:30:56",
-    "drift_pct": 0.04,
+    "checked_at": "2026-11-18T21:01:03",
+    "drift_pct": 0.16,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 22.68
+    "live_price": 24.93
   },
   {
     "symbol": "BILL",
@@ -37,32 +37,32 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-18T13:30:56",
-    "drift_pct": -0.32,
+    "checked_at": "2026-11-18T21:01:02",
+    "drift_pct": 1.17,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 64.88
+    "live_price": 65.85
   },
   {
-    "symbol": "WWW",
+    "symbol": "LFTO",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
-    "category": "momentum_candidate",
+    "category": "reversal_candidate",
     "confluence": 3,
-    "price_at_signal": 24.89,
-    "rsi_at_signal": 69.1,
-    "stdev_20": 0.039,
-    "vol_ratio": 2.23,
-    "date_added": "2026-11-13",
+    "price_at_signal": 22.67,
+    "rsi_at_signal": 70.9,
+    "stdev_20": 0.0814,
+    "vol_ratio": 1.5,
+    "date_added": "2026-11-17",
     "screens": [
       "unusual_volume",
-      "big_movers_up"
+      "big_movers_down"
     ],
-    "checked_at": "2026-11-18T13:30:55",
-    "drift_pct": -0.88,
+    "checked_at": "2026-11-18T21:01:02",
+    "drift_pct": 2.65,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 24.67
+    "live_price": 23.27
   }
 ]

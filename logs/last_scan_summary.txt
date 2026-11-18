@@ -1,3 +1,6 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:1
+signal_details:MDLN | momentum_breakout | conf3 | uptrend
+  Price: $38.53 | RSI: 53.6 | Vol: 1.95x
+  Buy: $150 (3.9 shares)
+  SL: $34.79 | TP: $45.47 (+18%) | TS: 10%
