@@ -1,9 +1,3 @@
 candidates_screened:103
-signals_found:2
-signal_details:BILL | momentum_breakout | conf3 | uptrend
-  Price: $65.09 | RSI: 79.9 | Vol: 4.86x
-  Buy: $150 (2.3 shares)
-  SL: $60.56 | TP: $76.81 (+18%) | TS: 10%|||LFTO | momentum_breakout | conf3 | uptrend
-  Price: $22.67 | RSI: 70.9 | Vol: 1.5x
-  Buy: $150 (6.6 shares)
-  SL: $18.98 | TP: $26.75 (+18%) | TS: 10%
+signals_found:0
+signal_details:
