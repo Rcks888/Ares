@@ -5187,7 +5187,9 @@ No `logs/admission_health_v1.jsonl`; no `Traceback` or `ADMISSION-HEALTH` in
   did nothing. Both runs held all five positions and wrote no state. Telegram
   messages 183 and 184 each match their own run, although both runs `tee` to
   the same `/tmp/ares_monitor.txt`. `run_monitor.sh` has no lock. Both tools'
-  time checks report the overlap correctly. Known issue 14.
+  time checks report the overlap correctly. Known issue 4, third time
+  (1 Oct, 23 Oct). First logged as a new issue 14 by mistake; folded into
+  issue 4 the same day.
 - **C. LFTO drop and re-queue in one run.** 21:00:56 maintenance dropped LFTO
   (drift −7.28%); 21:01:42 the scan queued it again (`scan_direct` →
   `queued` → `queue_insert`, signal 2026-11-17, $22.67). Rule 8 (Z2,
@@ -5204,7 +5206,7 @@ No `logs/admission_health_v1.jsonl`; no `Traceback` or `ADMISSION-HEALTH` in
   (`FAIL`) on an activated cycle" as an abort criterion. Both FAILs are
   lineage/time checks whose causes are outside the recorder (A: my push;
   B: the IBKR hang), and the recorder's evidence is consistent. Recorded as a
-  deviation from the written §6 rule. Ares stays FROZEN; issue 14 is not
+  deviation from the written §6 rule. Ares stays FROZEN; issue 4 is not
   fixed. Next inspection base: `4557f86`.
 
 ### [DATE TEMPLATE — Copy for new days]
