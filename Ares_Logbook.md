@@ -5116,6 +5116,97 @@ both. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB. Every dashboard agrees with
   Nov), 5 MB paged out; 05:01 back to 41 ms in 7.5 h. RAM 1022–1047 MB used.
   Recorded, not analysed.
 
+### 2026-11-17 → 18 — no fills, no closes; NWE expires; LFTO dropped on drift and re-queued in the same run; BILL queued (4/10); 16:10 monitor hung 80 min on IBKR; two inspection FAILs attributed outside the recorder, no rollback (owner's decision)
+
+Two dashboards (21:31 MYT Nov 17 and 05:01 MYT Nov 18) and the monitor posts.
+No fills and no closes: clean sample 13, W 3/13, −$94.47. 5/5 slots: TMO,
+AMP, SGRY, BRZE, TBBB. No peak or trail moved; the 13:31 report changed only
+`holding_days` in `virtual_trades.json`.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:31 Nov 17 | `ec432f7` | **NWE expired** (queued 11-11, age 6d > 5d); LFTO (+0.04%), WWW (+1.61%), MBGL (+3.84%) kept; 102 screened, 0 signals |
+| 00:10 Nov 18 | `894e7ca` | the 16:10 UTC monitor, **committed at 17:30:18 UTC** (subject says 17:30); no exits |
+| 01:30 Nov 18 | `b3b0b85` | 17:30 UTC monitor; TMO "No live price" (`skipped`); no exits |
+| 05:01 Nov 18 | `4557f86` | **LFTO dropped** (drift −7.3%, $24.45 → $22.67), WWW and MBGL kept; 103 screened, 2 signals: **BILL** ($65.09, RSI 79.9) and **LFTO re-signalled** ($22.67, RSI 70.9), both queued; queue 4/10 |
+
+- Monitor prices: TMO $689.92 (16:10 run, evaluated 17:30:15) / no price
+  (17:30 run), AMP $509.12, SGRY $26.82, BRZE $46.37, TBBB $67.84 in both.
+  Closest to a level: SGRY, 2.4% below its $27.47 target.
+- The 05:01 dashboard lists QUEUED (2), WWW and MBGL: it reads
+  `queue_ranked.json`, written by queue maintenance before the scan, so the
+  same-run inserts (BILL, LFTO) are not listed. `signal_queue.json` at
+  `4557f86` holds 4. Same behaviour on 13 Nov (ranked 6, queue 8). Display
+  only, not new.
+- System: stall 785 ms in 16.5 h, 45 MB paged out; 05:01 36 ms in 7.5 h.
+  RAM 1025–1044 MB used. Recorded, not analysed.
+
+**Admission inspection (laptop, after `git pull`), cycles `ec432f7`
+`894e7ca` `b3b0b85` `4557f86`.** Neither tool passes the range as a whole.
+Per cycle:
+
+| Cycle | Admission tool | Monitor tool | Cause |
+|---|---|---|---|
+| 13:31 report `ec432f7` | **FAIL** on the real chain (`repository_commit 763a662 is not the commit the run started on (33e476e)`); **PASS** replayed onto `763a662` (4 records: NWE expired, LFTO/WWW/MBGL maintenance, all consistent) | — | rebase after the laptop docs push (finding A) |
+| 16:10 monitor `894e7ca` | PASS (base `ec432f7`, 0 records) | PASS (5 records, `6e5720ca`) | ran 4809.6 s (finding B) |
+| 17:30 monitor `b3b0b85` | **FAIL** (`started is earlier than the parent commit`) | **FAIL** (`cycle_started_at is earlier than the previous commit`) | overlapped the hung 16:10 run (finding B) |
+| 21:00 report `4557f86` | **INCONCLUSIVE** (`key_reused_in_run queue LFTO`); the other four queue mutations consistent | — | rule 8, production behaviour (finding C) |
+
+No `logs/admission_health_v1.jsonl`; no `Traceback` or `ADMISSION-HEALTH` in
+`cron.log` after line 18600 (owner, VPS). Every heartbeat has
+`records_attempted == records_written`, `write_failures` 0,
+`records_incomplete` 0; the reports `report_completed: true`, the monitors
+`monitor_completed: true`, all `run_kind: scheduled`. Cycle commits touch
+`logs/` only.
+
+- **A. Lineage break from my docs push (process error).** `33e476e` (docs)
+  was pushed at about 07:21 UTC while the VPS stayed at `763a662`. The 13:31
+  report ran on `763a662`, its push was rejected, and `run_ares.sh`'s
+  `pull --rebase` re-parented the cycle commit onto `33e476e`. The recorder
+  logged the truth (`repository_commit 763a662`). Replay check: in a scratch
+  clone, the four cycle commits cherry-picked onto `763a662` with their
+  committer dates, `logs/` trees identical to the originals; the admission
+  tool on `763a662` → replayed `ec432f7`: PASS. `33e476e` touches no
+  `logs/`. Prevention, from now on: after any laptop push to `main`, the owner
+  runs `cd /root/ares/Ares && git pull -q --ff-only` on the VPS before the
+  next cycle.
+- **B. The 16:10 monitor hung 80 minutes on IBKR; the 17:30 monitor overlapped
+  it.** Heartbeat `6e5720ca`: started 16:10:05, completed 17:30:15 (every
+  other monitor cycle since 9 Nov took 6.6–7.7 s). All five observations are
+  stamped 17:30:15, so it blocked before evaluating its first symbol, TMO,
+  inside `get_live_price` (`data_feed.py:41-62`): only `ib.connect` has a
+  timeout (10 s); `qualifyContracts` has none. The admission code that runs
+  before that point only initialises an in-memory store. The 17:30 run
+  started 17:30:06 and connected with the same `clientId=10`; the 16:10 run
+  got its TMO answer and exited at 17:30:15 (release mechanism a
+  hypothesis); the 17:30 run's first connect timed out at 17:30:16 (`API
+  connection failed: TimeoutError()`, which lands inside the 16:10 block of
+  `cron.log` because that run's buffered stdout was written at its exit), so
+  TMO was skipped; it reconnected for AMP onwards and took 16.0 s.
+  `restart_gateway.sh` (17:25) restarts only a gateway with no process, so it
+  did nothing. Both runs held all five positions and wrote no state. Telegram
+  messages 183 and 184 each match their own run, although both runs `tee` to
+  the same `/tmp/ares_monitor.txt`. `run_monitor.sh` has no lock. Both tools'
+  time checks report the overlap correctly. Known issue 14.
+- **C. LFTO drop and re-queue in one run.** 21:00:56 maintenance dropped LFTO
+  (drift −7.28%); 21:01:42 the scan queued it again (`scan_direct` →
+  `queued` → `queue_insert`, signal 2026-11-17, $22.67). Rule 8 (Z2,
+  generalised to every file) makes the drop's end-of-run observation
+  ambiguous: INCONCLUSIVE by design. `queue_events.jsonl` records both
+  events. Under A6 the cause is production behaviour, not the recorder:
+  logged as a finding.
+- **D. Wording only.** The observer reads `HEAD` and the manifests at flush
+  (`admission_observer.py:947`), not at start; the tool's message says
+  "started on". `b3b0b85`'s heartbeat names `894e7ca`, committed after that
+  run started and before it flushed; `894e7ca` changed only `logs/`.
+- **Decision (owner, 18 Nov): no rollback, no change.** §6 of
+  `ACTIVATION_admission_capture_v1.md` lists "the admission tool exits 1
+  (`FAIL`) on an activated cycle" as an abort criterion. Both FAILs are
+  lineage/time checks whose causes are outside the recorder (A: my push;
+  B: the IBKR hang), and the recorder's evidence is consistent. Recorded as a
+  deviation from the written §6 rule. Ares stays FROZEN; issue 14 is not
+  fixed. Next inspection base: `4557f86`.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
