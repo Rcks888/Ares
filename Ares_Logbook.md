@@ -5209,6 +5209,40 @@ No `logs/admission_health_v1.jsonl`; no `Traceback` or `ADMISSION-HEALTH` in
   deviation from the written §6 rule. Ares stays FROZEN; issue 4 is not
   fixed. Next inspection base: `4557f86`.
 
+### 2026-11-18 → 19 — no fills, no closes; MBGL expires; MDLN queued (4/10); SGRY trail $24.20 → $24.28; all four cycles PASS on both tools
+
+Two dashboards (21:31 MYT Nov 18 and 05:01 MYT Nov 19) and the monitor posts.
+No fills and no closes: clean sample 13, W 3/13, −$94.47. 5/5 slots: TMO,
+AMP, SGRY, BRZE, TBBB.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:31 Nov 18 | `4f8c084` | **MBGL expired** (queued 11-12, age 6d > 5d); WWW (−0.88%), BILL (−0.32%), LFTO (+0.04%) kept; 103 screened, 0 signals |
+| 00:10 Nov 19 | `46c2aab` | 16:10 UTC monitor, 7.2 s; no exits, no state save |
+| 01:30 Nov 19 | `4bb650c` | 17:30 UTC monitor, 7.4 s; **SGRY peak $26.89 → $26.98 (15.9%), trail $24.20 → $24.28**; no exits |
+| 05:01 Nov 19 | `54aca74` | LFTO (+2.65%), BILL (+1.17%), WWW (+0.16%) kept; 103 screened, 1 signal: **MDLN** ($38.53, momentum_breakout, conf 3) queued; queue 4/10 |
+
+- Monitor prices: TMO $688.65 / $689.27, AMP $500.94 / $503.66, SGRY
+  $26.88 / $26.98, BRZE $46.60 / $46.62, TBBB $67.73 / $68.45. Closest to a
+  level: SGRY, 1.8% below its $27.47 target.
+- The 05:01 dashboard lists QUEUED (3) without MDLN: `queue_ranked.json`
+  is written by maintenance before the scan; `signal_queue.json` at
+  `54aca74` holds 4 (WWW, BILL, LFTO, MDLN). Same display item as 13 and
+  18 Nov; step 3b group B.
+- System: 21:31 swap 288 MB, 103 MB paged out in 16.5 h, stall 625 ms, RAM
+  871 MB used; 05:01 0 MB paged out, stall 181 ms. Recorded, not analysed.
+
+**Admission inspection (laptop, after `git pull`), base `a0839e4`, cycles
+`4f8c084` `46c2aab` `4bb650c` `54aca74`: RESULT PASS** (4, 0, 1, 6 records;
+all queue mutations consistent; open episodes 0, unknown 0). Monitor tool
+(`4f8c084` → `46c2aab` `4bb650c`): PASS, 5 records each (`42f0b502`,
+`fe57ee5b`). Parity 10/10 MATCH, no `would_change_action`. Every heartbeat
+`run_kind: scheduled`, `records_attempted == records_written`,
+`write_failures` 0, `records_incomplete` 0; each `repository_commit` is the
+cycle's parent (first cycle's parent `a0839e4`: the VPS was pulled after the
+18 Nov push, so no rebase). No admission health line. Cycle commits touch
+`logs/` only. Next inspection base: `54aca74`.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
