@@ -15,11 +15,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-19T13:31:08",
-    "drift_pct": 1.41,
+    "checked_at": "2026-11-19T21:01:14",
+    "drift_pct": -1.48,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 66.01
+    "live_price": 64.12
   },
   {
     "symbol": "MDLN",
@@ -37,10 +37,10 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-19T13:31:09",
-    "drift_pct": 1.64,
+    "checked_at": "2026-11-19T21:01:15",
+    "drift_pct": -1.79,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 39.16
+    "live_price": 37.84
   }
 ]

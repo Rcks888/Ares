@@ -1475,13 +1475,13 @@
       "active": true,
       "days_tracked": 21,
       "max_days": 30,
-      "peak_after_exit": 122.88,
+      "peak_after_exit": 144.54,
       "trough_after_exit": 104.44,
-      "peak_date": "2026-11-16",
+      "peak_date": "2026-11-19",
       "trough_date": "2026-11-03",
-      "missed_upside_pct": 13.78,
+      "missed_upside_pct": 33.83,
       "avoided_downside_pct": 3.3,
-      "latest_price": 119.8
+      "latest_price": 144.54
     }
   },
   {
@@ -1556,12 +1556,12 @@
       "days_tracked": 28,
       "max_days": 30,
       "peak_after_exit": 8.7,
-      "trough_after_exit": 6.63,
+      "trough_after_exit": 6.34,
       "peak_date": "2026-11-09",
-      "trough_date": "2026-11-18",
+      "trough_date": "2026-11-19",
       "missed_upside_pct": 12.11,
-      "avoided_downside_pct": 14.56,
-      "latest_price": 6.63
+      "avoided_downside_pct": 18.3,
+      "latest_price": 6.34
     }
   },
   {
