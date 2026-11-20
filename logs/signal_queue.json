@@ -1,22 +1,5 @@
 [
   {
-    "symbol": "BILL",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 65.09,
-    "rsi_at_signal": 79.9,
-    "stdev_20": 0.0348,
-    "vol_ratio": 4.86,
-    "date_added": "2026-11-17",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ]
-  },
-  {
     "symbol": "MDLN",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -30,6 +13,24 @@
     "date_added": "2026-11-18",
     "screens": [
       "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "BIP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 43.14,
+    "rsi_at_signal": 78.3,
+    "stdev_20": 0.0192,
+    "vol_ratio": 2.48,
+    "date_added": "2026-11-20",
+    "screens": [
+      "unusual_volume",
+      "near_52w_high",
       "big_movers_up"
     ]
   }

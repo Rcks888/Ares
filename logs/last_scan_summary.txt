@@ -1,3 +1,6 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:1
+signal_details:BIP | momentum_breakout | conf3 | uptrend
+  Price: $43.14 | RSI: 78.3 | Vol: 2.48x
+  Buy: $150 (3.5 shares)
+  SL: $41.48 | TP: $50.91 (+18%) | TS: 10%
