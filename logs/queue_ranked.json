@@ -1,5 +1,27 @@
 [
   {
+    "symbol": "MDLN",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 38.53,
+    "rsi_at_signal": 53.6,
+    "stdev_20": 0.0485,
+    "vol_ratio": 1.95,
+    "date_added": "2026-11-18",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-23T21:01:31",
+    "drift_pct": -0.0,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 38.53
+  },
+  {
     "symbol": "BIP",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -16,32 +38,10 @@
       "near_52w_high",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-23T13:31:24",
-    "drift_pct": -0.76,
+    "checked_at": "2026-11-23T21:01:31",
+    "drift_pct": 3.87,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 42.81
-  },
-  {
-    "symbol": "MDLN",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 38.53,
-    "rsi_at_signal": 53.6,
-    "stdev_20": 0.0485,
-    "vol_ratio": 1.95,
-    "date_added": "2026-11-18",
-    "screens": [
-      "unusual_volume",
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-23T13:31:23",
-    "drift_pct": -3.87,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 37.04
+    "live_price": 44.81
   }
 ]
