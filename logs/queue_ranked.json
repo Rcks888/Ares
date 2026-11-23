@@ -1,5 +1,28 @@
 [
   {
+    "symbol": "BIP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 43.14,
+    "rsi_at_signal": 78.3,
+    "stdev_20": 0.0192,
+    "vol_ratio": 2.48,
+    "date_added": "2026-11-20",
+    "screens": [
+      "unusual_volume",
+      "near_52w_high",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-23T13:31:24",
+    "drift_pct": -0.76,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 42.81
+  },
+  {
     "symbol": "MDLN",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -15,7 +38,7 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-20T21:01:31",
+    "checked_at": "2026-11-23T13:31:23",
     "drift_pct": -3.87,
     "rsi": 50.0,
     "ema20_ok": true,
