@@ -5243,6 +5243,78 @@ cycle's parent (first cycle's parent `a0839e4`: the VPS was pulled after the
 18 Nov push, so no rebase). No admission health line. Cycle commits touch
 `logs/` only. Next inspection base: `54aca74`.
 
+### 2026-11-19 → 21 — no fills, no closes; WWW expires; LFTO and BILL dropped on drift; BIP queued (2/10); all eight cycles PASS on both tools
+
+Four dashboards (21:32 MYT Nov 19 → 05:02 MYT Nov 21) and the monitor posts,
+pasted together on Mon 23 Nov (owner busy Thu–Fri). No fills and no closes:
+clean sample 13, W 3/13, −$94.47. 5/5 slots: TMO, AMP, SGRY, BRZE, TBBB. No
+peak, trail or stop moved; the reports changed only `holding_days` and the
+post-exit shadow fields of closed trades in `virtual_trades.json`.
+
+| MYT | Commit | Events |
+|---|---|---|
+| 21:32 Nov 19 | `4d66b26` | **WWW expired** (queued 11-13, age 6d > 5d); **LFTO dropped** (drift +5.87%); BILL (+1.41%), MDLN (+1.64%) kept; 103 screened, 0 signals |
+| 00:10 / 01:30 Nov 20 | `425cf34`, `4faa2b6` | monitors 7.4 s / 7.5 s; no exits, no state save |
+| 05:02 Nov 20 | `7a3ebd9` | BILL (−1.48%), MDLN (−1.79%) kept; 103 screened, 0 signals |
+| 21:32 Nov 20 | `b693ace` | BILL (−1.55%), MDLN (−1.79%) kept; 103 screened, 0 signals |
+| 00:10 / 01:30 Nov 21 | `55478c6`, `800ab99` | monitors 8.1 s / 7.1 s; no exits, no state save |
+| 05:02 Nov 21 | `27617e1` | **BILL dropped** (drift −5.6%); MDLN (−3.87%) kept; 103 screened, 1 signal: **BIP** ($43.14, momentum_breakout, conf 3, RSI 78.3, vol 2.48×) queued; queue 2/10 (MDLN, BIP) |
+
+- Monitor prices (16:10 / 17:30 UTC): Nov 19 TMO $696.80 / $692.91, AMP
+  $500.44 / $492.99, SGRY $26.75 / $26.64, BRZE $46.46 / $46.41, TBBB
+  $66.81 / $66.85. Nov 20 TMO $679.27 / $678.10, AMP $493.86 / $489.28
+  (−0.6%, first time below entry since the peak), SGRY $26.90 / $26.80,
+  BRZE $46.38 / $46.32, TBBB $65.87 / $65.16. Closest to a level: SGRY,
+  2.1% below its $27.47 target.
+- The 05:02 Nov 21 dashboard lists QUEUED (1), MDLN only; `signal_queue.json`
+  at `27617e1` holds MDLN and BIP. Same display item (step 3b group B).
+- System: stall 651 ms (16.5 h), 49 ms, **1069 ms (16.5 h, "memory pressure
+  event")**, 539 ms; swap steady at 291–292 MB, ≤ 5 MB paged out per
+  window; RAM 866–1026 MB used. Recorded, not analysed.
+
+**Admission inspection (laptop, Mon 23 Nov after `git pull`), base
+`3817db8`, cycles `4d66b26` `425cf34` `4faa2b6` `7a3ebd9` `b693ace` `55478c6`
+`800ab99` `27617e1`: RESULT PASS** (4, 0, 0, 4, 4, 0, 0, 6 records; all queue
+mutations consistent; open episodes 0, unknown 0). Monitor tool: PASS on
+`4d66b26` → `425cf34` `4faa2b6` (`a6b25146`, `b8fad75f`) and `b693ace` →
+`55478c6` `800ab99` (`600e4e93`, `7179b608`), 5 records each. Parity 20/20
+MATCH, no `would_change_action`. Every heartbeat `run_kind: scheduled`,
+`records_attempted == records_written`, `write_failures` 0,
+`records_incomplete` 0; each `repository_commit` is the cycle's parent. No
+admission health line. Cycle commits touch `logs/` only. Next inspection base:
+`27617e1` (or the checkpoint commit once the VPS has pulled it).
+
+### 2026-11-23 (Mon) — weekly checkpoint, week 16–20 Nov (held late: owner busy Fri)
+
+| Item | Result |
+|---|---|
+| Target: step 3 M4 | ✅ **Accepted** Mon 16 Nov, round 2 (`d8c9633`; tool `dd5f2f0`, suite 83/83). |
+| Pulled forward (owner free) | ✅ Activation decision: review v1 **APPROVED**; **activated Mon 16 Nov** (`4ff6bfe`, 40/40 live-tree checks). Step 3 done. |
+| Admission and monitor inspections | 20 activated cycles (16–20 Nov). 16, 17, 19, 20 Nov: all PASS on both tools. 17 Nov: 2 FAILs (lineage after my docs push; 17:30 overlap after the IBKR hang, known issue 4 third time) and 1 INCONCLUSIVE (rule 8, LFTO drop and re-queue), causes outside the recorder; owner's decision: no rollback, logged as a deviation from activation §6. No health line, no traceback in an activated cycle. |
+| Parity | All MATCH, no `would_change_action`. |
+| Trades | No fills, no closes since 4 Nov. Clean sample 13, W 3/13, −$94.47; 5/5 slots. SGRY peak $26.98 (15.9%), trail $24.28. |
+| Queue | Expired: BOBS, TGTX, GRDN, NWE, MBGL, WWW. Dropped on drift: MANE, LFTO (17 and 19 Nov), BILL. Queued: BILL, LFTO (re-queued 17 Nov), MDLN, BIP. Now 2/10. No promotion (slots full), so the admission recorder has not yet linked a fill. |
+| New known issue | None (issue 14 folded into 4). |
+| Process | VPS pull after every laptop push to `main` (finding A, 17 Nov): followed since. |
+
+**Next week (23–27 Nov), one target: step 3b group A** (environment and
+investigation, no Ares code change).
+- A1 tzdata tracebacks (pre-activation, `cron.log` 1747–2135): which job and
+  interpreter raised them, and whether any still recur.
+- A2 the Fri 13 Nov 13:31 "55 screened": per-screen counts from `cron.log`
+  against a normal run; cause, or "not determinable".
+- A3 known issue 3 (wedged gateway): what the gateway looked like in the
+  three hangs; a written detection proposal. Any change to
+  `restart_gateway.sh` is code, so it moves to group B.
+- A4 known issue 5 (SSH password login): verify key login, then a proposal
+  for key-only with a tested way back (DigitalOcean console).
+- **Done when** one findings-and-proposals bundle has been reviewed. A4 is
+  applied by the owner only after the review approves it, if time.
+- Not pulled forward: group B designs.
+- Calendar: Thu 26 Nov NYSE closed (Thanksgiving), Fri 27 Nov early close
+  13:00 ET (18:00 UTC). Cron runs both days; inspect those cycles as usual and
+  record what the holiday does to fills, queue ages and scans. Not a target.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
