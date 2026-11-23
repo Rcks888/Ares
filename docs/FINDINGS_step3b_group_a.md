@@ -448,3 +448,33 @@ re-checked over the rsyslog `auth.log*` files (about 26 Oct to 23 Nov;
 
 **Group A: APPROVED / COMPLETE.** This does not authorise Ares code, trading
 configuration, strategy, group B or group C work, or lifting FROZEN.
+
+## A4 applied (owner, Mon 23 Nov, about 08:05–08:22 UTC)
+
+A4.3 as approved, with the original SSH session open throughout.
+
+1. Recovery Console tested earlier the same day (above).
+2. Windows PowerShell: `ssh-keygen -t ed25519`, passphrase set.
+3. Public key appended over SSH: `authorized_keys` 333 → 432 bytes (one
+   ed25519 key), `/root/.ssh` 700, file 600.
+4. Second session with `PreferredAuthentications=publickey`,
+   `PasswordAuthentication=no`: asked for the key passphrase and logged in;
+   1 `Accepted publickey` in the journal.
+5. `/etc/ssh/sshd_config.d/10-ares-keyonly.conf` (644) with the three lines;
+   `sshd -t` OK; `systemctl reload ssh`. `sshd -T`: `permitrootlogin
+   without-password`, `pubkeyauthentication yes`, `passwordauthentication
+   no`, `kbdinteractiveauthentication no`.
+6. New key login asked for the passphrase and logged in; a password-only
+   attempt got `Permission denied (publickey).` without a prompt.
+7. Rollback rehearsed: drop-in moved aside + reload gave
+   `passwordauthentication yes`, `permitrootlogin yes`; moved back, `sshd -t`,
+   reload gave the step 5 values again. Step 6 repeated at 08:22 UTC: key
+   login OK, password-only refused.
+
+Rollback for real: `mv` the drop-in out of `sshd_config.d`, `systemctl reload
+ssh`; from the Recovery Console if SSH is unavailable.
+
+Follow-ups (record only): `Failed password` lines should stop in
+`auth.log`; DigitalOcean's temporary console key should leave
+`authorized_keys` (size check only, 432 → about 99 bytes); re-measure the
+journal's retention about 30 Nov.

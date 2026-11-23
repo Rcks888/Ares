@@ -5373,6 +5373,17 @@ written for owner execution), **Q-G4c, Q-G5, Q-G6 ACCEPT.** Group A
 applied. Nothing authorises Ares code, trading config, strategy, group B or
 C work, or lifting FROZEN.
 
+**A4 applied by the owner, 08:05–08:22 UTC**, original session open
+throughout. Windows ed25519 key with passphrase, appended to
+`authorized_keys` (333 → 432 bytes); key-only second session OK. Drop-in
+`/etc/ssh/sshd_config.d/10-ares-keyonly.conf` (`PasswordAuthentication no`,
+`KbdInteractiveAuthentication no`, `PermitRootLogin prohibit-password`),
+`sshd -t` OK, reload; `sshd -T` shows all three. Key login OK; password-only
+refused, `Permission denied (publickey).` Rollback rehearsed (aside → `yes`;
+back → `no`), then both tests repeated at 08:22, PASS. **Known issue 5
+closed.** Follow-ups: failed-password lines, the DigitalOcean temporary key,
+journal retention about 30 Nov.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
