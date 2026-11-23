@@ -5315,6 +5315,64 @@ investigation, no Ares code change).
   13:00 ET (18:00 UTC). Cron runs both days; inspect those cycles as usual and
   record what the holiday does to fills, queue ages and scans. Not a target.
 
+### 2026-11-23 (Mon) — step 3b group A: findings A1–A6; reviews rounds 1 and 2: group A APPROVED / COMPLETE
+
+Evidence: read-only VPS commands run by the owner (cron.log, venv, OS,
+gateway, sshd, ssh journal). Write-up `docs/FINDINGS_step3b_group_a.md`;
+bundle `review_bundle_step3b_group_a_v1` (8 files, IPs and IBKR ids
+redacted). No VPS change.
+
+- **A1 tzdata.** 19 tracebacks, all on 8 Sep (`cron.log` 1077–2146), from
+  `ib_insync` parsing three HAFN execution reports with `US/Eastern`. Ubuntu
+  24.04 has no `tzdata-legacy`, and the venv then had no `tzdata`. Fixed 16
+  Sep (`pip install tzdata`, venv 2026.4, installed 14:52:29 UTC). Every IBKR
+  price depends on it; `get_live_price` would hide its loss as "No live
+  price". Now recorded in the README.
+- **A2 "55 screened".** The winter 13:30 UTC scan runs at 08:30 ET; Finviz
+  pre-open returns 52–324 unique (median 199) against 229–1072 (median 512)
+  at 21:00. 13 Nov 52 and 17 Nov 99 fell under the 100 cap. Known issue 11.
+- **A3 wedged gateway.** Gateway runs 13:00 → 23:45 UTC on weekdays (51
+  starts, 0 failures). In all three hangs it was alive and served the next
+  run; each hang was one unanswered request (issue 4), released 7–69 s
+  after another process tried `clientId=10`.
+- **A4 SSH.** `PasswordAuthentication yes` from `50-cloud-init.conf`, root
+  has no key, 13251 failed password attempts in the journal's 2.4 days (it starts
+  20 Nov 21:39 UTC; round 1 said 7 days in error), 1 accepted (the
+  owner). The Web Console works but logs in over SSH with a temporary key
+  (1 `Accepted publickey`). No Recovery Console found under Access.
+
+**Review round 1 (23 Nov).** Q-G1 ACCEPT (no VPS change; record the venv
+dependency; `tzdata-legacy` not required). Q-G2 ACCEPT (not a fault; known
+issue 11; not a validation of the winter schedule). Q-G3 ACCEPT (issue 3
+unobserved, open; issue 4 first in group B; a probe is group B, log-only
+first). **Q-G4 CHANGES REQUIRED / HOLD:** the design and step order are
+approved; execution waits until an independent recovery path has been
+located and tested. Nothing authorises an Ares code, config, strategy or VPS
+change. STATUS known issues 3, 4, 5 and 11 updated.
+
+**After round 1, same day.**
+- **Recovery Console tested** (Droplet settings, not Access): local
+  `Ares-Trading login:`, root with the root password, `hostname` →
+  `Ares-Trading`, `logout`.
+- **Correction to A4:** the journal starts 20 Nov 21:39 UTC (`SystemMaxUse=50M`,
+  set in September), so the "7 days" counts covered 2.4 days.
+- **A5:** the console's "Out of memory" lines are 13 kills, all 22 Oct
+  07:40–08:18 UTC (11 `terminal64.exe`, 2 `systemd`), inside the recorded
+  Hermes MT5 lock-up. No Ares process; none since the 17 Oct boot.
+- **A6:** `auth.log*` (four weeks): about 261,500 failed password attempts.
+  Every accepted login is the owner (home 20; company VPN 4 + 1, all
+  Fridays), the VPS to itself once (30 Oct, inside a VPN session), or the
+  Web Console key test. Only `root` and `nobody`; only `sshd` public; root
+  crontab is the 9 known jobs (md5 `f592e6b5…`, changed 22 Oct 08:29 UTC,
+  after the lock-up).
+- Bundle `review_bundle_step3b_group_a_v2` (3 files + sums).
+
+**Review round 2 (23 Nov): Q-G4 ACCEPT** (blocker closed; A4.3 approved as
+written for owner execution), **Q-G4c, Q-G5, Q-G6 ACCEPT.** Group A
+**APPROVED / COMPLETE**, so the week's target is met on Monday. A4 is not yet
+applied. Nothing authorises Ares code, trading config, strategy, group B or
+C work, or lifting FROZEN.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)

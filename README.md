@@ -498,6 +498,21 @@ authority; the parity path never writes production state.
 | Verify | `python3 tools/pre_parity_snapshot.py` (exit 0 = all gates pass) |
 | Full VPS check | `bash tools/vps_phase3_verify.sh --pre-pull-commit <prev HEAD>` |
 
+### Venv dependency: Python `tzdata`
+
+The venv must contain the Python package `tzdata` (installed 16 Sep 2026,
+version 2026.4). Ubuntu 24.04 ships the old `US/*` zone names only in
+`tzdata-legacy`, which is not installed, and `ib_insync` parses IBKR
+timestamps with `US/Eastern`. Without the package every IBKR price fails
+silently (`get_live_price` returns `None`: "No live price"). There is no
+requirements file, so check for it after any venv rebuild:
+
+```sh
+/root/ares/Ares/venv/bin/python -c "import zoneinfo; zoneinfo.ZoneInfo('US/Eastern'); print('ok')"
+```
+
+Step 3b A1, accepted 23 Nov 2026 (`docs/FINDINGS_step3b_group_a.md`).
+
 ### Host provisioning requirement
 
 The verifier distinguishes the live host from a development checkout using a
