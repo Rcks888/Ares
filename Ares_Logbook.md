@@ -5384,6 +5384,25 @@ back → `no`), then both tests repeated at 08:22, PASS. **Known issue 5
 closed.** Follow-ups: failed-password lines, the DigitalOcean temporary key,
 journal retention about 30 Nov.
 
+### 2026-11-23 (Mon) — cycles, first day key-only
+
+Base `0419122` (owner pulled on the VPS before 13:30 UTC). 4 cycles
+`351ea70` `cfdbe10` `ad09a73` `9274eed`: **PASS** on both tools.
+- Heartbeats scheduled, `repository_commit` = parent each cycle, attempted =
+  written (4, 0, 0, 6), no write failures or incomplete records, no health
+  lines; cycle commits touch `logs/` only.
+- Parity 5/5 MATCH both reports, `would_change_action` False.
+- Monitors 16:10 (8 s) and 17:30 (7 s), 5 positions, no state save (no new
+  peak), as on 19–20 Nov.
+- 13:30 report: 103 screened, 0 signals (pre-open, consistent with A2);
+  MDLN kept −3.87%, BIP kept −0.76%.
+- 21:00 report: 103 screened, 1 signal, **BSP queued** (momentum_breakout,
+  conf3, uptrend); BIP kept +3.87%, MDLN kept −0.00%. Queue 3/10; the
+  dashboard shows 2 (known display lag, group B).
+- No fills or closes: clean sample 13, W 3/13, −$94.47; 5/5 slots (TMO,
+  AMP, SGRY, BRZE, TBBB). SGRY $26.67–26.75 at the monitors, TP $27.47.
+- System: RAM 932/1967 MB, swap 296 MB inert, disk 30%, cache 1175.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
