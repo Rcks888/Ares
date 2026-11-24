@@ -4,33 +4,32 @@
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
-    "category": "momentum_candidate",
+    "category": "reversal_candidate",
     "confluence": 3,
-    "price_at_signal": 47.27,
-    "rsi_at_signal": 56.8,
-    "stdev_20": 0.044,
-    "vol_ratio": 3.04,
-    "date_added": "2026-11-23",
+    "price_at_signal": 42.86,
+    "rsi_at_signal": 51.6,
+    "stdev_20": 0.0488,
+    "vol_ratio": 3.91,
+    "date_added": "2026-11-24",
     "screens": [
       "unusual_volume",
-      "big_movers_up"
+      "big_movers_down"
     ]
   },
   {
-    "symbol": "BIP",
+    "symbol": "SNY",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
     "regime": "uptrend",
     "category": "momentum_candidate",
     "confluence": 3,
-    "price_at_signal": 43.14,
-    "rsi_at_signal": 78.3,
-    "stdev_20": 0.0192,
-    "vol_ratio": 2.48,
-    "date_added": "2026-11-20",
+    "price_at_signal": 51.9,
+    "rsi_at_signal": 70.6,
+    "stdev_20": 0.0286,
+    "vol_ratio": 2.68,
+    "date_added": "2026-11-24",
     "screens": [
       "unusual_volume",
-      "near_52w_high",
       "big_movers_up"
     ]
   }

@@ -1,3 +1,9 @@
 candidates_screened:103
-signals_found:0
-signal_details:
+signals_found:2
+signal_details:BSP | momentum_breakout | conf3 | uptrend
+  Price: $42.86 | RSI: 51.6 | Vol: 3.91x
+  Buy: $150 (3.5 shares)
+  SL: $38.68 | TP: $50.57 (+18%) | TS: 10%|||SNY | momentum_breakout | conf3 | uptrend
+  Price: $51.90 | RSI: 70.6 | Vol: 2.68x
+  Buy: $150 (2.9 shares)
+  SL: $48.93 | TP: $61.24 (+18%) | TS: 10%
