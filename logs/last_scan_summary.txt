@@ -1,6 +1,3 @@
 candidates_screened:103
-signals_found:1
-signal_details:BSP | momentum_breakout | conf3 | uptrend
-  Price: $47.27 | RSI: 56.8 | Vol: 3.04x
-  Buy: $150 (3.2 shares)
-  SL: $43.11 | TP: $55.78 (+18%) | TS: 10%
+signals_found:0
+signal_details:

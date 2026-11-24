@@ -505,7 +505,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 63
+    "holding_days": 64
   },
   {
     "symbol": "WBD",
@@ -794,7 +794,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 55
+    "holding_days": 56
   },
   {
     "symbol": "TWST",
@@ -1241,7 +1241,7 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 28,
+      "days_tracked": 29,
       "max_days": 30,
       "peak_after_exit": 9.32,
       "trough_after_exit": 6.52,
@@ -1249,7 +1249,7 @@
       "trough_date": "2026-11-20",
       "missed_upside_pct": 0.11,
       "avoided_downside_pct": 29.97,
-      "latest_price": 6.52
+      "latest_price": 6.69
     }
   },
   {
@@ -1473,15 +1473,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 25,
+      "days_tracked": 26,
       "max_days": 30,
-      "peak_after_exit": 144.54,
+      "peak_after_exit": 149.09,
       "trough_after_exit": 104.44,
-      "peak_date": "2026-11-19",
+      "peak_date": "2026-11-23",
       "trough_date": "2026-11-03",
-      "missed_upside_pct": 33.83,
+      "missed_upside_pct": 38.05,
       "avoided_downside_pct": 3.3,
-      "latest_price": 141.33
+      "latest_price": 149.09
     }
   },
   {
@@ -1610,7 +1610,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 26
+    "holding_days": 27
   },
   {
     "symbol": "RRC",
@@ -1677,15 +1677,15 @@
     },
     "shadow": {
       "active": true,
-      "days_tracked": 19,
+      "days_tracked": 20,
       "max_days": 30,
       "peak_after_exit": 54.01,
-      "trough_after_exit": 47.94,
+      "trough_after_exit": 47.67,
       "peak_date": "2026-11-03",
-      "trough_date": "2026-11-20",
+      "trough_date": "2026-11-23",
       "missed_upside_pct": 4.07,
-      "avoided_downside_pct": 7.63,
-      "latest_price": 47.94
+      "avoided_downside_pct": 8.15,
+      "latest_price": 47.67
     }
   },
   {
@@ -1734,7 +1734,7 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 25
+    "holding_days": 26
   },
   {
     "symbol": "TBBB",
@@ -1782,6 +1782,6 @@
     "pnl_pct": null,
     "pnl_after_costs": null,
     "version": "3.0",
-    "holding_days": 19
+    "holding_days": 20
   }
 ]
