@@ -1,22 +1,5 @@
 [
   {
-    "symbol": "BSP",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "reversal_candidate",
-    "confluence": 3,
-    "price_at_signal": 42.86,
-    "rsi_at_signal": 51.6,
-    "stdev_20": 0.0488,
-    "vol_ratio": 3.91,
-    "date_added": "2026-11-24",
-    "screens": [
-      "unusual_volume",
-      "big_movers_down"
-    ]
-  },
-  {
     "symbol": "SNY",
     "strategy": "momentum_breakout",
     "trigger": "breakout",
@@ -30,6 +13,39 @@
     "date_added": "2026-11-24",
     "screens": [
       "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "BSP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 46.29,
+    "rsi_at_signal": 52.5,
+    "stdev_20": 0.0523,
+    "vol_ratio": 2.61,
+    "date_added": "2026-11-25",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ]
+  },
+  {
+    "symbol": "ANF",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 176.87,
+    "rsi_at_signal": 64.5,
+    "stdev_20": 0.0591,
+    "vol_ratio": 1.54,
+    "date_added": "2026-11-25",
+    "screens": [
       "big_movers_up"
     ]
   }
