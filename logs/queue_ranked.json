@@ -1,1 +1,46 @@
-[]
+[
+  {
+    "symbol": "BSP",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "reversal_candidate",
+    "confluence": 3,
+    "price_at_signal": 42.86,
+    "rsi_at_signal": 51.6,
+    "stdev_20": 0.0488,
+    "vol_ratio": 3.91,
+    "date_added": "2026-11-24",
+    "screens": [
+      "unusual_volume",
+      "big_movers_down"
+    ],
+    "checked_at": "2026-11-25T13:31:22",
+    "drift_pct": 0.0,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 42.86
+  },
+  {
+    "symbol": "SNY",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 51.9,
+    "rsi_at_signal": 70.6,
+    "stdev_20": 0.0286,
+    "vol_ratio": 2.68,
+    "date_added": "2026-11-24",
+    "screens": [
+      "unusual_volume",
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-25T13:31:23",
+    "drift_pct": 0.0,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 51.9
+  }
+]
