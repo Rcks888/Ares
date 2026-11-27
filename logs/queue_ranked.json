@@ -15,32 +15,11 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-27T13:31:13",
-    "drift_pct": 0.0,
+    "checked_at": "2026-11-27T21:00:54",
+    "drift_pct": -2.72,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 46.29
-  },
-  {
-    "symbol": "ANF",
-    "strategy": "momentum_breakout",
-    "trigger": "breakout",
-    "regime": "uptrend",
-    "category": "momentum_candidate",
-    "confluence": 3,
-    "price_at_signal": 176.87,
-    "rsi_at_signal": 64.5,
-    "stdev_20": 0.0591,
-    "vol_ratio": 1.54,
-    "date_added": "2026-11-25",
-    "screens": [
-      "big_movers_up"
-    ],
-    "checked_at": "2026-11-27T13:31:14",
-    "drift_pct": 0.05,
-    "rsi": 50.0,
-    "ema20_ok": true,
-    "live_price": 176.96
+    "live_price": 45.03
   },
   {
     "symbol": "SNY",
@@ -58,10 +37,31 @@
       "unusual_volume",
       "big_movers_up"
     ],
-    "checked_at": "2026-11-27T13:31:15",
-    "drift_pct": 4.8,
+    "checked_at": "2026-11-27T21:00:55",
+    "drift_pct": 2.77,
     "rsi": 50.0,
     "ema20_ok": true,
-    "live_price": 54.39
+    "live_price": 53.34
+  },
+  {
+    "symbol": "ANF",
+    "strategy": "momentum_breakout",
+    "trigger": "breakout",
+    "regime": "uptrend",
+    "category": "momentum_candidate",
+    "confluence": 3,
+    "price_at_signal": 176.87,
+    "rsi_at_signal": 64.5,
+    "stdev_20": 0.0591,
+    "vol_ratio": 1.54,
+    "date_added": "2026-11-25",
+    "screens": [
+      "big_movers_up"
+    ],
+    "checked_at": "2026-11-27T21:00:54",
+    "drift_pct": 4.27,
+    "rsi": 50.0,
+    "ema20_ok": true,
+    "live_price": 184.43
   }
 ]

@@ -1475,13 +1475,13 @@
       "active": true,
       "days_tracked": 29,
       "max_days": 30,
-      "peak_after_exit": 170.33,
+      "peak_after_exit": 170.44,
       "trough_after_exit": 104.44,
-      "peak_date": "2026-11-25",
+      "peak_date": "2026-11-27",
       "trough_date": "2026-11-03",
-      "missed_upside_pct": 57.71,
+      "missed_upside_pct": 57.81,
       "avoided_downside_pct": 3.3,
-      "latest_price": 170.31
+      "latest_price": 170.44
     }
   },
   {
@@ -1582,8 +1582,8 @@
     "position_size": 149.0,
     "stop_loss": 18.27,
     "take_profit": 27.47,
-    "trailing_stop": 24.28,
-    "peak_price": 26.98,
+    "trailing_stop": 24.44,
+    "peak_price": 27.16,
     "rsi_at_entry": 84.6,
     "vol_at_entry": 2.18,
     "stdev_20": 0.1077,
