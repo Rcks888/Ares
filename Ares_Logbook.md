@@ -5403,6 +5403,57 @@ Base `0419122` (owner pulled on the VPS before 13:30 UTC). 4 cycles
   AMP, SGRY, BRZE, TBBB). SGRY $26.67–26.75 at the monitors, TP $27.47.
 - System: RAM 932/1967 MB, swap 296 MB inert, disk 30%, cache 1175.
 
+### 2026-11-24 → 26 (Tue–Thu) — cycles, Thanksgiving
+
+Base `55d9e81`. 12 cycles: 24 Nov `d2f9303` `b68ead5` `c9f894b` `eefb860`;
+25 Nov `b30c624` `fb89340` `f181c3b` `95450c0`; 26 Nov `b34100a` `e82f240`
+`a11f18a` `ed43b08`. Monitor tool **PASS** (all 6). Admission tool **PASS**
+except `eefb860` and `95450c0`: **INCONCLUSIVE** (`key_reused_in_run queue
+BSP`), every other mutation consistent, no FAIL.
+- Heartbeats scheduled, `repository_commit` = parent each cycle, attempted =
+  written (4, 0, 0, 8; 6, 0, 0, 10; 10, 0, 0, 10), no write failures or
+  incomplete records, no health lines; cycle commits touch `logs/` only.
+- Parity 5/5 MATCH every report, `would_change_action` False.
+- Monitors 6.9–8.3 s, 5 positions, none skipped, no state save (no new
+  peak).
+- **BSP drop and re-queue in one run, twice** (same as LFTO 17 Nov,
+  finding C; rule 8, INCONCLUSIVE by design, production behaviour):
+  - 24 Nov 21:01:04 dropped (signal 23 Nov $47.27, drift −9.33%); 21:01:39
+    queued again (signal 24 Nov $42.86).
+  - 25 Nov 21:00:53 dropped (drift +8.0%); 21:01:34 queued again (signal
+    25 Nov $46.29).
+  - Each re-queue resets `queued_at` and the signal price, so the 5-day age
+    cap and the ±5% drift band restart. Recorded, not changed (Ares FROZEN).
+- Other queue events: MDLN expired 24 Nov 13:31 (6d > 5d); BIP dropped
+  24 Nov 21:01 (drift +5.55%); SNY queued 24 Nov ($51.90); ANF queued
+  25 Nov ($176.87). Queue at 26 Nov 21:00: BSP, ANF, SNY (3/10). The
+  dashboard lags by a run (known display item, group B); on 24 Nov 21:00
+  it listed BSP and SNY without "ranked".
+- **Thu 26 Nov, NYSE closed:** all four cycles ran normally. Both monitors
+  show identical prices (no trading). Both reports re-found BSP, ANF, SNY
+  from the 25 Nov data; the inserts are consistent and the queue is
+  unchanged.
+- No fills or closes: clean sample 13, W 3/13, −$94.47; 5/5 slots (TMO,
+  AMP, SGRY, BRZE, TBBB). SGRY $26.47–26.85, TP $27.47.
+- System: ⚠️ stall 1237 ms (24 Nov) and 1478 ms (25 Nov) over 16.5 h,
+  "memory pressure event"; same benign pattern as earlier (e.g. 1253 ms,
+  1331 ms). Swap 160–291 MB, ≤98 MB paged out, RAM ~1 GB free, disk 30%.
+
+### 2026-11-27 (Fri) — weekly checkpoint, week 23–27 Nov
+
+- **Target (step 3b group A): MET Mon 23 Nov.** A1–A6 approved in review
+  rounds 1 and 2; A4 SSH key-only applied the same day, known issue 5 closed.
+- Inspections: 16 cycles (23–26 Nov), no FAIL; 2 INCONCLUSIVE by design
+  (BSP drop and re-queue in one run). Thanksgiving cycles ran normally.
+  Fri 27 Nov (early close 18:00 UTC) cycles go into Monday's inspection.
+- Trading: no fills or closes all week; clean sample 13, W 3/13, −$94.47;
+  5/5 slots; queue BSP, ANF, SNY.
+- **Next week (30 Nov – 4 Dec): step 3b group B, design for known issue 4**
+  (monitor overlap lock, explicit timeouts on `qualifyContracts` /
+  `reqHistoricalData`, separate client ids, gateway probe log-only first).
+  Design only, no code; done when the design is reviewed. Also check
+  `auth.log` failed-password lines after key-only, and journal retention.
+
 ### [DATE TEMPLATE — Copy for new days]
 
 ### Mon DD, 2026 (Day)
